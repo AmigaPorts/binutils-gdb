@@ -4075,6 +4075,12 @@ enum bfd_reloc_code_real
   BFD_RELOC_PPC64_GOT_DTPREL_PCREL34,
   BFD_RELOC_PPC64_TLS_PCREL,
 
+  /* AmigaOS PowerPC r2 base relative addressing into data section.  */
+  BFD_RELOC_PPC_AMIGAOS_BREL,
+  BFD_RELOC_PPC_AMIGAOS_BREL_LO,
+  BFD_RELOC_PPC_AMIGAOS_BREL_HI,
+  BFD_RELOC_PPC_AMIGAOS_BREL_HA,
+
   /* The type of reloc used to build a constructor table - at the moment
      probably a 32 bit wide absolute relocation, but the target can choose.
      It generally does map to one of the other relocation types.  */
