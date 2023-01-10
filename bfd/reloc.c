@@ -2795,6 +2795,17 @@ ENUMDOC
   PowerPC and PowerPC64 thread-local storage relocations.
 
 ENUM
+  BFD_RELOC_PPC_AMIGAOS_BREL
+ENUMX
+  BFD_RELOC_PPC_AMIGAOS_BREL_LO
+ENUMX
+  BFD_RELOC_PPC_AMIGAOS_BREL_HI
+ENUMX
+  BFD_RELOC_PPC_AMIGAOS_BREL_HA
+ENUMDOC
+  AmigaOS PowerPC r2 base relative addressing into data section.
+
+ENUM
   BFD_RELOC_CTOR
 ENUMDOC
   The type of reloc used to build a constructor table - at the moment
