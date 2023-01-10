@@ -612,7 +612,8 @@ enum elf_target_os
 {
   is_normal,
   is_solaris,	/* Solaris.  */
-  is_vxworks	/* VxWorks.  */
+  is_vxworks,	/* VxWorks.  */
+  is_amigaos	/* AmigaOS.  */
 };
 
 /* Used by bfd_sym_from_r_symndx to cache a small number of local

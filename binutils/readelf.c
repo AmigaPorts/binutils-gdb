@@ -98,6 +98,7 @@
 #include "elf/aarch64.h"
 #include "elf/alpha.h"
 #include "elf/amdgpu.h"
+#include "elf/amigaos.h"
 #include "elf/arc.h"
 #include "elf/arm.h"
 #include "elf/avr.h"
@@ -3028,6 +3029,7 @@ get_ppc_dynamic_type (unsigned long type)
     {
     case DT_PPC_GOT:    return "PPC_GOT";
     case DT_PPC_OPT:    return "PPC_OPT";
+	case DT_AMIGAOS_DYNVERSION: return "AMIGAOS_DYNVERSION";
     default:
       return NULL;
     }
@@ -3376,6 +3378,8 @@ get_dynamic_type (Filedata * filedata, unsigned long type)
     case DT_GNU_LIBLISTSZ: return "GNU_LIBLISTSZ";
     case DT_GNU_HASH:	return "GNU_HASH";
     case DT_GNU_FLAGS_1: return "GNU_FLAGS_1";
+
+	case DT_AMIGAOS_DYNVERSION: return get_ppc_dynamic_type (type);
 
     default:
       if ((type >= DT_LOPROC) && (type <= DT_HIPROC))
