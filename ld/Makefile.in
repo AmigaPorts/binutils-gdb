@@ -676,6 +676,7 @@ ALL_EMULATION_SOURCES = \
 	ealphavms.c \
 	eamiga.c \
 	eamiga_bss.c \
+	eamigaos.c \
 	earcelf.c \
 	earclinux.c \
 	earclinux_nps.c \
@@ -852,8 +853,6 @@ ALL_EMULATION_SOURCES = \
 	ens32knbsd.c \
 	epc532macha.c \
 	epdp11.c \
-	eppcamiga.c \
-	eppcamiga_bss.c \
 	epjelf.c \
 	epjlelf.c \
 	eppcmacos.c \
@@ -1290,6 +1289,7 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ealphavms.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eamiga.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eamiga_bss.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eamigaos.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/earcelf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/earclinux.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/earclinux_nps.Po@am__quote@
@@ -1540,8 +1540,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ens32knbsd.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/epc532macha.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/epdp11.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eppcamiga.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eppcamiga_bss.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/epjelf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/epjlelf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eppcmacos.Po@am__quote@
