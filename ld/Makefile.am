@@ -161,6 +161,7 @@ ALL_EMULATION_SOURCES = \
 	ealphavms.c \
 	eamiga.c \
 	eamiga_bss.c \
+	eamigaos.c \
 	earcelf.c \
 	earclinux.c \
 	earclinux_nps.c \
@@ -336,8 +337,6 @@ ALL_EMULATION_SOURCES = \
 	ens32knbsd.c \
 	epc532macha.c \
 	epdp11.c \
-	eppcamiga.c \
-	eppcamiga_bss.c \
 	epjelf.c \
 	epjlelf.c \
 	eppcmacos.c \
