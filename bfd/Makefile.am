@@ -295,6 +295,7 @@ BFD32_BACKENDS = \
 	elf-properties.lo \
 	elf-sframe.lo \
 	elf-strtab.lo \
+	elf-amigaos.lo \
 	elf-vxworks.lo \
 	elf.lo \
 	elf32-am33lin.lo \
@@ -432,6 +433,7 @@ BFD32_BACKENDS_CFILES = \
 	elf-properties.c \
 	elf-sframe.c \
 	elf-strtab.c \
+	elf-amigaos.c \
 	elf-vxworks.c \
 	elf.c \
 	elf32-am33lin.c \
@@ -715,7 +717,7 @@ SOURCE_HFILES = \
 	elf32-tic6x.h elf32-tilegx.h elf32-tilepro.h elf32-v850.h \
 	elf64-hppa.h elf64-ppc.h elf64-tilegx.h elf-attrs.h \
 	elf-bfd.h elfcode.h elfcore.h elf-hppa.h elf-linker-x86.h \
-	elf-linux-core.h elf-s390.h elf-vxworks.h \
+	elf-linux-core.h elf-s390.h elf-amigaos.h elf-vxworks.h \
 	elfxx-aarch64.h elfxx-ia64.h elfxx-mips.h elfxx-riscv.h \
 	elfxx-sparc.h elfxx-tilegx.h elfxx-x86.h elfxx-loongarch.h \
 	genlink.h go32stub.h hidden.h \
