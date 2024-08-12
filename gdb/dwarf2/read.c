@@ -1640,31 +1640,39 @@ dw2_get_file_names (dwarf2_per_cu *this_cu, dwarf2_per_objfile *per_objfile)
   return this_cu->file_names;
 }
 
+/* The current directory as a search path element.  On AmigaOS the
+   current directory is the empty path, "." is not special there.  */
+#ifdef __amigaos4__
+#define CURRENT_DIR_STRING ""
+#else
+#define CURRENT_DIR_STRING "."
+#endif
+
 /* A helper for the "quick" functions which computes and caches the
    real path for a given file name from the line table.  */
 
 static const char *
 dw2_get_real_path (dwarf2_per_objfile *per_objfile,
-		   struct quick_file_names *qfn, int index)
+		   struct quick_file_names *qfn, int i)
 {
   if (qfn->real_names == NULL)
     qfn->real_names = OBSTACK_CALLOC (&per_objfile->per_bfd->obstack,
 				      qfn->num_file_names, const char *);
 
-  if (qfn->real_names[index] == NULL)
+  if (qfn->real_names[i] == NULL)
     {
       const char *dirname = nullptr;
 
-      if (!IS_ABSOLUTE_PATH (qfn->file_names[index]))
+      if (!IS_ABSOLUTE_PATH (qfn->file_names[i]))
 	dirname = qfn->comp_dir;
 
       gdb::unique_xmalloc_ptr<char> fullname;
-      fullname = find_source_or_rewrite (qfn->file_names[index], dirname);
+      fullname = find_source_or_rewrite (qfn->file_names[i], dirname);
 
-      qfn->real_names[index] = fullname.release ();
+      qfn->real_names[i] = fullname.release ();
     }
 
-  return qfn->real_names[index];
+  return qfn->real_names[i];
 }
 
 struct symtab *
@@ -6711,13 +6719,14 @@ try_open_dwop_file (dwarf2_per_bfd *per_bfd, const char *file_name, int is_dwp,
 
       if (!debug_dir.empty ())
 	{
-	  search_path_holder.reset (concat (".", dirname_separator_string,
+	  search_path_holder.reset (concat (CURRENT_DIR_STRING,
+					    dirname_separator_string,
 					    debug_dir.c_str (),
 					    (char *) NULL));
 	  search_path = search_path_holder.get ();
 	}
       else
-	search_path = ".";
+	search_path = CURRENT_DIR_STRING;
     }
   else
     search_path = per_bfd->captured_debug_dir.c_str ();
