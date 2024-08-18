@@ -796,7 +796,11 @@ openp (const char *path, openp_flags opts, const char *string,
     }
 
   if (!path)
+  #if defined(__amigaos4__) 
+    path = "\"\"";
+  #elif
     path = ".";
+  #endif
 
   mode |= O_BINARY;
 
@@ -837,7 +841,12 @@ openp (const char *path, openp_flags opts, const char *string,
       char *dir = dir_up.get ();
       int reg_file_errno;
 
-      if (streq (dir, "$cwd"))
+      if (streq (dir, "$cwd")
+#ifdef __amigaos4__
+	  /* On AmigaOS the empty path is the current directory.  */
+	  || streq (dir, "")
+#endif
+	  )
 	{
 	  /* Name is $cwd -- insert current directory name instead.  */
 	  filename = cwd;
