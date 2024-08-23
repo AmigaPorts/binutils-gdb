@@ -36,6 +36,7 @@
 #endif
 
 #include <gdbsupport/config.h>
+#include <gdbsupport/host-defs.h>
 
 #undef PACKAGE_NAME
 #undef PACKAGE
