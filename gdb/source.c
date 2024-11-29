@@ -801,6 +801,7 @@ openp (const char *path, openp_flags opts, const char *string,
   #else
     path = ".";
   #endif
+  #endif
 
   mode |= O_BINARY;
 
