@@ -1976,6 +1976,10 @@ just_print_symbol_name (struct extended_symbol_info *info, bfd *abfd)
 int
 main (int argc, char **argv)
 {
+#if defined(__amigaos4__) && !defined(ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
+  enableUnixPaths();
+#endif
+	
   int c;
   int retval;
 
