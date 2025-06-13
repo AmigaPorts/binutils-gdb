@@ -25007,6 +25007,21 @@ _ACEOF
 
 # GDB's datadir relocation
 
+# AmigaOS 4 has no Unix-style prefix; the GDB data, JIT reader and
+# auto-load directories live at fixed places below the SDK: assign.
+case "$host" in
+  powerpc-*-amigaos*)
+    gdb_default_datadir="SDK:gcc/share/gdb"
+    gdb_default_jit_reader_dir="SDK:gcc/lib/gdb"
+    gdb_default_auto_load_dir='SDK:gcc/lib/debug;SDK:gcc/share/gdb/auto-load'
+    ;;
+  *)
+    gdb_default_datadir="${datadir}/gdb"
+    gdb_default_jit_reader_dir="${libdir}/gdb"
+    gdb_default_auto_load_dir='$debugdir:$datadir/auto-load'
+    ;;
+esac
+
 
 
 # Check whether --with-gdb-datadir was given.
@@ -25014,7 +25029,7 @@ if test "${with_gdb_datadir+set}" = set; then :
   withval=$with_gdb_datadir;
     GDB_DATADIR=$withval
 else
-  GDB_DATADIR=${datadir}/gdb
+  GDB_DATADIR=${gdb_default_datadir}
 fi
 
 
@@ -25080,7 +25095,7 @@ $as_echo_n "checking for default auto-load directory... " >&6; }
 if test "${with_auto_load_dir+set}" = set; then :
   withval=$with_auto_load_dir;
 else
-  with_auto_load_dir='$debugdir:$datadir/auto-load'
+  with_auto_load_dir="$gdb_default_auto_load_dir"
 fi
 
 escape_dir=`echo $with_auto_load_dir | sed -e 's/[$]datadir\>/\\\\\\\\\\\\&/g' -e 's/[$]debugdir\>/\\\\\\\\\\\\&/g'`
@@ -27691,7 +27706,7 @@ if test "${with_jit_reader_dir+set}" = set; then :
   withval=$with_jit_reader_dir;
     JIT_READER_DIR=$withval
 else
-  JIT_READER_DIR=${libdir}/gdb
+  JIT_READER_DIR=${gdb_default_jit_reader_dir}
 fi
 
 

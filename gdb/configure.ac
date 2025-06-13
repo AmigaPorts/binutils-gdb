@@ -139,9 +139,24 @@ AC_DEFINE_DIR(BINDIR, bindir, [Directory of programs.])
 
 # GDB's datadir relocation
 
+# AmigaOS 4 has no Unix-style prefix; the GDB data, JIT reader and
+# auto-load directories live at fixed places below the SDK: assign.
+case "$host" in
+  powerpc-*-amigaos*)
+    gdb_default_datadir="SDK:gcc/share/gdb"
+    gdb_default_jit_reader_dir="SDK:gcc/lib/gdb"
+    gdb_default_auto_load_dir='SDK:gcc/lib/debug;SDK:gcc/share/gdb/auto-load'
+    ;;
+  *)
+    gdb_default_datadir="${datadir}/gdb"
+    gdb_default_jit_reader_dir="${libdir}/gdb"
+    gdb_default_auto_load_dir='$debugdir:$datadir/auto-load'
+    ;;
+esac
+
 GDB_AC_WITH_DIR(GDB_DATADIR, gdb-datadir,
     [look for global separate data files in this path @<:@DATADIR/gdb@:>@],
-    [${datadir}/gdb])
+    [${gdb_default_datadir}])
 
 AC_ARG_WITH(relocated-sources,
 AS_HELP_STRING([--with-relocated-sources=PATH], [automatically relocate this path for source files]),
@@ -154,7 +169,7 @@ AC_MSG_CHECKING([for default auto-load directory])
 AC_ARG_WITH(auto-load-dir,
 AS_HELP_STRING([--with-auto-load-dir=PATH],
   [directories from which to load auto-loaded scripts @<:@$debugdir:$datadir/auto-load@:>@]),,
-  [with_auto_load_dir='$debugdir:$datadir/auto-load'])
+  [with_auto_load_dir="$gdb_default_auto_load_dir"])
 escape_dir=`echo $with_auto_load_dir | sed -e 's/[[$]]datadir\>/\\\\\\\\\\\\&/g' -e 's/[[$]]debugdir\>/\\\\\\\\\\\\&/g'`
 AC_DEFINE_DIR(AUTO_LOAD_DIR, escape_dir,
 	      [Directories from which to load auto-loaded scripts.])
@@ -721,7 +736,7 @@ AC_SEARCH_LIBS(dlopen, dl)
 
 GDB_AC_WITH_DIR([JIT_READER_DIR], [jit-reader-dir],
 		[directory to load the JIT readers from],
-		[${libdir}/gdb])
+		[${gdb_default_jit_reader_dir}])
 
 AC_ARG_WITH(expat,
   AS_HELP_STRING([--with-expat], [include expat support (auto/yes/no)]),
