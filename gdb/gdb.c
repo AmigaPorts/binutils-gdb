@@ -23,6 +23,10 @@
 int
 main (int argc, char **argv)
 {
+#if defined(__amigaos4__) && !defined(ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
+  enableUnixPaths();
+#endif
+	
   /* The first call to is_main_thread () should be from the main thread.
      If this is the first call, then that requirement is fulfilled here.
      If this is not the first call, then this verifies that the first call
