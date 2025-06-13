@@ -796,7 +796,7 @@ openp (const char *path, openp_flags opts, const char *string,
     }
 
   if (!path)
-  #if defined(__amigaos4__) 
+  #if defined(__amigaos4__) && defined(ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
     path = "\"\"";
   #else
     path = ".";
