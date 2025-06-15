@@ -117,9 +117,26 @@ if test x"$gdb_cv_have_makeinfo_click" = xyes; then
 fi
 AC_SUBST(MAKEINFO_EXTRA_FLAGS)
 
+# AmigaOS 4 has no Unix-style prefix; the GDB debug, data, JIT reader
+# and auto-load directories live at fixed places below the SDK: assign.
+case "$host" in
+  powerpc-*-amigaos*)
+    gdb_default_debugdir="SDK:gcc/lib/debug"
+    gdb_default_datadir="SDK:gcc/share/gdb"
+    gdb_default_jit_reader_dir="SDK:gcc/lib/gdb"
+    gdb_default_auto_load_dir='SDK:gcc/lib/debug;SDK:gcc/share/gdb/auto-load'
+    ;;
+  *)
+    gdb_default_debugdir="${libdir}/debug"
+    gdb_default_datadir="${datadir}/gdb"
+    gdb_default_jit_reader_dir="${libdir}/gdb"
+    gdb_default_auto_load_dir='$debugdir:$datadir/auto-load'
+    ;;
+esac
+
 GDB_AC_WITH_DIR(DEBUGDIR, separate-debug-dir,
     [look for global separate debug info in this path @<:@LIBDIR/debug@:>@],
-    [${libdir}/debug])
+    [${gdb_default_debugdir}])
 
 AC_ARG_WITH(additional-debug-dirs,
 	    AS_HELP_STRING([--with-additional-debug-dirs=PATHs],
@@ -138,21 +155,6 @@ AC_ARG_WITH(additional-debug-dirs,
 AC_DEFINE_DIR(BINDIR, bindir, [Directory of programs.])
 
 # GDB's datadir relocation
-
-# AmigaOS 4 has no Unix-style prefix; the GDB data, JIT reader and
-# auto-load directories live at fixed places below the SDK: assign.
-case "$host" in
-  powerpc-*-amigaos*)
-    gdb_default_datadir="SDK:gcc/share/gdb"
-    gdb_default_jit_reader_dir="SDK:gcc/lib/gdb"
-    gdb_default_auto_load_dir='SDK:gcc/lib/debug;SDK:gcc/share/gdb/auto-load'
-    ;;
-  *)
-    gdb_default_datadir="${datadir}/gdb"
-    gdb_default_jit_reader_dir="${libdir}/gdb"
-    gdb_default_auto_load_dir='$debugdir:$datadir/auto-load'
-    ;;
-esac
 
 GDB_AC_WITH_DIR(GDB_DATADIR, gdb-datadir,
     [look for global separate data files in this path @<:@DATADIR/gdb@:>@],
