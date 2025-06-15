@@ -131,8 +131,11 @@ gdb_abspath (const char *path, const char *cwd)
 {
   gdb_assert (path != NULL && path[0] != '\0');
 
+// TODO: ML: AmigaOS doesn have sometghing like ~, or let it expand to HOME: ??
+#ifndef __amigaos4__
   if (path[0] == '~')
     return gdb_tilde_expand (path);
+#endif
 
   if (IS_ABSOLUTE_PATH (path) || cwd == NULL)
     return path;
@@ -212,6 +215,16 @@ path_join (gdb::array_view<const char *> paths)
 	  while (IS_DIR_SEPARATOR (path[0]))
 	    ++path;
 	}
+#if defined(__amigaos4__)
+      /* On AmigaOS a leading '/' of the first element names a volume
+	 or assign, so "/SDK" becomes "SDK:".  */
+      else if (i == 0 && path[0] == '/')
+	{
+	  ret.append (path + 1);
+	  ret += ':';
+	  continue;
+	}
+#endif
 
       ret.append (path);
     }
