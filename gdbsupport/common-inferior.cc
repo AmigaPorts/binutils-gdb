@@ -40,7 +40,7 @@ escape_characters (const char *arg, const char *special)
 
 #ifdef __MINGW32__
   static const char quote = '"';
-#elif defined (__amigaos4__)
+#elif defined (__amigaos4__) && !defined (ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
   static const char quote = '"';
 #else
   static const char quote = '\'';
@@ -106,10 +106,10 @@ escape_shell_characters (const char *arg)
   /* This holds all the characters considered special to the
      Windows shells.  */
   static const char special[] = "\"!&*|[]{}<>?`~^=;, \t\n";
-#elif defined (__amigaos4__)
+#elif defined (__amigaos4__) && !defined (ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
   /* This holds all the characters considered special to the
-     Amiga shells.  Currently a copy of the Unix set.  */
-  static const char special[] = "\"!#$&*()\\|[]{}<>?'`~^; \t\n";
+     Amiga shells.  The Unix set plus ':', minus '?'.  */
+  static const char special[] = "\"!#$&*()\\|[]{}<>'`~^;: \t\n";
 #else
   /* This holds all the characters considered special to the
      typical Unix shells.  We include `^' because the SunOS
