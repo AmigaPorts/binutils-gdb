@@ -289,7 +289,11 @@ AC_DEFUN([gl_INIT],
   gl_CONDITIONAL([GL_COND_OBJ_CANONICALIZE_LGPL],
                  [test $HAVE_CANONICALIZE_FILE_NAME = 0 || test $REPLACE_CANONICALIZE_FILE_NAME = 1])
   gl_MODULE_INDICATOR([canonicalize-lgpl])
-  gl_STDLIB_MODULE_INDICATOR([canonicalize_file_name])
+  # On AmigaOS 4 clib4 provides canonicalize_file_name itself.
+  case "$host" in
+    powerpc-*-amigaos*) ;;
+    *) gl_STDLIB_MODULE_INDICATOR([canonicalize_file_name]) ;;
+  esac
   gl_STDLIB_MODULE_INDICATOR([realpath])
   gl_UNISTD_MODULE_INDICATOR([chdir])
   gl_FUNC_CHDIR_LONG
