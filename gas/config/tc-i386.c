@@ -5925,7 +5925,7 @@ optimize_disp (void)
 		 || i.reloc[op] == BFD_RELOC_X86_64_TLSDESC_CALL)
 	  {
 	    fix_new_exp (frag_now, frag_more (0) - frag_now->fr_literal, 0,
-			 i.op[op].disps, 0, i.reloc[op]);
+			 i.op[op].disps, 0, i.reloc[op], 0);
 	    i.types[op] = operand_type_and_not (i.types[op], anydisp);
 	  }
  	else
@@ -8927,7 +8927,7 @@ output_jump (void)
   jump_reloc = reloc (size, 1, 1, jump_reloc);
 
   fixP = fix_new_exp (frag_now, p - frag_now->fr_literal, size,
-		      i.op[0].disps, 1, jump_reloc);
+		      i.op[0].disps, 1, jump_reloc, 0);
 
   /* All jumps handled here are signed, but don't unconditionally use a
      signed limit check for 32 and 16 bit jumps as we want to allow wrap
@@ -9011,14 +9011,14 @@ output_interseg_jump (void)
     }
   else
     fix_new_exp (frag_now, p - frag_now->fr_literal, size,
-		 i.op[1].imms, 0, reloc (size, 0, 0, i.reloc[1]));
+		 i.op[1].imms, 0, reloc (size, 0, 0, i.reloc[1]), 0);
 
   p += size;
   if (i.op[0].imms->X_op == O_constant)
     md_number_to_chars (p, (valueT) i.op[0].imms->X_add_number, 2);
   else
     fix_new_exp (frag_now, p - frag_now->fr_literal, 2,
-		 i.op[0].imms, 0, reloc (2, 0, 0, i.reloc[0]));
+		 i.op[0].imms, 0, reloc (2, 0, 0, i.reloc[0]), 0);
 }
 
 #if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
@@ -10048,7 +10048,7 @@ output_disp (fragS *insn_start_frag, offsetT insn_start_off)
 		}
 	      fixP = fix_new_exp (frag_now, p - frag_now->fr_literal,
 				  size, i.op[n].disps, pcrel,
-				  reloc_type);
+				  reloc_type, 0);
 
 	      if (flag_code == CODE_64BIT && size == 4 && pcrel
 		  && !i.prefix[ADDR_PREFIX])
@@ -10196,7 +10196,7 @@ output_imm (fragS *insn_start_frag, offsetT insn_start_off)
 		    encoding_length (insn_start_frag, insn_start_off, p);
 		}
 	      fix_new_exp (frag_now, p - frag_now->fr_literal, size,
-			   i.op[n].imms, 0, reloc_type);
+			   i.op[n].imms, 0, reloc_type, 0);
 	    }
 	}
     }
@@ -10222,7 +10222,7 @@ x86_cons_fix_new (fragS *frag, unsigned int off, unsigned int len,
     r = BFD_RELOC_16_SECIDX;
 #endif
 
-  fix_new_exp (frag, off, len, exp, 0, r);
+  fix_new_exp (frag, off, len, exp, 0, r, 0);
 }
 
 /* Export the ABI address size for use by TC_ADDRESS_BYTES for the
@@ -12299,7 +12299,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	  fixP = fix_new (fragP, old_fr_fix, size,
 			  fragP->fr_symbol,
 			  fragP->fr_offset, 1,
-			  reloc_type);
+			  reloc_type, 0);
 	  break;
 
 	case COND_JUMP86:
@@ -12318,7 +12318,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	      fix_new (fragP, old_fr_fix + 2, 2,
 		       fragP->fr_symbol,
 		       fragP->fr_offset, 1,
-		       reloc_type);
+		       reloc_type, 0);
 	      break;
 	    }
 	  /* Fall through.  */
@@ -12330,7 +12330,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	      fixP = fix_new (fragP, old_fr_fix, 1,
 			      fragP->fr_symbol,
 			      fragP->fr_offset, 1,
-			      BFD_RELOC_8_PCREL);
+			      BFD_RELOC_8_PCREL, 0);
 	      fixP->fx_signed = 1;
 	      break;
 	    }
@@ -12344,7 +12344,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	  fixP = fix_new (fragP, old_fr_fix + 1, size,
 			  fragP->fr_symbol,
 			  fragP->fr_offset, 1,
-			  reloc_type);
+			  reloc_type, 0);
 	  break;
 
 	default:

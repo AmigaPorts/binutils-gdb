@@ -49,22 +49,14 @@
 #if defined (HANDLE_SIGNALS)
 
 #if !defined (RETSIGTYPE)
-#  if defined (VOID_SIGHANDLER)
 #    define RETSIGTYPE void
-#  else
-#    define RETSIGTYPE int
-#  endif /* !VOID_SIGHANDLER */
 #endif /* !RETSIGTYPE */
 
-#if defined (VOID_SIGHANDLER)
-#  define SIGHANDLER_RETURN return
-#else
-#  define SIGHANDLER_RETURN return (0)
-#endif
+#define SIGHANDLER_RETURN return
 
 /* This typedef is equivalent to the one for Function; it allows us
    to say SigHandler *foo = signal (SIGKILL, SIG_IGN); */
-typedef RETSIGTYPE SigHandler ();
+typedef RETSIGTYPE SigHandler (int);
 
 #if defined (HAVE_POSIX_SIGNALS)
 typedef struct sigaction sighandler_cxt;
