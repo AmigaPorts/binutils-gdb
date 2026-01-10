@@ -4111,7 +4111,9 @@ amiga_collect (struct bfd_hash_table *ht, asection *sec)
                       sym->name, sec->name);
 
                   he->section = sec;
-                  aout_keep_section(ht, sec);   /* or whatever the a.out equivalent is */
+// TODO                  
+//                  aout_keep_section(ht, sec);   /* or whatever the a.out equivalent is */
+                  sec->flags |= SEC_KEEP;
                 }
             }
         }
@@ -4173,6 +4175,7 @@ amiga_gc_keep (struct bfd_hash_table *ht, struct bfd_link_info *info)
     }
 }
 
+
 static bool
 amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 {
@@ -4202,8 +4205,8 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
       for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
 	for (sec = ibfd->sections; sec != NULL; sec = sec->next)
 	  {
-	    if (!(sec->flags & SEC_KEEP))
-	      fprintf(stderr, "############### %s\n", sec->name);
+//	    if (!(sec->flags & SEC_KEEP))
+//	      fprintf(stderr, "############### %s\n", sec->name);
 	    amiga_collect(&referenced, sec);
 	  }
     }
