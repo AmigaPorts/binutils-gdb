@@ -2794,8 +2794,13 @@ NAME (aout, find_nearest_line) (bfd *abfd,
 		    low_func_vma = q->symbol.value;
 		    func = (asymbol *)q;
 		  }
-		else if (q->symbol.value > offset)
-		  goto done;
+		/* Don't stop searching on q->symbol.value > offset.  Some
+		   producers/targets emit N_FUN stabs out of address order (e.g.
+		   Amiga HUNK_DEBUG), and we can still find better matches later
+		   in the symbol stream.  */
+		/* Old behaviour (kept for reference):
+		   else if (q->symbol.value > offset)
+		     goto done;  */
 	      }
 	      break;
 	    }
