@@ -2396,8 +2396,11 @@ amiga_write_section_contents (
 	  if (insection->output_section == data_sec)
 	    {
 	      if (determine_type(r) == 0)
-		if (!write_longs (&r->address, 1, abfd))
-		  return false;
+		{
+		  n[0] = r->address;
+		  if (!write_longs (n, 1, abfd))
+		    return false;
+		}
 	    }
 	}
     }
@@ -2476,15 +2479,17 @@ amiga_write_section_contents (
 #endif
 		      if (jj == j && i == determine_type (r))
 			{
-	      section->orelocation[k] = NULL;
+		      section->orelocation[k] = NULL;
 			  if (rel32)
 			    {
-		if (!write_longs (&r->address, 1, abfd))
+		n[0] = r->address;
+		if (!write_longs (n, 1, abfd))
 		  return false;
 	      }
 			  else
 			    {
-		if (!write_words (&r->address, 1, abfd))
+		n[0] = r->address;
+		if (!write_words (n, 1, abfd))
 		  return false;
 	      }
 	      if (--relocs == 0)
@@ -2830,15 +2835,20 @@ amiga_get_section_contents (bfd *abfd, sec_ptr section,
 
   if (offset+count > disk_size)
     {
+      file_ptr got;
+
       /* the section's size on disk may be smaller than in memory
        in this case, pad the contents */
-      if (bfd_bread (location, disk_size-offset, abfd) != disk_size-offset)
+      got = bfd_bread (location, disk_size-offset, abfd);
+      if (got < 0 || (bfd_size_type) got != disk_size-offset)
       return false;
       memset ((char *) location + disk_size - offset, 0, count-(disk_size-offset));
     }
   else
     {
-      if (bfd_bread (location, count, abfd) != count)
+      file_ptr got = bfd_bread (location, count, abfd);
+
+      if (got < 0 || (bfd_size_type) got != count)
       return false;
     }
   return true;
@@ -4047,7 +4057,7 @@ amiga_collect (struct bfd_hash_table *ht, asection * sec)
  * Mark all not kept as SEC_EXCLUDE
  */
 static bool
-amiga_purge (struct bfd_hash_table *ht, asection * sec, bool print)
+amiga_purge (struct bfd_hash_table *ht ATTRIBUTE_UNUSED, asection * sec, bool print)
 {
   if (!sec->owner)
     sec->flags |= SEC_KEEP;
