@@ -231,7 +231,7 @@ case $1 in
 				basic_machine=580-amdahl
 				basic_os=sysv
 				;;
-			amiga)
+			amiga | amigaoself)
 				basic_machine=m68k-unknown
 				basic_os=
 				;;
@@ -1730,7 +1730,7 @@ case $os in
 	     | hiux* | abug | nacl* | netware* | windows* \
 	     | os9* | macos* | osx* | ios* \
 	     | mpw* | magic* | mmixware* | mon960* | lnews* \
-	     | amigaos* | amigados* | msdos* | newsos* | unicos* | aof* \
+	     | amigaos* | amigaelf* | amigados* | msdos* | newsos* | unicos* | aof* \
 	     | aos* | aros* | cloudabi* | sortix* | twizzler* \
 	     | nindy* | vxsim* | vxworks* | ebmon* | hms* | mvs* \
 	     | clix* | riscos* | uniplus* | iris* | isc* | rtu* | xenix* \

@@ -49,14 +49,8 @@ extern const char *m68k_comment_chars;
 #define REGISTER_PREFIX '%'
 #endif
 
-#ifdef OBJ_AMIGAHUNK
 #undef REGISTER_PREFIX_OPTIONAL 
 #define REGISTER_PREFIX_OPTIONAL 1
-#else
-#ifndef REGISTER_PREFIX_OPTIONAL
-#define REGISTER_PREFIX_OPTIONAL 0
-#endif
-#endif
 
 extern void m68k_mri_mode_change (int);
 #define MRI_MODE_CHANGE(i) m68k_mri_mode_change (i)

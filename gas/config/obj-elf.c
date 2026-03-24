@@ -820,7 +820,7 @@ obj_elf_change_section (const char *name,
 	      if (ssect != NULL)
 		as_warn (_("ignoring changed section attributes for %s"), name);
 	      else
-		as_bad (_("changed section attributes for %s"), name);
+		as_bad (_("changed section attributes for %s old=%08lx new=%08lx"), name, old_sec->flags, flags);
 	    }
 	  else
 	    /* FIXME: Maybe we should consider removing a previously set
