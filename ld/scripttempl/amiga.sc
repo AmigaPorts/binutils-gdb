@@ -62,7 +62,7 @@ SECTIONS
   {
     *(.bsschip)
   }
-  .dwarf :
+  .dwarf2 :
   {
     ${RELOCATING+__debug_frame_start = .;}
     *(.debug_frame)

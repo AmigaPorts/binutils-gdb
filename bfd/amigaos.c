@@ -1280,7 +1280,7 @@ amiga_handle_cdb_hunk (
     case HUNK_DEBUG:
       /* handle .stab and .stabs as real sections. */
       if (current_name && (0 == strcmp (current_name, ".stab") || 0 == strcmp (current_name, ".stabstr")
-	  || 0 == strncmp (current_name, ".debug_", 7) || 0 == strcmp (current_name, ".dwarf")))
+	  || 0 == strncmp (current_name, ".debug_", 7) || 0 == strcmp (current_name, ".dwarf2")))
 	{
 	  secflags = SEC_HAS_CONTENTS;
 	  goto do_section;
@@ -1342,9 +1342,38 @@ amiga_handle_cdb_hunk (
 
 	      amiga_per_section(current_section)->disk_size = amiga_data->stringtab_size; /* size on disk */
 	      amiga_per_section(current_section)->attribute = 0;
-
-
 	    }
+	  else   /* Not ZMAGIC -> treat as merged DWARF2 container */
+	    {
+	      /* The entire HUNK_DEBUG payload is one merged DWARF2 block.
+		 We create a synthetic section named ".dwarf2" that covers
+		 the whole hunk.  Later, in amigaread.c, after symbols are
+		 loaded, we will reconstruct the individual .debug_* sections
+		 using the __debug_*_start/__debug_*_end symbols emitted by
+		 the linker script.  */
+
+	      bfd_size_type dwarf_size = hunk_size;   /* already known */
+	      bfd_vma dwarf_filepos = bfd_tell (abfd);     /* start of hunk data */
+
+	      current_section = amiga_make_unique_section (abfd, ".dwarf2");
+	      if (!current_section)
+		  return false;
+
+	      current_section->filepos      = dwarf_filepos;
+	      current_section->size         = dwarf_size;
+	      current_section->target_index = hunk_number;
+
+	      bfd_set_section_flags (current_section,
+				     SEC_ALLOC | SEC_DEBUGGING | SEC_HAS_CONTENTS);
+
+	      amiga_per_section (current_section)->disk_size = dwarf_size;
+	      amiga_per_section (current_section)->attribute = 0;
+
+	      /* Nothing more to do here - the real DWARF sections (.debug_info,
+		 .debug_abbrev, .debug_line, .debug_str, etc.) will be created
+		 later in amigaread.c once the symbol table is available.  */
+	    }
+
 	  len -= sizeof(buf);
 	}
       if (bfd_seek (abfd, len, SEEK_CUR))
@@ -1706,7 +1735,7 @@ amiga_write_object_contents (
 	      break;
 	      continue;
 	    }
-	  if (0 == strcmp (p->name, ".dwarf"))
+	  if (0 == strcmp (p->name, ".dwarf2"))
 	    {
 	      dwarf = p;
 	      q->next = p->next;
@@ -1769,7 +1798,7 @@ amiga_write_object_contents (
 	      && !(amiga_base_relative && !strcmp (p->name, ".bss")))
 	    {
 	      /* don't count debug sections. */
-	      if (strcmp (p->name, ".stab") && strcmp(p->name, ".dwarf"))
+	      if (strcmp (p->name, ".stab") && strcmp(p->name, ".dwarf2"))
 		n[2]++;
 	    }
 	else
@@ -1808,7 +1837,7 @@ amiga_write_object_contents (
 	    continue;
 
 	  /* don't add debug sections. */
-	  if (!strcmp (p->name, ".stab") || !strcmp (p->name, ".stabstr") || !strcmp(p->name, ".dwarf"))
+	  if (!strcmp (p->name, ".stab") || !strcmp (p->name, ".stabstr") || !strcmp(p->name, ".dwarf2"))
 	    continue;
 
 	  if (datadata_relocs && !strcmp(p->name,".text"))
@@ -2206,7 +2235,7 @@ amiga_write_section_contents (
       if (!write_longs (n, 1, abfd) || !write_name (abfd, section->name, 0))
 	return false;
     }
-  if (0 == strncmp(section->name, ".debug_", 7) || 0 == strcmp(section->name, ".dwarf"))
+  if (0 == strncmp(section->name, ".debug_", 7) || 0 == strcmp(section->name, ".dwarf2"))
     section->flags = (section->flags & ~(SEC_CODE | SEC_DATA | SEC_ALLOC | SEC_LOAD)) | SEC_DEBUGGING;
 
   /* Depending on the type of the section, write out HUNK_{CODE|DATA|BSS} */
