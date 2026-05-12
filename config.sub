@@ -305,7 +305,7 @@ case $1 in
 				basic_machine=580-amdahl
 				basic_os=sysv
 				;;
-			amiga)
+			amiga | amigaoself)
 				basic_machine=m68k-unknown
 				basic_os=
 				;;

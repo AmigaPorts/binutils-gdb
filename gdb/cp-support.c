@@ -1619,6 +1619,10 @@ report_failed_demangle (const char *name, bool core_dump_allowed,
 
 #endif
 
+#ifdef __CYGWIN__ 
+extern void set_segv_handler(void* hdl);
+#endif
+
 /* A wrapper for bfd_demangle.  */
 
 gdb::unique_xmalloc_ptr<char>
@@ -1628,10 +1632,22 @@ gdb_demangle (const char *name, int options)
   int crash_signal = 0;
 
 #ifdef HAVE_WORKING_FORK
+#ifdef __CYGWIN__ 
+  thread_local void (*thread_local_segv_handler_l) (int);
+  thread_local_segv_handler_l = NULL;
+
+  scoped_restore restore_segv
+    = make_scoped_restore (&thread_local_segv_handler_l,
+              catch_demangler_crashes
+              ? gdb_demangle_signal_handler
+              : nullptr);
+  set_segv_handler((void *)thread_local_segv_handler_l);
+#else
   scoped_segv_handler_restore restore_segv
     (catch_demangler_crashes
      ? gdb_demangle_signal_handler
      : nullptr);
+#endif
 
   bool core_dump_allowed = gdb_demangle_attempt_core_dump;
   SIGJMP_BUF jmp_buf;

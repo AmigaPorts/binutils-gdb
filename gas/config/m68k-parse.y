@@ -422,7 +422,7 @@ mit_operand:
 	  optzapc '@'
 		{
 		  /* We use optzapc to avoid a shift/reduce conflict.  */
-		  if ($1 < ADDR0 || $1 > ADDR7)
+		  if (($1 < ADDR0 || $1 > ADDR7) && ($1 < ADDR8 || $1 > ADDR15))
 		    yyerror (_("syntax error"));
 		  op->mode = AINDR;
 		  op->reg = $1;
@@ -430,7 +430,7 @@ mit_operand:
 	| optzapc '@' '+'
 		{
 		  /* We use optzapc to avoid a shift/reduce conflict.  */
-		  if ($1 < ADDR0 || $1 > ADDR7)
+		  if (($1 < ADDR0 || $1 > ADDR7) && ($1 < ADDR8 || $1 > ADDR15))
 		    yyerror (_("syntax error"));
 		  op->mode = AINC;
 		  op->reg = $1;
@@ -438,7 +438,7 @@ mit_operand:
 	| optzapc '@' '-'
 		{
 		  /* We use optzapc to avoid a shift/reduce conflict.  */
-		  if ($1 < ADDR0 || $1 > ADDR7)
+		  if (($1 < ADDR0 || $1 > ADDR7) && ($1 < ADDR8 || $1 > ADDR15))
 		    yyerror (_("syntax error"));
 		  op->mode = ADEC;
 		  op->reg = $1;
@@ -650,11 +650,11 @@ reglistpair:
 reglistreg:
 	  DR
 		{
-		  $$ = $1 - DATA0;
+		  $$ = $1 < DATA8 ? $1 - DATA0 : $1 - DATA8 + 256;
 		}
 	| AR
 		{
-		  $$ = $1 - ADDR0 + 8;
+		  $$ = $1 < ADDR8 ? $1 - ADDR0 + 8 : $1 - ADDR8 + 128 + 8;
 		}
 	| FPR
 		{
@@ -850,7 +850,11 @@ yylex (void)
 
       if (reg >= DATA0 && reg <= DATA7)
 	ret = DR;
+	  else if (reg >= DATA8 && reg <= DATA23)
+	ret = DR;	
       else if (reg >= ADDR0 && reg <= ADDR7)
+	ret = AR;
+      else if (reg >= ADDR8 && reg <= ADDR15)
 	ret = AR;
       else if (reg >= FP0 && reg <= FP7)
 	return FPR;
@@ -862,7 +866,7 @@ yylex (void)
 	return LPC;
       else if (reg >= ZDATA0 && reg <= ZDATA7)
 	ret = ZDR;
-      else if (reg >= ZADDR0 && reg <= ZADDR7)
+      else if (reg >= ZADDR0 && reg <= ZADDR7) 
 	ret = ZAR;
       else if (reg == ZPC)
 	return LZPC;
@@ -971,6 +975,7 @@ yylex (void)
     }
 
   yylval.exp.size = SIZE_UNSPEC;
+  yylval.exp.baserel = 0;
   if (s <= str + 2
       || (s[-2] != '.' && s[-2] != ':'))
     tail = 0;
@@ -978,18 +983,21 @@ yylex (void)
     {
       switch (s[-1])
 	{
+	case 'B':
+          yylval.exp.baserel = 1;
 	case 's':
 	case 'S':
 	case 'b':
-	case 'B':
 	  yylval.exp.size = SIZE_BYTE;
 	  break;
-	case 'w':
 	case 'W':
+          yylval.exp.baserel = 1;
+	case 'w':
 	  yylval.exp.size = SIZE_WORD;
 	  break;
-	case 'l':
 	case 'L':
+          yylval.exp.baserel = 1;
+	case 'l':
 	  yylval.exp.size = SIZE_LONG;
 	  break;
 	default:
@@ -1089,6 +1097,7 @@ yylex (void)
 int
 m68k_ip_op (char *s, struct m68k_op *oparg)
 {
+  int r;
   memset (oparg, 0, sizeof *oparg);
   oparg->error = NULL;
   oparg->index.reg = ZDATA0;
@@ -1099,7 +1108,34 @@ m68k_ip_op (char *s, struct m68k_op *oparg)
   str = strorig = s;
   op = oparg;
 
-  return yyparse ();
+  r = yyparse ();
+  if (oparg->reg >= DATA8 && oparg->reg <= DATA31)
+    {
+      oparg->mode = DREG;
+      oparg->bank = (oparg->reg - DATA8 + 8) >> 3;
+      oparg->reg = ((oparg->reg - DATA8) & 7) + DATA0; 
+    }
+  else if (oparg->reg >= ADDR8 && oparg->reg <= ADDR15)
+    {
+      oparg->bank = BANK1;
+      oparg->reg = oparg->reg - ADDR8 + ADDR0;
+    }
+  if (oparg->index.reg >= DATA16 && oparg->index.reg <= DATA23)
+    {
+      oparg->error = "invalid index register, e8-e15 are not supported";
+      r = 1;
+    }
+  else if (oparg->index.reg >= DATA8 && oparg->index.reg <= DATA15)
+    {
+      oparg->bank |= BANK2;
+      oparg->index.reg += DATA0 - DATA8;
+    }
+  else if (oparg->index.reg >= ADDR8 && oparg->index.reg <= ADDR15)
+    {
+      oparg->bank |= BANK2;
+      oparg->index.reg += ADDR0 - ADDR8;
+    }
+  return r;
 }
 
 /* The error handler.  */

@@ -434,7 +434,7 @@ changequote([,])dnl
 
     # Does the target support Object Attributes ?
     case ${cpu_type} in
-      aarch64* | arc* | arm* | csky | loongarch | m68k | mips* | msp430 \
+      aarch64* | arc* | arm* | csky | loongarch | mips* | msp430 \
       | ppc* | riscv* | s390* | sparc* | tic6x)
 	for f in config/obj-elf-attr.o; do
 	  case " $extra_objects " in
@@ -443,6 +443,19 @@ changequote([,])dnl
 	  esac
 	done
 	;;
+	m68k)
+	    case ${targ} in
+	      m68*-*-amigaos* ) ;;   # Amiga: keine ELF-Attributes
+	      * )
+	        for f in config/obj-elf-attr.o; do
+	          case " $extra_objects " in
+	            *" $f "*) ;;
+	            *) extra_objects="$extra_objects $f" ;;
+	          esac
+	        done
+	        ;;
+	    esac
+	    ;;	
     esac
 
     # Any other special object files needed ?

@@ -263,6 +263,9 @@ ALL_MACHINES_CFILES = \
 # The .o files needed by all of the 32 bit vectors that are configured into
 # target_vector in targets.c if configured with --enable-targets=all.
 BFD32_BACKENDS = \
+	amigaos.lo \
+	amigaoslink.lo \
+	aout-amiga.lo \
 	aout-cris.lo \
 	aout-ns32k.lo \
 	aout32.lo \
@@ -397,6 +400,9 @@ BFD32_BACKENDS = \
 	xtensa-modules.lo
 
 BFD32_BACKENDS_CFILES = \
+	amigaos.c \
+	amigaoslink.c \
+	aout-amiga.c \
 	aout-cris.c \
 	aout-ns32k.c \
 	aout32.c \

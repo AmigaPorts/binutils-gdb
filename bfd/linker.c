@@ -425,12 +425,15 @@ static bool generic_add_output_symbol
   (bfd *, size_t *psymalloc, asymbol *);
 static bool default_data_link_order
   (bfd *, struct bfd_link_info *, asection *, struct bfd_link_order *);
-static bool default_indirect_link_order
+/* static */
+bool default_indirect_link_order
   (bfd *, struct bfd_link_info *, asection *, struct bfd_link_order *,
    bool);
-static bool _bfd_generic_link_output_symbols
+/* static */
+bool _bfd_generic_link_output_symbols
   (bfd *, bfd *, struct bfd_link_info *, size_t *);
-static bool _bfd_generic_link_write_global_symbol
+/* static */
+bool _bfd_generic_link_write_global_symbol
   (struct generic_link_hash_entry *, void *);
 
 /* The link hash table structure is defined in bfdlink.h.  It provides
@@ -483,6 +486,7 @@ _bfd_link_hash_table_init
   bool ret;
 
   BFD_ASSERT (!abfd->is_linker_output && !abfd->link.hash);
+  table->creator = abfd->xvec;
   table->undefs = NULL;
   table->undefs_tail = NULL;
   table->type = bfd_link_generic_hash_table;
@@ -1137,6 +1141,13 @@ generic_link_check_archive_element (bfd *abfd,
 	  h->u.c.size = size;
 
 	  power = bfd_log2 (size);
+	  /* For the amiga, we don't want an alignment bigger than 2**2.
+	     Doing this here is horrible kludgy, but IMHO the maximal
+	     power alignment really should be target-dependant so that
+	     we wouldn't have to do this -- daniel */
+	  if (info->hash->creator->flavour == bfd_target_amiga_flavour
+	      && power > 2)
+	    power = 2;
 	  if (power > 4)
 	    power = 4;
 	  h->u.c.p->alignment_power = power;
@@ -1627,6 +1638,13 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	    unsigned int power;
 
 	    power = bfd_log2 (value);
+	    /* For the amiga, we don't want an alignment bigger than 2**2.
+	       Doing this here is horrible kludgy, but IMHO the maximal
+	       power alignment really should be target-dependant so that
+	       we wouldn't have to do this -- daniel */
+	    if (info->hash->creator->flavour == bfd_target_amiga_flavour
+		&& power > 2)
+	      power = 2;
 	    if (power > 4)
 	      power = 4;
 	    h->u.c.p->alignment_power = power;
@@ -1681,6 +1699,13 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
 	      /* Select a default alignment based on the size.  This may
 		 be overridden by the caller.  */
 	      power = bfd_log2 (value);
+	      /* For the amiga, we don't want an alignment bigger than 2**2.
+		 Doing this here is horrible kludgy, but IMHO the maximal
+		 power alignment really should be target-dependant so that
+		 we wouldn't have to do this -- daniel */
+	      if (info->hash->creator->flavour == bfd_target_amiga_flavour
+		  && power > 2)
+		power = 2;
 	      if (power > 4)
 		power = 4;
 	      h->u.c.p->alignment_power = power;
@@ -2078,7 +2103,7 @@ generic_add_output_symbol (bfd *output_bfd, size_t *psymalloc, asymbol *sym)
 
 /* Handle the symbols for an input BFD.  */
 
-static bool
+bool
 _bfd_generic_link_output_symbols (bfd *output_bfd,
 				  bfd *input_bfd,
 				  struct bfd_link_info *info,
@@ -2385,7 +2410,7 @@ set_symbol_from_hash (bfd *output_bfd,
 /* Write out a global symbol, if it hasn't already been written out.
    This is called for each symbol in the hash table.  */
 
-static bool
+bool
 _bfd_generic_link_write_global_symbol (struct generic_link_hash_entry *h,
 				       void *data)
 {
@@ -2642,7 +2667,7 @@ default_data_link_order (bfd *abfd,
 
 /* Default routine to handle a bfd_indirect_link_order.  */
 
-static bool
+bool
 default_indirect_link_order (bfd *output_bfd,
 			     struct bfd_link_info *info,
 			     asection *output_section,
@@ -3049,6 +3074,8 @@ _bfd_generic_section_already_linked (bfd *abfd ATTRIBUTE_UNUSED,
   const char *name;
   struct bfd_section_already_linked *l;
   struct bfd_section_already_linked_hash_entry *already_linked_list;
+
+  static bfd * last_abfd;
 
   if ((sec->flags & SEC_LINK_ONCE) == 0)
     return false;

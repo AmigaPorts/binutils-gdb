@@ -4202,7 +4202,7 @@ stab_demangle_qualified (struct stab_demangle_info *minfo, const char **pp,
 	++*pp;
       if (**pp == 't')
 	{
-	  char *name;
+	  char *name = "";
 
 	  if (! stab_demangle_template (minfo, pp,
 					ptype != NULL ? &name : NULL))
@@ -4648,7 +4648,7 @@ stab_demangle_arg (struct stab_demangle_info *minfo, const char **pp,
 		   unsigned int *palloc)
 {
   const char *start;
-  debug_type type;
+  debug_type type = DEBUG_TYPE_NULL;
 
   start = *pp;
   if (! stab_demangle_type (minfo, pp,
@@ -4771,7 +4771,7 @@ stab_demangle_type (struct stab_demangle_info *minfo, const char **pp,
     case 'F':
       /* A function.  */
       {
-	debug_type *args;
+	debug_type *args = 0;
 	bool varargs;
 
 	++*pp;
@@ -5154,7 +5154,7 @@ stab_demangle_fund_type (struct stab_demangle_info *minfo, const char **pp,
 
     case 't':
       {
-	char *name;
+	char *name = "";
 
 	if (! stab_demangle_template (minfo, pp,
 				      ptype != NULL ? &name : NULL))

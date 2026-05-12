@@ -90,8 +90,10 @@
 #define TC_FINALIZE_SYMS_BEFORE_SIZE_SEG 1
 #endif
 
+extern long
+md_pcrel_from_m68k (fixS *fixP, segT current_section);
 #ifndef	MD_PCREL_FROM_SECTION
-#define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from (FIX)
+#define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from_m68k (FIX, SEC)
 #endif
 
 #ifndef TC_FAKE_LABEL
@@ -141,6 +143,7 @@ fix_new_internal (fragS *frag,		/* Which frag?  */
 		  offsetT offset,	/* X_add_number.  */
 		  int pcrel,		/* TRUE if PC-relative relocation.  */
 		  RELOC_ENUM r_type	/* Relocation type.  */,
+		  int baserel ATTRIBUTE_UNUSED,
 		  int at_beginning)	/* Add to the start of the list?  */
 {
   fixS *fixP;
@@ -180,6 +183,7 @@ fix_new_internal (fragS *frag,		/* Which frag?  */
 #endif
 
 #ifdef TC_FIX_TYPE
+  fixP->tc_fix_data = baserel;
   TC_INIT_FIX_DATA (fixP);
 #endif
 
@@ -224,10 +228,11 @@ fix_new (fragS *frag,			/* Which frag?  */
 	 symbolS *add_symbol,		/* X_add_symbol.  */
 	 offsetT offset,		/* X_add_number.  */
 	 int pcrel,			/* TRUE if PC-relative relocation.  */
-	 RELOC_ENUM r_type		/* Relocation type.  */)
+	 RELOC_ENUM r_type,		/* Relocation type.  */
+	 int baserel)
 {
   return fix_new_internal (frag, where, size, add_symbol,
-			   NULL, offset, pcrel, r_type, false);
+			   NULL, offset, pcrel, r_type, baserel, false);
 }
 
 /* Create a fixup for an expression.  Currently we only support fixups
@@ -240,7 +245,8 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
 	     unsigned long size,	/* 1, 2, or 4 usually.  */
 	     const expressionS *exp,	/* Expression.  */
 	     int pcrel,			/* TRUE if PC-relative relocation.  */
-	     RELOC_ENUM r_type		/* Relocation type.  */)
+	     RELOC_ENUM r_type,		/* Relocation type.  */
+		 int baserel)
 {
   symbolS *add = NULL;
   symbolS *sub = NULL;
@@ -284,7 +290,7 @@ fix_new_exp (fragS *frag,		/* Which frag?  */
     }
 
   return fix_new_internal (frag, where, size, add, sub, off, pcrel,
-			   r_type, false);
+			   r_type, baserel, false);
 }
 
 /* Create a fixup at the beginning of FRAG.  The arguments are the same
@@ -295,7 +301,7 @@ fix_at_start (fragS *frag, unsigned long size, symbolS *add_symbol,
 	      offsetT offset, int pcrel, RELOC_ENUM r_type)
 {
   return fix_new_internal (frag, 0, size, add_symbol,
-			   NULL, offset, pcrel, r_type, true);
+			   NULL, offset, pcrel, r_type, 0, true);
 }
 
 /* Generic function to determine whether a fixup requires a relocation.  */
@@ -1001,7 +1007,8 @@ fixup_segment (fixS *fixP, segT this_segment)
       add_number = fixP->fx_offset;
 
       if (fixP->fx_addsy != NULL)
-	add_symbol_segment = S_GET_SEGMENT (fixP->fx_addsy);
+//	add_symbol_segment = S_GET_SEGMENT (fixP->fx_addsy);
+	add_symbol_segment = S_IS_WEAK (fixP->fx_addsy) ? undefined_section : S_GET_SEGMENT (fixP->fx_addsy);
 
       if (fixP->fx_subsy != NULL)
 	{
@@ -2227,11 +2234,11 @@ write_object_file (void)
 #ifdef TC_CONS_FIX_NEW
 	  TC_CONS_FIX_NEW (lie->frag,
 			   lie->word_goes_here - lie->frag->fr_literal,
-			   2, &exp, TC_PARSE_CONS_RETURN_NONE);
+			   2, &exp, TC_PARSE_CONS_RETURN_NONE, 0);
 #else
 	  fix_new_exp (lie->frag,
 		       lie->word_goes_here - lie->frag->fr_literal,
-		       2, &exp, 0, BFD_RELOC_16);
+		       2, &exp, 0, BFD_RELOC_16, 0);
 #endif
 	  *prevP = lie->next_broken_word;
 	}

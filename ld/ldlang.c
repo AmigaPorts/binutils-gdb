@@ -7876,6 +7876,7 @@ lang_reset_memory_regions (void)
       os->processed_lma = false;
     }
 
+  if (link_info.output_bfd)
   for (o = link_info.output_bfd->sections; o != NULL; o = o->next)
     {
       /* Save the last size for possible use by bfd_relax_section.  */
@@ -9003,6 +9004,9 @@ lang_add_reloc (bfd_reloc_code_real_type reloc,
   p->section = section;
   p->name = name;
   p->addend_exp = addend;
+// AMIGA???  
+  if (reloc == BFD_RELOC_CTOR)
+	  p->addend_exp->value.value -= section->vma;
 
   p->addend_value = 0;
   p->output_section = NULL;

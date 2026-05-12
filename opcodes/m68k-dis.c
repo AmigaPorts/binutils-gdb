@@ -26,8 +26,77 @@
 #include "cpu-m68k.h"
 #include "opcode/m68k.h"
 
-/* Local function prototypes.  */
+#define MOTOROLA 1
+#define TARGET_AMIGA 1
 
+#ifdef MOTOROLA
+/* print as signed decimal. */
+#undef sprintf_vma
+#define sprintf_vma(b,n) sprintf(b,"%d",(int)n)
+#endif
+
+#ifdef TARGET_AMIGA
+/* Extra info to pass to the disassembler address printing function.  */
+/* Extra info to pass to the section disassembler and address printing
+   function.  */
+struct xobjdump_disasm_info
+{
+  bfd *              abfd;
+  asection *         sec;
+  bool        require_sec;
+  disassembler_ftype disassemble_fn;
+  const char *       symbol;
+  arelent *          reloc;
+  arelent ***        relppp; // pointer to relocations
+  bfd_vma            vma; // code position
+  unsigned char *    buffer; // vma + *pp - buffer determines relppp usage
+  unsigned char **   pp; // current position in buffer
+};
+
+struct objdump_disasm_info
+{
+  bfd *abfd;
+  bool require_sec;
+  disassembler_ftype disassemble_fn;
+  arelent *reloc;
+  struct symbol_entry *symbol_list;
+  unsigned char *    buffer; // vma + *pp - buffer determines relppp usage
+  unsigned char **   pp; // current position in buffer
+};
+
+/* Support display of symbols in baserel offsets. */
+void print_m68k_disassembler_options (FILE * stream);
+static void
+parse_disassembler_options (const char *);
+#endif
+
+
+/* Local function prototypes.  */
+#ifdef MOTOROLA
+static int dump_baserel;
+
+const char * const fpcr_names[] =
+{
+  "", "fpiar", "fpsr", "fpiar/fpsr", "fpcr",
+  "fpiar/fpcr", "fpsr/fpcr", "fpiar/fpsr/fpcr"
+};
+
+static char *const reg_names[] =
+{
+  "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7",
+  "a0", "a1", "a2", "a3", "a4", "a5", "a6", "sp",
+  "ps", "pc"
+};
+
+/* Name of register halves for MAC/EMAC.
+   Seperate from reg_names since 'spu', 'fpl' look weird.  */
+static char *const reg_half_names[] =
+{
+  "d0", "d1", "d2", "d3", "d4", "d5", "d6", "d7",
+  "a0", "a1", "a2", "a3", "a4", "a5", "a6", "a7",
+  "ps", "pc"
+};
+#else
 const char * const fpcr_names[] =
 {
   "", "%fpiar", "%fpsr", "%fpiar/%fpsr", "%fpcr",
@@ -49,6 +118,7 @@ static char *const reg_half_names[] =
   "%a0", "%a1", "%a2", "%a3", "%a4", "%a5", "%a6", "%a7",
   "%ps", "%pc"
 };
+#endif
 
 /* Sign-extend an (unsigned char).  */
 #if __STDC__ == 1
@@ -680,6 +750,11 @@ print_insn_arg (const char *d,
   bfd_signed_vma disp;
   unsigned int uval;
 
+  struct objdump_disasm_info * aux = (struct objdump_disasm_info *) info->application_data;
+  aux->buffer = buffer;
+  aux->pp = &p;
+
+
   switch (*d)
     {
     case 'c':		/* Cache identifier.  */
@@ -737,6 +812,40 @@ print_insn_arg (const char *d,
 	   same address different names.  The tables below try to get it right
 	   using info->mach, but only for v4e.  */
 	struct regname { char * name; int value; };
+#ifdef MOTOROLA
+	static const struct regname names[] =
+	  {
+	    {"sfc", 0x000}, {"dfc", 0x001}, {"cacr", 0x002},
+	    {"tc",  0x003}, {"itt0",0x004}, {"itt1", 0x005},
+	    {"dtt0",0x006}, {"dtt1",0x007}, {"buscr",0x008},
+	    {"rgpiobar", 0x009}, {"acr4",0x00c},
+	    {"acr5",0x00d}, {"acr6",0x00e}, {"acr7", 0x00f},
+	    {"usp", 0x800}, {"vbr", 0x801}, {"caar", 0x802},
+	    {"msp", 0x803}, {"isp", 0x804},
+	    {"pc", 0x80f},
+	    /* Reg c04 is sometimes called flashbar or rambar.
+	       Reg c05 is also sometimes called rambar.  */
+	    {"rambar0", 0xc04}, {"rambar1", 0xc05},
+
+	    /* reg c0e is sometimes called mbar2 or secmbar.
+	       reg c0f is sometimes called mbar.  */
+	    {"mbar0", 0xc0e}, {"mbar1", 0xc0f},
+
+	    /* Should we be calling this psr like we do in case 'Y'?  */
+	    {"mmusr",0x805},
+
+	    {"urp", 0x806}, {"srp", 0x807}, {"pcr", 0x808},
+
+	    /* Fido added these.  */
+	    {"cac", 0xffe}, {"mbo", 0xfff}
+	};
+	/* Alternate names for v4e (MCF5407/5445x/MCF547x/MCF548x), at least.  */
+	static const struct regname names_v4e[] =
+	  {
+	    {"asid",0x003}, {"acr0",0x004}, {"acr1",0x005},
+	    {"acr2",0x006}, {"acr3",0x007}, {"mmubar",0x008},
+	  };
+#else
 	static const struct regname names[] =
 	  {
 	    {"%sfc", 0x000}, {"%dfc", 0x001}, {"%cacr", 0x002},
@@ -769,6 +878,7 @@ print_insn_arg (const char *d,
 	    {"%asid",0x003}, {"%acr0",0x004}, {"%acr1",0x005},
 	    {"%acr2",0x006}, {"%acr3",0x007}, {"%mmubar",0x008},
 	  };
+#endif
 	unsigned int arch_mask;
 
 	arch_mask = bfd_m68k_mach_to_features (info->mach);
@@ -1356,6 +1466,30 @@ print_insn_arg (const char *d,
 	FETCH_ARG (5, val);
 	switch (val)
 	  {
+#ifdef MOTOROLA
+	  case 2: name = "tt0"; break;
+	  case 3: name = "tt1"; break;
+	  case 0x10: name = "tc"; break;
+	  case 0x11: name = "drp"; break;
+	  case 0x12: name = "srp"; break;
+	  case 0x13: name = "crp"; break;
+	  case 0x14: name = "cal"; break;
+	  case 0x15: name = "val"; break;
+	  case 0x16: name = "scc"; break;
+	  case 0x17: name = "ac"; break;
+ 	  case 0x18: name = "psr"; break;
+	  case 0x19: name = "pcsr"; break;
+	  case 0x1c:
+	  case 0x1d:
+	    {
+	      int break_reg = ((buffer[3] >> 2) & 7);
+
+	      (*info->fprintf_func)
+		(info->stream, val == 0x1c ? "bad%d" : "bac%d",
+		 break_reg);
+	    }
+	    break;
+#else
 	  case 2: name = "%tt0"; break;
 	  case 3: name = "%tt1"; break;
 	  case 0x10: name = "%tc"; break;
@@ -1378,6 +1512,7 @@ print_insn_arg (const char *d,
 		 val == 0x1c ? "%%bad%d" : "%%bac%d", break_reg);
 	    }
 	    break;
+#endif	    
 	  default:
 	    (*info->fprintf_styled_func) (info->stream, dis_style_text,
 					  "<mmu register %d>", val);
@@ -1763,6 +1898,14 @@ print_insn_m68k (bfd_vma memaddr, disassemble_info *info)
   info->display_endian = BFD_ENDIAN_BIG;
   priv.max_fetched = priv.the_buffer;
   priv.insn_start = memaddr;
+
+//  if (info->disassembler_options)
+//    {
+//      parse_disassembler_options (info->disassembler_options);
+//
+//      /* To avoid repeated parsing of these options, we remove them here.  */
+//      info->disassembler_options = NULL;
+//    }
 
   arch_mask = bfd_m68k_mach_to_features (info->mach);
   if (!arch_mask)

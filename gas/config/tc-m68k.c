@@ -27,10 +27,21 @@
 
 #include "opcode/m68k.h"
 #include "m68k-parse.h"
+
+#if defined (OBJ_ELF)
 #include "elf/m68k.h"
 
 static void m68k_elf_cons (int);
 static void m68k_elf_gnu_attribute (int);
+
+#endif
+
+#ifdef TE_AMIGA
+extern const bfd_target amiga_vec;
+#endif
+long
+md_pcrel_from_m68k (fixS *fixP, segT current_section);
+
 
 /* This string holds the chars that always start a comment.  If the
    pre-processor is disabled, these aren't very useful.  The macro
@@ -74,6 +85,9 @@ int flag_want_pic;
 static int flag_short_refs;	/* -l option.  */
 static int flag_long_jumps;	/* -S option.  */
 static int flag_keep_pcrel;	/* --pcrel option.  */
+static int flag_small_code;	/* -sc option */
+
+#define FLAG_SMALL_CODE (0 && flag_small_code)
 
 #ifdef REGISTER_PREFIX_OPTIONAL
 int flag_reg_prefix_optional = REGISTER_PREFIX_OPTIONAL;
@@ -330,6 +344,8 @@ struct m68k_it
   int numo;			/* Number of shorts in opcode.  */
   short opcode[11];
 
+  short bank;
+
   struct m68k_op operands[6];
 
   int nexp;			/* Number of exprs in use.  */
@@ -360,9 +376,12 @@ struct m68k_it
 	 significance of some values (in the branch instruction, for
 	 example).  */
       int pcrel_fix;
+#ifdef OBJ_ELF
       /* Whether this expression needs special pic relocation, and if
 	 so, which.  */
       enum pic_relocation pic_reloc;
+#endif
+      char baserel;
     }
   reloc[5];			/* Five is enough???  */
 };
@@ -375,13 +394,13 @@ struct m68k_it
 
 /* Macros for determining if cpu supports a specific addressing mode.  */
 #define HAVE_LONG_DISP(x)	\
-	((x) & (m68020|m68030|m68040|m68060|cpu32|fido_a|mcfisa_b|mcfisa_c))
+	((x) & (m68020|m68030|m68040|m68060|m68080|cpu32|fido_a|mcfisa_b|mcfisa_c))
 #define HAVE_LONG_CALL(x)	\
-	((x) & (m68020|m68030|m68040|m68060|cpu32|fido_a|mcfisa_b|mcfisa_c))
+	((x) & (m68020|m68030|m68040|m68060|m68080|cpu32|fido_a|mcfisa_b|mcfisa_c))
 #define HAVE_LONG_COND(x)	\
-	((x) & (m68020|m68030|m68040|m68060|cpu32|fido_a|mcfisa_b|mcfisa_c))
+	((x) & (m68020|m68030|m68040|m68060|m68080|cpu32|fido_a|mcfisa_b|mcfisa_c))
 #define HAVE_LONG_BRANCH(x)	\
-	((x) & (m68020|m68030|m68040|m68060|cpu32|fido_a|mcfisa_b))
+	((x) & (m68020|m68030|m68040|m68060|m68080|cpu32|fido_a|mcfisa_b))
 #define LONG_BRANCH_VIA_COND(x) (HAVE_LONG_COND(x) && !HAVE_LONG_BRANCH(x))
 
 static struct m68k_it the_ins;	/* The instruction being assembled.  */
@@ -413,7 +432,7 @@ insop (int w, const struct m68k_incant *opcode)
 /* The numo+1 kludge is so we can hit the low order byte of the prev word.
    Blecch.  */
 static void
-add_fix (int width, struct m68k_exp *exp, int pc_rel, int pc_fix)
+add_fix (int width, struct m68k_exp *exp, int pc_rel, int pc_fix, int base_rel)
 {
   the_ins.reloc[the_ins.nrel].n = (width == 'B' || width == '3'
 				   ? the_ins.numo * 2 - 1
@@ -423,8 +442,11 @@ add_fix (int width, struct m68k_exp *exp, int pc_rel, int pc_fix)
   the_ins.reloc[the_ins.nrel].exp = exp->exp;
   the_ins.reloc[the_ins.nrel].wid = width;
   the_ins.reloc[the_ins.nrel].pcrel_fix = pc_fix;
+#ifdef OBJ_ELF
   the_ins.reloc[the_ins.nrel].pic_reloc = exp->pic_reloc;
-  the_ins.reloc[the_ins.nrel++].pcrel = pc_rel;
+#endif  
+  the_ins.reloc[the_ins.nrel].pcrel = pc_rel;
+  the_ins.reloc[the_ins.nrel++].baserel = base_rel;
 }
 
 /* Cause an extra frag to be generated here, inserting up to 10 bytes
@@ -455,6 +477,7 @@ static int reverse_16_bits (int in);
 static int reverse_8_bits (int in);
 static void install_gen_operand (int mode, int val);
 static void install_operand (int mode, int val);
+static void s_bss (int);
 static void s_data1 (int);
 static void s_data2 (int);
 static void s_even (int);
@@ -508,6 +531,7 @@ static const struct m68k_cpu m68k_archs[] =
   {m68030|m68881|m68851,			m68020_ctrl, "68030", 0},
   {m68040,					m68040_ctrl, "68040", 0},
   {m68060,					m68060_ctrl, "68060", 0},
+  {m68080,					m68060_ctrl, "68080", 0},
   {cpu32|m68881,				cpu32_ctrl, "cpu32", 0},
   {fido_a,					fido_ctrl, "fidoa", 0},
   {mcfisa_a|mcfhwdiv,				NULL, "isaa", 0},
@@ -563,6 +587,7 @@ static const struct m68k_cpu m68k_cpus[] =
   {m68040,					m68040_ctrl, "68ec040", 1},
   {m68060,					m68060_ctrl, "68060", 0},
   {m68060,					m68060_ctrl, "68ec060", 1},
+  {m68080,					m68060_ctrl, "68080", 0},
 
   {cpu32|m68881,				cpu32_ctrl, "cpu32",  0},
   {cpu32|m68881,				cpu32_ctrl, "68330", 1},
@@ -774,9 +799,21 @@ static void m68k_init_arch (void);
 #define PCINDEX		8	/* PC + displacement + index. */
 #define ABSTOPCREL	9	/* Absolute relax down to 16-bit PC-relative.  */
 
+/* ABSREL (nice name;-)) is used in small-code, it might be implemented
+ * base-relative (a4), pc-relative, or base-relative with an extra add
+ * instruction to add the base-register.
+ *
+ * IMMREL is the analogous mode for immediate addressing of variables. This
+ * one can lead into situations, where a replacement is not possible:
+ *   addl #foo,a0
+ * can't be made pc-relative, if foo is in the text segment.  */
+
+#define ABSREL		10
+#define IMMREL		11
+
 /* This relaxation is required for branches where there is no long
    branch and we are in pcrel mode.  We generate a bne/beq pair.  */
-#define BRANCHBWPL	10      /* Branch byte, word or pair of longs
+#define BRANCHBWPL	12      /* Branch byte, word or pair of longs
 				   */
 
 /* Note that calls to frag_var need to specify the maximum expansion
@@ -846,6 +883,16 @@ relax_typeS md_relax_table[] =
   { 32767, -32768,  2, TAB (BRANCHBWPL, LONG) },
   {     0,	0,  10, 0 },
   {     1,	1,  0, 0 },
+  
+  {   127,   -128,  0, 0 },
+  { 32767, -32768,  2, TAB (ABSREL, LONG) },
+  {     0,      0,  6, 0 },
+  {     1,      1,  0, 0 },
+
+  {   127,   -128,  0, 0 },
+  { 32767, -32768,  2, TAB (IMMREL, LONG) },
+  {     0,      0,  6, 0 },
+  {     1,      1,  0, 0 },
 };
 
 /* These are the machine dependent pseudo-ops.  These are included so
@@ -861,18 +908,21 @@ const pseudo_typeS md_pseudo_table[] =
 {
   {"data1", s_data1, 0},
   {"data2", s_data2, 0},
+  {"bss", s_bss, 0},
   {"even", s_even, 0},
   {"skip", s_space, 0},
   {"proc", s_proc, 0},
+#ifdef OBJ_ELF
   {"align", s_align_bytes, 0},
   {"swbeg", s_ignore, 0},
   {"long", m68k_elf_cons, 4},
+  {"gnu_attribute", m68k_elf_gnu_attribute, 0},
+#endif
   {"extend", float_cons, 'x'},
   {"ldouble", float_cons, 'x'},
 
   {"arch", s_m68k_arch, 0},
   {"cpu", s_m68k_cpu, 0},
-  {"gnu_attribute", m68k_elf_gnu_attribute, 0},
 
   /* The following pseudo-ops are supported for MRI compatibility.  */
   {"chip", s_chip, 0},
@@ -934,7 +984,11 @@ const pseudo_typeS mote_pseudo_table[] =
   {"dsb", s_space, 1},
 
   {"xdef", s_globl, 0},
+#ifdef OBJ_ELF
   {"align", s_align_bytes, 0},
+#else
+  {"align", s_align_ptwo, 0},
+#endif
   {0, 0, 0}
 };
 
@@ -959,6 +1013,7 @@ static char alt_notend_table[256];
       || (*s == ':'						\
 	  && alt_notend_table[(unsigned char) s[1]])))
 
+#ifdef OBJ_ELF
 
 /* Return zero if the reference to SYMBOL from within the same segment may
    be relaxed.  */
@@ -1184,6 +1239,16 @@ tc_m68k_fix_adjustable (fixS *fixP)
     }
 }
 
+#else /* !OBJ_ELF */
+
+#define get_reloc_code(SIZE,PCREL,OTHER) NO_RELOC
+
+/* PR gas/3041 Weak symbols are not relaxable
+   because they must be treated as extern.  */
+#define relaxable_symbol(symbol)   (!(S_IS_WEAK (symbol)))
+
+#endif /* OBJ_ELF */
+
 arelent *
 tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 {
@@ -1263,6 +1328,17 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 	    }
 	}
     }
+  else if (fixp->tc_fix_data)
+    {
+      switch (fixp->fx_size)
+	{
+	case 1: code = BFD_RELOC_8_BASEREL; break;
+	case 2: code = BFD_RELOC_16_BASEREL; break;
+	case 4: code = BFD_RELOC_32_BASEREL; break;
+	default:
+	  abort ();
+	}
+    }
   else
     {
 #define F(SZ,PCREL)		(((SZ) << 1) + (PCREL))
@@ -1286,13 +1362,62 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
   reloc->sym_ptr_ptr = notes_alloc (sizeof (asymbol *));
   *reloc->sym_ptr_ptr = symbol_get_bfdsym (fixp->fx_addsy);
   reloc->address = fixp->fx_frag->fr_address + fixp->fx_where;
+
+#ifndef OBJ_ELF
+  if (OUTPUT_FLAVOR == bfd_target_aout_flavour
+      && fixp->fx_addsy
+      && S_IS_WEAK (fixp->fx_addsy)
+      && ! bfd_is_und_section (S_GET_SEGMENT (fixp->fx_addsy)))
+    {
+      /* PR gas/3041 References to weak symbols must be treated as extern
+	 in order to be overridable by the linker, even if they are defined
+	 in the same object file. So the original addend must be written
+	 "as is" into the output section without further processing.
+	 The addend value must be hacked here in order to force
+	 bfd_install_relocation() to write the original value into the
+	 output section.
+	 1) MD_APPLY_SYM_VALUE() is set to 1 for m68k/a.out, so the symbol
+	 value has already been added to the addend in fixup_segment(). We
+	 have to remove it.
+	 2) bfd_install_relocation() will incorrectly treat this symbol as
+	 resolved, so it will write the symbol value plus its addend and
+	 section VMA. As a workaround we can tweak the addend value here in
+	 order to get the original value in the section after the call to
+	 bfd_install_relocation().  */
+      reloc->addend = fixp->fx_addnumber
+		      /* Fix because of MD_APPLY_SYM_VALUE() */
+		      - S_GET_VALUE (fixp->fx_addsy)
+		      /* Fix for bfd_install_relocation() */
+		      - (S_GET_VALUE (fixp->fx_addsy)
+			 + S_GET_SEGMENT (fixp->fx_addsy)->vma);
+    }
+  else if (OUTPUT_FLAVOR == bfd_target_amiga_flavour
+      && fixp->fx_addsy
+      && S_IS_WEAK (fixp->fx_addsy)
+      && ! bfd_is_und_section (S_GET_SEGMENT (fixp->fx_addsy)))
+    {
+      // similar fix for amigavec
+      reloc->addend = fixp->fx_addnumber - S_GET_VALUE (fixp->fx_addsy);
+      if (fixp->fx_pcrel)
+	reloc->addend += reloc->address;
+    }
+  else if (fixp->fx_pcrel)
+    reloc->addend = fixp->fx_addnumber;
+  else
+    reloc->addend = 0;
+#else
+
+  
   if (!fixp->fx_pcrel)
     reloc->addend = fixp->fx_addnumber;
   else
     reloc->addend = (section->vma
-		     + fixp->fx_pcrel_adjust
+		     /* Explicit sign extension in case char is
+			unsigned.  */
+		     + ((fixp->fx_pcrel_adjust & 0xff) ^ 0x80) - 0x80
 		     + fixp->fx_addnumber
-		     + md_pcrel_from (fixp));
+		     + md_pcrel_from_m68k (fixp, section));
+#endif
 
   reloc->howto = bfd_reloc_type_lookup (stdoutput, code);
   gas_assert (reloc->howto != 0);
@@ -1813,8 +1938,8 @@ m68k_ip (char *instring)
 		case '4':
 		  if (opP->mode != AINDR && opP->mode != AINC && opP->mode != ADEC
 		      && (opP->mode != DISP
-			   || opP->reg < ADDR0
-			   || opP->reg > ADDR7))
+			   || (!(opP->reg >= ADDR0 && opP->reg <= ADDR7) &&
+			       !(opP->reg >= ADDR8 && opP->reg <= ADDR15))))
 		    ++losing;
 		  break;
 
@@ -1850,8 +1975,8 @@ m68k_ip (char *instring)
 
 		case 'd':
 		  if (opP->mode != DISP
-		      || opP->reg < ADDR0
-		      || opP->reg > ADDR7)
+			   || (!(opP->reg >= ADDR0 && opP->reg <= ADDR7) &&
+			       !(opP->reg >= ADDR8 && opP->reg <= ADDR15)))
 		    losing++;
 		  break;
 
@@ -2378,6 +2503,22 @@ m68k_ip (char *instring)
   the_ins.opcode[0] = getone (opcode);
   the_ins.opcode[1] = gettwo (opcode);
 
+  {
+    // 68080 support
+    int k;
+    int bank = 0xf7100;
+    for (k = 0, opP = &the_ins.operands[0]; k < opsfound; ++k, ++opP) {
+	bank |= (int)opP->bank << (2 - k*2);
+    }
+    if (bank != 0xf7100)
+      {
+	/* For a single operand instruction, both AA and BB should be the same. */
+	if (opsfound == 1)
+	  bank |= (bank >> 2) & 3;
+	the_ins.bank = bank;
+      } else
+	the_ins.bank = 0;
+
   for (s = the_ins.args, opP = &the_ins.operands[0]; *s; s += 2, opP++)
     {
       int have_disp = 0;
@@ -2423,13 +2564,24 @@ m68k_ip (char *instring)
 	      else
 		nextword = get_num (&opP->disp, 0);
 	      if (isvar (&opP->disp))
-		add_fix (s[1], &opP->disp, 0, 0);
+		{
+/* This doesn't work when the symbol is N_UNDF! We ignore this for now. */
+		  if (FLAG_SMALL_CODE)
+		    {
+		      add_frag (adds (&opP->disp),
+				offs (&opP->disp),
+				TAB (IMMREL, SZ_UNDEF));
+		       break;
+		    }
+		  else
+		    add_fix(s[1], &opP->disp, 0, 0, opP->disp.baserel);
+	        }
 	      switch (s[1])
 		{
 		case 'b':
 		  if (!isbyte (nextword))
 		    opP->error = _("operand out of range");
-		  addword (nextword);
+		  addword (nextword & 0xff); /* G.Nikl: clear upper byte */
 		  baseo = 0;
 		  break;
 		case 'w':
@@ -2459,7 +2611,7 @@ m68k_ip (char *instring)
 		  outro = 11;
 		  break;
 		case 'x':
-		  baseo = 6;
+		  baseo = 5;
 		  outro = 15;
 		  break;
 		case 'p':
@@ -2584,12 +2736,15 @@ m68k_ip (char *instring)
 		      if (opP->reg == PC)
 			{
 			  if (opP->disp.size == SIZE_LONG
+#ifdef OBJ_ELF
 			      /* If the displacement needs pic
 				 relocation it cannot be relaxed.  */
-			      || opP->disp.pic_reloc != pic_none)
+			      || opP->disp.pic_reloc != pic_none
+#endif
+			      )
 			    {
 			      addword (0x0170);
-			      add_fix ('l', &opP->disp, 1, 2);
+			      add_fix ('l', &opP->disp, 1, 2, opP->disp.baserel);
 			    }
 			  else
 			    {
@@ -2602,7 +2757,7 @@ m68k_ip (char *instring)
 		      else
 			{
 			  addword (0x0170);
-			  add_fix ('l', &opP->disp, 0, 0);
+			  add_fix ('l', &opP->disp, 0, 0, opP->disp.baserel);
 			}
 		    }
 		  else
@@ -2620,10 +2775,10 @@ m68k_ip (char *instring)
 		    {
 		      if (opP->reg == PC)
 			{
-			  add_fix ('w', &opP->disp, 1, 0);
+			  add_fix ('w', &opP->disp, 1, 0, opP->disp.baserel);
 			}
 		      else
-			add_fix ('w', &opP->disp, 0, 0);
+			add_fix ('w', &opP->disp, 0, 0, opP->disp.baserel);
 		    }
 		}
 	      addword (nextword);
@@ -2733,9 +2888,9 @@ m68k_ip (char *instring)
 				 fit (possible on m68000) let the
 				 fixup processing complain later.  */
 			      if (opP->reg == PC)
-				add_fix ('B', &opP->disp, 1, 1);
+				add_fix ('B', &opP->disp, 1, 1, opP->disp.baserel);
 			      else
-				add_fix ('B', &opP->disp, 0, 0);
+				add_fix ('B', &opP->disp, 0, 0, opP->disp.baserel);
 			    }
 			  else if (siz1 != SIZE_BYTE)
 			    {
@@ -2751,9 +2906,12 @@ m68k_ip (char *instring)
 			       && opP->reg == PC
 			       && isvar (&opP->disp)
 			       && subs (&opP->disp) == NULL
+#ifdef OBJ_ELF
 			       /* If the displacement needs pic
 				  relocation it cannot be relaxed.  */
-			       && opP->disp.pic_reloc == pic_none)
+			       && opP->disp.pic_reloc == pic_none
+#endif
+			       )
 			{
 			  /* The code in md_convert_frag_1 needs to be
                              able to adjust nextword.  Call frag_grow
@@ -2863,9 +3021,9 @@ m68k_ip (char *instring)
 	      if (siz1 != SIZE_UNSPEC && isvar (&opP->disp))
 		{
 		  if (opP->reg == PC || opP->reg == ZPC)
-		    add_fix (siz1 == SIZE_LONG ? 'l' : 'w', &opP->disp, 1, 2);
+		    add_fix (siz1 == SIZE_LONG ? 'l' : 'w', &opP->disp, 1, 2, opP->disp.baserel);
 		  else
-		    add_fix (siz1 == SIZE_LONG ? 'l' : 'w', &opP->disp, 0, 0);
+		    add_fix (siz1 == SIZE_LONG ? 'l' : 'w', &opP->disp, 0, 0, opP->disp.baserel);
 		}
 	      if (siz1 == SIZE_LONG)
 		addword (baseo >> 16);
@@ -2873,7 +3031,7 @@ m68k_ip (char *instring)
 		addword (baseo);
 
 	      if (siz2 != SIZE_UNSPEC && isvar (&opP->odisp))
-		add_fix (siz2 == SIZE_LONG ? 'l' : 'w', &opP->odisp, 0, 0);
+		add_fix (siz2 == SIZE_LONG ? 'l' : 'w', &opP->odisp, 0, 0, opP->odisp.baserel);
 	      if (siz2 == SIZE_LONG)
 		addword (outro >> 16);
 	      if (siz2 != SIZE_UNSPEC)
@@ -2897,9 +3055,11 @@ m68k_ip (char *instring)
 		  if (isvar (&opP->disp)
 		      && !subs (&opP->disp)
 		      && adds (&opP->disp)
+#ifdef OBJ_ELF
 		      /* If the displacement needs pic relocation it
 			 cannot be relaxed.  */
 		      && opP->disp.pic_reloc == pic_none
+#endif
 		      && !flag_long_jumps
 		      && !strchr ("~%&$?", s[0]))
 		    {
@@ -2911,8 +3071,17 @@ m68k_ip (char *instring)
 		    }
 		  /* Fall through.  */
 		case SIZE_LONG:
+/* This doesn't work when the symbol is N_UNDF! We ignore this for now. */
+		  if (FLAG_SMALL_CODE)
+		    {
+		      tmpreg=0x3A; /* 7.2 */
+		      add_frag (adds (&opP->disp),
+			        offs (&opP->disp),
+				TAB (ABSREL, SZ_UNDEF));
+		      break;
+		    }
 		  if (isvar (&opP->disp))
-		    add_fix ('l', &opP->disp, 0, 0);
+		    add_fix ('l', &opP->disp, 0, 0, opP->disp.baserel);
 
 		  tmpreg = 0x39;/* 7.1 mode */
 		  addword (nextword >> 16);
@@ -2925,7 +3094,7 @@ m68k_ip (char *instring)
 
 		case SIZE_WORD:
 		  if (isvar (&opP->disp))
-		    add_fix ('w', &opP->disp, 0, 0);
+		    add_fix ('w', &opP->disp, 0, 0, opP->disp.baserel);
 
 		  tmpreg = 0x38;/* 7.0 mode */
 		  addword (nextword);
@@ -2971,7 +3140,7 @@ m68k_ip (char *instring)
 	    }
 	  tmpreg = get_num (&opP->disp, tmpreg);
 	  if (isvar (&opP->disp))
-	    add_fix (s[1], &opP->disp, 0, 0);
+	    add_fix (s[1], &opP->disp, 0, 0, opP->disp.baserel);
 	  switch (s[1])
 	    {
 	    case 'b':		/* Danger:  These do no check for
@@ -2979,7 +3148,7 @@ m68k_ip (char *instring)
 				   user beware! */
 	      if (!isbyte (tmpreg))
 		opP->error = _("out of range");
-	      insop (tmpreg, opcode);
+	      insop (tmpreg & 0xff, opcode); /* G.Nikl: clear upper byte */
 	      if (isvar (&opP->disp))
 		the_ins.reloc[the_ins.nrel - 1].n =
 		  (opcode->m_codenum) * 2 + 1;
@@ -3039,16 +3208,16 @@ m68k_ip (char *instring)
 	  switch (s[1])
 	    {
 	    case 'B':
-	      add_fix ('B', &opP->disp, 1, -1);
+	      add_fix ('B', &opP->disp, 1, -1, opP->disp.baserel);
 	      break;
 	    case 'W':
-	      add_fix ('w', &opP->disp, 1, 0);
+	      add_fix ('w', &opP->disp, 1, 0, opP->disp.baserel);
 	      addword (0);
 	      break;
 	    case 'L':
 	    long_branch:
 	      the_ins.opcode[0] |= 0xff;
-	      add_fix ('l', &opP->disp, 1, 0);
+	      add_fix ('l', &opP->disp, 1, 0, opP->disp.baserel);
 	      addword (0);
 	      addword (0);
 	      break;
@@ -3066,9 +3235,12 @@ m68k_ip (char *instring)
 
 	      var_branch:
 	      if (subs (&opP->disp)	/* We can't relax it.  */
+#ifdef OBJ_ELF
 		  /* If the displacement needs pic relocation it cannot be
 		     relaxed.  */
-		  || opP->disp.pic_reloc != pic_none)
+		  || opP->disp.pic_reloc != pic_none
+#endif
+		  || 0)
 		{
 		  if (!have_disp)
 		    as_warn (_("Can't use long branches on this architecture"));
@@ -3091,7 +3263,7 @@ m68k_ip (char *instring)
 		      the_ins.opcode[0] |= 0x0006;
 		      addword (0x4EF9);
 		    }
-		  add_fix ('l', &opP->disp, 0, 0);
+		  add_fix ('l', &opP->disp, 0, 0, opP->disp.baserel);
 		  addword (0);
 		  addword (0);
 		  break;
@@ -3142,12 +3314,19 @@ m68k_ip (char *instring)
 				  TAB (DBCCABSJ, SZ_UNDEF));
 		      break;
 		    }
-		  add_fix ('w', &opP->disp, 1, 0);
+		  add_fix ('w', &opP->disp, 1, 0, opP->disp.baserel);
 		}
 	      addword (0);
 	      break;
+
+      case '~':                                               // APOLLO 68080 DBRAL
+        opP->disp.exp.X_add_number |=1;                       // APOLLO 68080 DBRAL
+        add_fix ('w', &opP->disp, 1, 0, opP->disp.baserel);   // APOLLO 68080 DBRAL
+        addword (0);                                          // APOLLO 68080 DBRAL
+        break;                                                // APOLLO 68080 DBRAL
+
 	    case 'C':		/* Fixed size LONG coproc branches.  */
-	      add_fix ('l', &opP->disp, 1, 0);
+	      add_fix ('l', &opP->disp, 1, 0, opP->disp.baserel);
 	      addword (0);
 	      addword (0);
 	      break;
@@ -3155,7 +3334,7 @@ m68k_ip (char *instring)
 	      if (subs (&opP->disp) || (adds (&opP->disp) == 0))
 		{
 		  the_ins.opcode[the_ins.numo - 1] |= 0x40;
-		  add_fix ('l', &opP->disp, 1, 0);
+		  add_fix ('l', &opP->disp, 1, 0, opP->disp.baserel);
 		  addword (0);
 		  addword (0);
 		}
@@ -3609,7 +3788,7 @@ m68k_ip (char *instring)
 	  break;
 	case '_':	/* used only for move16 absolute 32-bit address.  */
 	  if (isvar (&opP->disp))
-	    add_fix ('l', &opP->disp, 0, 0);
+	    add_fix ('l', &opP->disp, 0, 0, opP->disp.baserel);
 	  tmpreg = get_num (&opP->disp, 90);
 	  addword (tmpreg >> 16);
 	  addword (tmpreg & 0xFFFF);
@@ -3637,7 +3816,7 @@ m68k_ip (char *instring)
 	  abort ();
 	}
     }
-
+  }
   /* By the time when get here (FINALLY) the_ins contains the complete
      instruction, ready to be emitted. . .  */
 }
@@ -3958,6 +4137,12 @@ struct init_entry
     int number;
   };
 
+#if TE_AMIGA
+  #define FRAME ADDR5
+#else
+  #define FRAME ADDR6
+#endif
+
 static const struct init_entry init_table[] =
 {
   { "d0", DATA0 },
@@ -3975,7 +4160,7 @@ static const struct init_entry init_table[] =
   { "a4", ADDR4 },
   { "a5", ADDR5 },
   { "a6", ADDR6 },
-  { "fp", ADDR6 },
+  { "fp", FRAME },
   { "a7", ADDR7 },
   { "sp", ADDR7 },
   { "ssp", ADDR7 },
@@ -3997,6 +4182,39 @@ static const struct init_entry init_table[] =
   { "control", FPC },
   { "status", FPS },
   { "iaddr", FPI },
+
+  { "b0", ADDR8 },
+  { "b1", ADDR9 },
+  { "b2", ADDR10 },
+  { "b3", ADDR11 },
+  { "b4", ADDR12 },
+  { "b5", ADDR13 },
+  { "b6", ADDR14 },
+  { "b7", ADDR15 },
+  { "e0", DATA8 },
+  { "e1", DATA9 },
+  { "e2", DATA10 },
+  { "e3", DATA11 },
+  { "e4", DATA12 },
+  { "e5", DATA13 },
+  { "e6", DATA14 },
+  { "e7", DATA15 },
+  { "e8", DATA16 },
+  { "e9", DATA17 },
+  { "e10", DATA19 },
+  { "e11", DATA19 },
+  { "e12", DATA20 },
+  { "e13", DATA21 },
+  { "e14", DATA22 },
+  { "e15", DATA23 },
+  { "e16", DATA24 },
+  { "e17", DATA25 },
+  { "e18", DATA26 },
+  { "e19", DATA27 },
+  { "e20", DATA28 },
+  { "e21", DATA29 },
+  { "e22", DATA30 },
+  { "e23", DATA31 },
 
   { "cop0", COP0 },
   { "cop1", COP1 },
@@ -4297,13 +4515,28 @@ md_assemble (char *str)
       current_label = NULL;
     }
 
+#ifdef OBJ_ELF
   /* Tie dwarf2 debug info to the address at the start of the insn.  */
   dwarf2_emit_insn (0);
+#endif
 
   if (the_ins.nfrag == 0)
     {
       /* No frag hacking involved; just put it out.  */
-      toP = frag_more (2 * the_ins.numo);
+      int numc = 2 * the_ins.numo;
+
+      if (the_ins.bank)
+        numc += 2;
+
+      toP = frag_more (numc);
+
+      if (the_ins.bank)
+	{
+  	  the_ins.bank |= (numc / 2 - 2) << 6;
+	  md_number_to_chars (toP, (long) the_ins.bank, 2);
+	  toP += 2;
+	}
+
       fromP = &the_ins.opcode[0];
       for (m = the_ins.numo; m; --m)
 	{
@@ -4344,7 +4577,8 @@ md_assemble (char *str)
 			      &the_ins.reloc[m].exp,
 			      the_ins.reloc[m].pcrel,
 			      get_reloc_code (n, the_ins.reloc[m].pcrel,
-					      the_ins.reloc[m].pic_reloc));
+					      the_ins.reloc[m].pic_reloc),
+			      the_ins.reloc[m].baserel);
 	  fixP->fx_pcrel_adjust = the_ins.reloc[m].pcrel_fix;
 	  if (the_ins.reloc[m].wid == 'B')
 	    fixP->fx_signed = 1;
@@ -4362,6 +4596,10 @@ md_assemble (char *str)
       wid += 2 * (the_ins.numo - the_ins.fragb[n - 1].fragoff);
     /* frag_var part.  */
     wid += FRAG_VAR_SIZE;
+
+    if (the_ins.bank)
+      wid += 2;
+
     /* Make sure the whole insn fits in one chunk, in particular that
        the var part is attached, as we access one byte before the
        variable frag for byte branches.  */
@@ -4376,7 +4614,19 @@ md_assemble (char *str)
 	wid = 2 * the_ins.fragb[n].fragoff;
       else
 	wid = 2 * (the_ins.numo - the_ins.fragb[n - 1].fragoff);
+
+      if (the_ins.bank)
+        wid += 2;
+
       toP = frag_more (wid);
+
+      if (the_ins.bank)
+  	{
+  	  the_ins.bank |= (wid / 2 - 2) << 6;
+  	  md_number_to_chars (toP, (long) the_ins.bank, 2);
+  	  toP += 2;
+  	}
+
       to_beg_P = toP;
       shorts_this_frag = 0;
       for (m = wid / 2; m; --m)
@@ -4406,7 +4656,8 @@ md_assemble (char *str)
 			      &the_ins.reloc[m].exp,
 			      the_ins.reloc[m].pcrel,
 			      get_reloc_code (wid, the_ins.reloc[m].pcrel,
-					      the_ins.reloc[m].pic_reloc));
+					      the_ins.reloc[m].pic_reloc),
+			      the_ins.reloc[m].baserel);
 	  fixP->fx_pcrel_adjust = the_ins.reloc[m].pcrel_fix;
 	}
       (void) frag_var (rs_machine_dependent, FRAG_VAR_SIZE, 0,
@@ -4444,7 +4695,8 @@ md_assemble (char *str)
 			  &the_ins.reloc[m].exp,
 			  the_ins.reloc[m].pcrel,
 			  get_reloc_code (wid, the_ins.reloc[m].pcrel,
-					  the_ins.reloc[m].pic_reloc));
+					  the_ins.reloc[m].pic_reloc),
+			  the_ins.reloc[m].baserel);
       fixP->fx_pcrel_adjust = the_ins.reloc[m].pcrel_fix;
     }
 }
@@ -4668,9 +4920,11 @@ md_begin (void)
 
   init_regtable ();
 
+#ifdef OBJ_ELF
   record_alignment (text_section, 2);
   record_alignment (data_section, 2);
   record_alignment (bss_section, 2);
+#endif
 }
 
 
@@ -4686,7 +4940,9 @@ m68k_frob_label (symbolS *sym)
   n->text = 0;
   current_label = n;
 
+#ifdef OBJ_ELF
   dwarf2_emit_label (sym);
+#endif
 }
 
 /* This is called when a value that is not an instruction is emitted.  */
@@ -4790,6 +5046,7 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
   if (fixP->fx_addsy == NULL && fixP->fx_pcrel == 0)
     fixP->fx_done = 1;
 
+#ifdef OBJ_ELF
   if (fixP->fx_addsy)
     {
       memset (buf, 0, fixP->fx_size);
@@ -4826,6 +5083,15 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
 
       return;
     }
+#elif defined(OBJ_AOUT)
+  /* PR gas/3041 Do not fix frags referencing a weak symbol.  */
+  if (fixP->fx_addsy && S_IS_WEAK (fixP->fx_addsy))
+    {
+      memset (buf, 0, fixP->fx_size);
+      fixP->fx_addnumber = val;	/* Remember value for emit_reloc.  */
+      return;
+    }
+#endif
 
   if (fixP->fx_r_type == BFD_RELOC_VTABLE_INHERIT
       || fixP->fx_r_type == BFD_RELOC_VTABLE_ENTRY)
@@ -4884,7 +5150,8 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
      in write.c may have clobbered fx_pcrel, so we need to examine the
      reloc type.  */
   if ((fixP->fx_pcrel
-       || fixP->fx_r_type == BFD_RELOC_8_PCREL)
+       || fixP->fx_r_type == BFD_RELOC_8_PCREL
+       || fixP->fx_r_type == BFD_RELOC_NONE)
       && fixP->fx_size == 1
       && (fixP->fx_addsy == NULL
 	  || S_IS_DEFINED (fixP->fx_addsy))
@@ -4929,7 +5196,7 @@ md_convert_frag_1 (fragS *fragP)
 	as_bad_where (fragP->fr_file, fragP->fr_line,
 		      _("short branch with zero offset: use :w"));
       fixP = fix_new (fragP, fragP->fr_fix - 1, 1, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC8);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC8, 0);
       fixP->fx_pcrel_adjust = -1;
       break;
     case TAB (BRANCHBWL, SHORT):
@@ -4939,13 +5206,13 @@ md_convert_frag_1 (fragS *fragP)
     case TAB (BRANCHBWPL, SHORT):
       fragP->fr_opcode[1] = 0x00;
       fixP = fix_new (fragP, fragP->fr_fix, 2, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC16);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC16, 0);
       fragP->fr_fix += 2;
       break;
     case TAB (BRANCHBWL, LONG):
       fragP->fr_opcode[1] = (char) 0xFF;
       fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC32);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC32, 0);
       fragP->fr_fix += 4;
       break;
     case TAB (BRANCHBWPL, LONG):
@@ -4954,7 +5221,7 @@ md_convert_frag_1 (fragS *fragP)
       fragP->fr_opcode[0] = 0x66; /* bne */
       fragP->fr_opcode[1] = 0xFF;
       fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC32);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC32, 0);
       fixP->fx_file = fragP->fr_file;
       fixP->fx_line = fragP->fr_line;
       fragP->fr_fix += 4;  /* Skip first offset */
@@ -4963,10 +5230,14 @@ md_convert_frag_1 (fragS *fragP)
       *buffer_address++ = 0xff;
       fragP->fr_fix += 2;  /* Skip second branch opcode */
       fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC32);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC32, 0);
       fragP->fr_fix += 4;
       break;
     case TAB (BRABSJUNC, LONG):
+      if (flag_small_code)
+	{
+	  as_bad (_("Long branch in small code model, not supported."));
+	}
       if (fragP->fr_opcode[0] == 0x61)		/* jbsr */
 	{
 	  if (flag_keep_pcrel)
@@ -4975,7 +5246,7 @@ md_convert_frag_1 (fragS *fragP)
 	  fragP->fr_opcode[0] = 0x4E;
 	  fragP->fr_opcode[1] = (char) 0xB9; /* JSR with ABSL LONG operand.  */
 	  fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-			  fragP->fr_offset, 0, RELAX_RELOC_ABS32);
+			  fragP->fr_offset, 0, RELAX_RELOC_ABS32, 0);
 	  fragP->fr_fix += 4;
 	}
       else if (fragP->fr_opcode[0] == 0x60)	/* jbra */
@@ -4986,7 +5257,7 @@ md_convert_frag_1 (fragS *fragP)
 	  fragP->fr_opcode[0] = 0x4E;
 	  fragP->fr_opcode[1] = (char) 0xF9; /* JMP with ABSL LONG operand.  */
 	  fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-			  fragP->fr_offset, 0, RELAX_RELOC_ABS32);
+			  fragP->fr_offset, 0, RELAX_RELOC_ABS32, 0);
 	  fragP->fr_fix += 4;
 	}
       else
@@ -5013,25 +5284,25 @@ md_convert_frag_1 (fragS *fragP)
       *buffer_address++ = (char) 0xf9;
       fragP->fr_fix += 2;	/* Account for jmp instruction.  */
       fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-		      fragP->fr_offset, 0, RELAX_RELOC_ABS32);
+		      fragP->fr_offset, 0, RELAX_RELOC_ABS32, 0);
       fragP->fr_fix += 4;
       break;
     case TAB (FBRANCH, SHORT):
       know ((fragP->fr_opcode[1] & 0x40) == 0);
       fixP = fix_new (fragP, fragP->fr_fix, 2, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC16);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC16, 0);
       fragP->fr_fix += 2;
       break;
     case TAB (FBRANCH, LONG):
       fragP->fr_opcode[1] |= 0x40;	/* Turn on LONG bit.  */
       fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC32);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC32, 0);
       fragP->fr_fix += 4;
       break;
     case TAB (DBCCLBR, SHORT):
     case TAB (DBCCABSJ, SHORT):
       fixP = fix_new (fragP, fragP->fr_fix, 2, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC16);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC16, 0);
       fragP->fr_fix += 2;
       break;
     case TAB (DBCCLBR, LONG):
@@ -5047,7 +5318,7 @@ md_convert_frag_1 (fragS *fragP)
 
       fragP->fr_fix += 6;	/* Account for bra/jmp instructions.  */
       fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC32);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC32, 0);
       fragP->fr_fix += 4;
       break;
     case TAB (DBCCABSJ, LONG):
@@ -5067,14 +5338,14 @@ md_convert_frag_1 (fragS *fragP)
 
       fragP->fr_fix += 6;		/* Account for bra/jmp instructions.  */
       fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-		      fragP->fr_offset, 0, RELAX_RELOC_ABS32);
+		      fragP->fr_offset, 0, RELAX_RELOC_ABS32, 0);
       fragP->fr_fix += 4;
       break;
     case TAB (PCREL1632, SHORT):
       fragP->fr_opcode[1] &= ~0x3F;
       fragP->fr_opcode[1] |= 0x3A; /* 072 - mode 7.2 */
       fixP = fix_new (fragP, (int) (fragP->fr_fix), 2, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC16);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC16, 0);
       fragP->fr_fix += 2;
       break;
     case TAB (PCREL1632, LONG):
@@ -5084,7 +5355,7 @@ md_convert_frag_1 (fragS *fragP)
       *buffer_address++ = 0x70;
       fragP->fr_fix += 2;
       fixP = fix_new (fragP, (int) (fragP->fr_fix), 4, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC32);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC32, 0);
       fixP->fx_pcrel_adjust = 2;
       fragP->fr_fix += 4;
       break;
@@ -5092,7 +5363,7 @@ md_convert_frag_1 (fragS *fragP)
       gas_assert (fragP->fr_fix >= 2);
       buffer_address[-2] &= ~1;
       fixP = fix_new (fragP, fragP->fr_fix - 1, 1, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC8);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC8, 0);
       fixP->fx_pcrel_adjust = 1;
       break;
     case TAB (PCINDEX, SHORT):
@@ -5100,7 +5371,7 @@ md_convert_frag_1 (fragS *fragP)
       buffer_address[-2] |= 0x1;
       buffer_address[-1] = 0x20;
       fixP = fix_new (fragP, (int) (fragP->fr_fix), 2, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC16);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC16, 0);
       fixP->fx_pcrel_adjust = 2;
       fragP->fr_fix += 2;
       break;
@@ -5109,13 +5380,13 @@ md_convert_frag_1 (fragS *fragP)
       buffer_address[-2] |= 0x1;
       buffer_address[-1] = 0x30;
       fixP = fix_new (fragP, (int) (fragP->fr_fix), 4, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC32);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC32, 0);
       fixP->fx_pcrel_adjust = 2;
       fragP->fr_fix += 4;
       break;
     case TAB (ABSTOPCREL, SHORT):
       fixP = fix_new (fragP, fragP->fr_fix, 2, fragP->fr_symbol,
-		      fragP->fr_offset, 1, RELAX_RELOC_PC16);
+		      fragP->fr_offset, 1, RELAX_RELOC_PC16, 0);
       fragP->fr_fix += 2;
       break;
     case TAB (ABSTOPCREL, LONG):
@@ -5129,8 +5400,80 @@ md_convert_frag_1 (fragS *fragP)
       fragP->fr_opcode[1] &= ~0x3F;
       fragP->fr_opcode[1] |= 0x39;	/* Mode 7.1 */
       fixP = fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol,
-		      fragP->fr_offset, 0, RELAX_RELOC_ABS32);
+		      fragP->fr_offset, 0, RELAX_RELOC_ABS32, 0);
       fragP->fr_fix += 4;
+      break;
+    case TAB (ABSREL, BYTE):
+      as_bad (_("ABSREL_BYTE: how the ** does this look??"));
+      break;
+    case TAB (ABSREL, SHORT):
+      fragP->fr_opcode[1] &= ~0x3f;
+      fragP->fr_fix += 2;
+      if (S_GET_SEGMENT (fragP->fr_symbol) == text_section)
+	{
+	  /* so this is really a pc-relative address */
+	  fragP->fr_opcode[1] |= 0x3a;
+	  fix_new (fragP, fragP->fr_fix, 2, fragP->fr_symbol, fragP->fr_offset, 1, NO_RELOC, 0);
+  	  break;
+  	}
+      /* in that case we have to generate base-relative code
+       * (note: if we're in N_UNDF, this could as well be pc-relative, but the linker
+       *        will have to do the final patch in that case) */
+      fragP->fr_opcode[1] |= 0x2c;  /* (a4) */
+      fix_new (fragP, fragP->fr_fix, 2, fragP->fr_symbol, fragP->fr_offset, 0, NO_RELOC, 1);
+      break;
+    case TAB (ABSREL, LONG):
+      as_bad (_("ABSREL_LONG: sorry, not supported."));
+      break;
+    case TAB (IMMREL, BYTE):
+      as_bad (_("IMMREL_BYTE: how the ** does this look??"));
+      break;
+    case TAB (IMMREL, SHORT):
+      if (S_GET_SEGMENT (fragP->fr_symbol) == text_section)
+	{
+	/* we can only fix operations on data registers, not on <ea> */
+	if ((fragP->fr_opcode[1] & 0x38) != 0)
+	  {
+	    /* use the normal reloc32, sigh... */
+	    fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol, fragP->fr_offset, 0, NO_RELOC, 0);
+      fragP->fr_fix += 4;
+      break;
+    }
+
+	  /* so this is really a pc-relative address
+	   * What we have to do now is a VERY UGLY AND BIG KLUDGE. Basically do the
+	   * following thing:
+	   *   turn
+	   *     addl #foo,d0      (foo is N_TEXT)
+	   *   into
+	   *     pea  foo(pc)
+	   *     addl (sp)+,d0
+	   */
+	  *buffer_address++ = fragP->fr_opcode[0]; /* save the original command */
+	  *buffer_address++ = fragP->fr_opcode[1];
+	  fragP->fr_opcode[0] = 0x48; 	/* PEA */
+	  fragP->fr_opcode[1] = 0x7a;
+	  fix_new (fragP, fragP->fr_fix, 2, fragP->fr_symbol, fragP->fr_offset, 1, NO_RELOC, 0);
+
+	  *buffer_address++ = 0x9f;	/* sp@+ */
+	  fragP->fr_fix += 4;	/* two byte fix, two byte code extension */
+	  break;
+	}
+      /* in that case we have to generate base-relative code
+       * (note: if we're in N_UNDF, this could as well be pc-relative, but the linker
+       *        will have to do the final patch in that case) */
+
+      /* analogous (more or less;-)) to above, the following conversion is done
+       *   turn
+       *     addl #bar,d0		(bar is N_DATA)
+       *   into
+       *	   addl #<bar>,d0	where <bar> is a baserel-reloc
+       *     addl a4,d0
+       */
+
+      fix_new (fragP, fragP->fr_fix, 4, fragP->fr_symbol, fragP->fr_offset, 0, NO_RELOC, 1);
+      *buffer_address++ = 0xd0;
+      *buffer_address++ = 0x8c;
       break;
     }
   if (fixP)
@@ -5167,7 +5510,7 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	  {
 	    fragP->fr_subtype = TAB (TABTYPE (fragP->fr_subtype), BYTE);
 	  }
-	else if (flag_short_refs)
+	else if (flag_short_refs || flag_small_code)
 	  {
 	    /* Symbol is undefined and we want short ref.  */
 	    fragP->fr_subtype = TAB (TABTYPE (fragP->fr_subtype), SHORT);
@@ -5235,6 +5578,21 @@ md_estimate_size_before_relax (fragS *fragP, segT segment)
 	else
 	  {
 	    fragP->fr_subtype = TAB (ABSTOPCREL, LONG);
+	  }
+	break;
+      }
+
+    case TAB (ABSREL, SZ_UNDEF):
+      {
+	if ((S_GET_SEGMENT (fragP->fr_symbol) == segment
+	     && relaxable_symbol (fragP->fr_symbol))
+	    || flag_short_refs || FLAG_SMALL_CODE)
+	  {
+	    fragP->fr_subtype = TAB (ABSREL, SHORT);
+	  }
+	else
+	  {
+	    fragP->fr_subtype = TAB (ABSREL, LONG);
 	  }
 	break;
       }
@@ -5309,7 +5667,7 @@ md_create_long_jump (char *ptr, addressT from_addr, addressT to_addr,
       md_number_to_chars (ptr, (valueT) 0x4EF9, 2);
       md_number_to_chars (ptr + 2, (valueT) offset, 4);
       fix_new (frag, (ptr + 2) - frag->fr_literal, 4, to_symbol, (offsetT) 0,
-	       0, NO_RELOC);
+	       0, NO_RELOC, 0);
     }
   else
     {
@@ -5488,6 +5846,16 @@ static void
 s_data2 (int ignore ATTRIBUTE_UNUSED)
 {
   subseg_set (data_section, 2);
+  demand_empty_rest_of_line ();
+}
+
+static void
+s_bss (int ignore ATTRIBUTE_UNUSED)
+{
+  /* We don't support putting frags in the BSS segment, we fake it
+     by marking in_bss, then looking at s_skip for clues.  */
+
+  subseg_set (bss_section, 0);
   demand_empty_rest_of_line ();
 }
 
@@ -7186,12 +7554,15 @@ s_m68k_arch (int ignored ATTRIBUTE_UNUSED)
   char saved_char;
   char *name;
 
-  if (initialized)
-    {
-      as_bad (_("already assembled instructions"));
-      ignore_rest_of_line ();
-      return;
-    }
+  current_architecture = 0;
+  not_current_architecture = 0;
+
+//  if (initialized)
+//    {
+//      as_bad (_("already assembled instructions"));
+//      ignore_rest_of_line ();
+//      return;
+//    }
 
   name = input_line_pointer;
   while (!is_end_of_stmt (*input_line_pointer)
@@ -7223,6 +7594,9 @@ s_m68k_arch (int ignored ATTRIBUTE_UNUSED)
 
   *input_line_pointer = saved_char;
   demand_empty_rest_of_line ();
+
+  m68k_init_arch();
+
   return;
 }
 
@@ -7261,6 +7635,8 @@ m68k_lookup_cpu (const char *arg, const struct m68k_cpu *table,
 	    arg += 2;
 	}
     }
+  else if (arg[0] == 'c' && arg[1] == 'p' && arg[2] == 'u' && arg[3] == '=')
+    arg += 4;
   else if (arg[0] == 'c' && arg[1] == '6')
     arg += 1;
 
@@ -7343,7 +7719,11 @@ m68k_set_extension (char const *name, int allow_m, int silent)
    Invocation line includes a switch not recognized by the base assembler.
  */
 
+#ifdef OBJ_ELF
 const char md_shortopts[] = "lSA:m:kQ:V";
+#else
+const char md_shortopts[] = "lSA:m:s:k";
+#endif
 
 const struct option md_longopts[] = {
 #define OPTION_PIC (OPTION_MD_BASE)
@@ -7385,6 +7765,13 @@ md_parse_option (int c, const char *arg)
     case OPTION_PCREL:		/* --pcrel means never turn PC-relative
 				   branches into absolute jumps.  */
       flag_keep_pcrel = 1;
+      break;
+
+    case 's':
+      if (!strcmp(arg, "c") || !strcmp(arg, "mallcode"))
+	flag_small_code = 1;
+      else
+	return 0;
       break;
 
     case OPTION_PIC:
@@ -7459,6 +7846,8 @@ md_parse_option (int c, const char *arg)
 	;
       else
 	return 0;
+
+      m68k_init_arch();
       break;
 
     default:
@@ -7522,8 +7911,8 @@ m68k_init_arch (void)
      with a coprocessor could be doing emulation.  */
   if (current_architecture & m68851)
     {
-      if (current_architecture & m68040)
-	as_warn (_("68040 and 68851 specified; mmu instructions may assemble incorrectly"));
+      if (current_architecture & (m68040|m68060|m68080))
+	as_warn (_("68040/68060/68080 and 68851 specified; mmu instructions may assemble incorrectly"));
     }
   /* What other incompatibilities could we check for?  */
 
@@ -7569,7 +7958,8 @@ md_show_usage (FILE *stream)
   fprintf (stream, _("\
 -l			use 1 word for refs to undefined symbols [default 2]\n\
 -pic, -k		generate position independent code\n\
--S			turn jbsr into jsr\n\
+-S			turn jbsr into jsr and keeps jra for non local labels.\n\
+-smallcode, -sc		small code model - does nothing atm\n\
 --pcrel                 never turn PC-relative branches into absolute jumps\n\
 --register-prefix-optional\n\
 			recognize register names without prefix character\n\
@@ -7715,16 +8105,42 @@ md_section_align (segT segment ATTRIBUTE_UNUSED, valueT size)
    word.  The difference between the addresses of the offset and the
    first extension word is stored in fx_pcrel_adjust.  */
 long
-md_pcrel_from (fixS *fixP)
+md_pcrel_from_m68k (fixS *fixP, segT current_section)
 {
   int adjust;
 
   adjust = fixP->fx_pcrel_adjust;
   if (adjust == 64)
     adjust = -1;
+
+#ifndef OBJ_ELF
+#ifdef TE_AMIGA
+  /* Amiga Hunk adjusts to current address. */
+  if (stdoutput->xvec == &amiga_vec)
+    {
+      if (!fixP->fx_addsy)
+	return -adjust;
+
+      asymbol * sym = symbol_get_bfdsym (fixP->fx_addsy);
+      if (adjust != -1 && sym->section != current_section)
+	{
+	  if (strcmp(sym->section->name, "*UND*") && strcmp(sym->section->name, current_section->name))
+	    {
+	      long addsy_fix = fixP->fx_addsy ? symbol_get_frag(fixP->fx_addsy)->fr_fix : 0;
+	      return -adjust + fixP->fx_frag->fr_address + addsy_fix;
+	    }
+	  return -adjust;
+	}
+
+      // fall through
+    }
+#endif
+#endif
+
   return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
 }
 
+#ifdef OBJ_ELF
 void
 m68k_elf_final_processing (void)
 {
@@ -7826,7 +8242,7 @@ m68k_elf_suffix (char **str_p, expressionS *exp_p)
   *str2 = '\0';
   len = str2 - ident;
 
-  if (startswith (ident, "TLSLDO")
+  if (strncmp (ident, "TLSLDO", 6) == 0
       && len == 6)
     {
       /* Now check for identifier@suffix+constant.  */
@@ -7900,7 +8316,7 @@ m68k_elf_cons (int nbytes /* 4=.long */)
 	      if (target_big_endian)
 		offset = nbytes - size;
 	      fix_new_exp (frag_now, p - frag_now->fr_literal + offset, size,
-			   &exp, 0, reloc);
+			   &exp, 0, reloc, 0);
 	    }
 	}
       else
@@ -7912,7 +8328,9 @@ m68k_elf_cons (int nbytes /* 4=.long */)
   input_line_pointer--;
   demand_empty_rest_of_line ();
 }
+#endif
 
+#if defined (OBJ_ELF)
 /* Parse a .gnu_attribute directive.  */
 static void
 m68k_elf_gnu_attribute (int ignored ATTRIBUTE_UNUSED)
@@ -7930,6 +8348,7 @@ m68k_elf_gnu_attribute (int ignored ATTRIBUTE_UNUSED)
 	as_warn (_("unknown .gnu_attribute value"));
     }
 }
+#endif
 
 int
 tc_m68k_regname_to_dw2regnum (const char *regname)

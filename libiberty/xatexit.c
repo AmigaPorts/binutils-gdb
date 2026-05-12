@@ -37,7 +37,9 @@ failure.  If you use @code{xatexit} to register functions, you must use
 #include <unixlib.h>
 #else
 /* For systems with larger pointers than ints, this must be declared.  */
+#ifndef _MSC_VER
 void *malloc (size_t);
+#endif
 #endif
 
 static void xatexit_cleanup (void);

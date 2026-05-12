@@ -3680,8 +3680,8 @@ read_comp_units_from_section (dwarf2_per_objfile *per_objfile,
   section->read (objfile);
 
   info_ptr = section->buffer;
-
-  while (info_ptr < section->buffer + section->size)
+  /* add 3 since amiga hunk aligns to 4 bytes */
+  while (info_ptr + 3 < section->buffer + section->size)
     {
       dwarf2_per_cu_up this_cu;
 

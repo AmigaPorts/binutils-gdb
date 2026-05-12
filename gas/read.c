@@ -334,7 +334,7 @@ static htab_t po_hash;
 
 static const pseudo_typeS potable[] = {
   {"abort", s_abort, 0},
-  {"align", s_align_ptwo, 0},
+  {"align", s_align_bytes, 0},
   {"altmacro", s_altmacro, 1},
   {"ascii", stringer, 8+0},
   {"asciz", stringer, 8+1},
@@ -416,6 +416,7 @@ static const pseudo_typeS potable[] = {
   {"global", s_globl, 0},
   {"globl", s_globl, 0},
   {"hword", cons, 2},
+  {"ident", s_ignore, 0},
   {"if", s_if, (int) O_ne},
   {"ifb", s_ifb, 1},
   {"ifc", s_ifc, 0},
@@ -446,6 +447,7 @@ static const pseudo_typeS potable[] = {
   {"list", listing_list, 1},	/* Turn listing on.  */
   {"llen", listing_psize, 1},
   {"long", cons, 4},
+  {"loc", s_ignore, 0},
   {"lsym", s_lsym, 0},
   {"macro", s_macro, 0},
   {"mexit", s_mexit, 0},
@@ -481,6 +483,7 @@ static const pseudo_typeS potable[] = {
   {"short", cons, 2},
   {"single", float_cons, 'f'},
 /* size  */
+  {"size", s_ignore, 0},
   {"space", s_space, 0},
   {"skip", s_space, 0},
   {"sleb128", s_leb128, 1},
@@ -1870,8 +1873,11 @@ s_comm_internal (int param,
       S_SET_EXTERNAL (symbolP);
       S_SET_SEGMENT (symbolP, bfd_com_section_ptr);
     }
-
+#ifdef OBJ_AMIGAHUNK
+  ignore_rest_of_line ();
+#else
   demand_empty_rest_of_line ();
+#endif
  out:
   if (flag_mri)
     mri_comment_end (stop, stopc);
@@ -1948,6 +1954,7 @@ s_mri_common (int small ATTRIBUTE_UNUSED)
   if (S_IS_DEFINED (sym) && !S_IS_COMMON (sym))
     {
       as_bad (_("symbol `%s' is already defined"), S_GET_NAME (sym));
+      ignore_rest_of_line ();
       mri_comment_end (stop, stopc);
       return;
     }
@@ -4076,9 +4083,11 @@ demand_empty_rest_of_line (void)
     input_line_pointer++;
   else
     {
-      if (ISPRINT (*input_line_pointer))
+      if (ISPRINT (*input_line_pointer)) {
+	if (*input_line_pointer != '|')
 	as_bad (_("junk at end of line, first unrecognized character is `%c'"),
 		 *input_line_pointer);
+      }
       else
 	as_bad (_("junk at end of line, first unrecognized character valued 0x%x"),
 		 *input_line_pointer);
@@ -4133,7 +4142,13 @@ pseudo_set (symbolS *symbolP)
   if (!S_IS_FORWARD_REF (symbolP))
     (void) expression (&exp);
   else
-    (void) expr (0, &exp, expr_defer_incl_dot);
+    (void) deferred_expression (&exp);
+
+#if defined(OBJ_AMIGAHUNK)
+// needed to get .stabs working
+  if (exp.X_op == O_absent && symbol_get_bfdsym (symbolP)->section == undefined_section)
+    exp.X_op = O_constant;
+#endif
 
   if (exp.X_op == O_illegal)
     as_bad (_("illegal expression"));
@@ -4911,7 +4926,7 @@ emit_expr_fix (expressionS *exp, unsigned int nbytes, fragS *frag, char *p,
 	return;
       }
   fix_new_exp (frag, p - frag->fr_literal + offset, size,
-	       exp, 0, r);
+	       exp, 0, r, 0);
 #endif
 }
 
@@ -6347,6 +6362,14 @@ demand_copy_string (int *lenP)
 
   len = 0;
   SKIP_WHITESPACE ();
+
+  if (ISDIGIT(*input_line_pointer))
+    {
+      while (ISDIGIT(*input_line_pointer))
+	++input_line_pointer;
+      SKIP_WHITESPACE ();
+    }
+
   if (*input_line_pointer == '\"')
     {
       input_line_pointer++;	/* Skip opening quote.  */

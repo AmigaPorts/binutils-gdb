@@ -42,6 +42,7 @@ const struct m68k_opcode m68k_opcodes[] =
 
 {"addib", 4,	one(0003000),	one(0177700), "#b$s", m68000up },
 {"addiw", 4,	one(0003100),	one(0177700), "#w$s", m68000up },
+{"addiwl",4,    one(0003300),   one(0177700), "#w$s", m68080 }, // 68080 APOLLO
 {"addil", 6,	one(0003200),	one(0177700), "#l$s", m68000up },
 {"addil", 6,	one(0003200),	one(0177700), "#lDs", mcfisa_a },
 
@@ -257,6 +258,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"clrb", 2,	one(0041000),	one(0177700), "$s", m68000up | mcfisa_a },
 {"clrw", 2,	one(0041100),	one(0177700), "$s", m68000up | mcfisa_a },
 {"clrl", 2,	one(0041200),	one(0177700), "$s", m68000up | mcfisa_a },
+{"clrq", 2,     one(0127000),   one(0177700), "$s", m68080 }, // APOLLO 68080
 
 {"cmp2b", 4,	two(0000300,0), two(0177700,07777), "!sR1", m68020up | cpu32 | fido_a },
 {"cmp2w", 4,	two(0001300,0),	two(0177700,07777), "!sR1", m68020up | cpu32 | fido_a },
@@ -271,6 +273,7 @@ const struct m68k_opcode m68k_opcodes[] =
 {"cmpiw", 4,	one(0006100),	one(0177700), "#w$s", m68000 | m68010 },
 {"cmpiw", 4,	one(0006100),	one(0177700), "#w@s", m68020up | cpu32 | fido_a },
 {"cmpiw", 4,	one(0006100),	one(0177700), "#wDs", mcfisa_b | mcfisa_c },
+{"cmpiwl",4,    one(0047000),   one(0177700), "#w@s", m68080 }, // 68080 APOLLO
 {"cmpil", 6,	one(0006200),	one(0177700), "#l$s", m68000 | m68010 },
 {"cmpil", 6,	one(0006200),	one(0177700), "#l@s", m68020up | cpu32 | fido_a },
 {"cmpil", 6,	one(0006200),	one(0177700), "#lDs", mcfisa_a },
@@ -339,6 +342,8 @@ const struct m68k_opcode m68k_opcodes[] =
 {"dbt", 2,	one(0050310),	one(0177770), "DsBw", m68000up },
 {"dbvc", 2,	one(0054310),	one(0177770), "DsBw", m68000up },
 {"dbvs", 2,	one(0054710),	one(0177770), "DsBw", m68000up },
+
+{"dbral", 2, one(0050710), one(0177770), "DsB~", m68080 },   // APOLLO 68080 DBRAL
 
 {"divsw", 2,	one(0100700),	one(0170700), ";wDd", m68000up | mcfhwdiv },
 
@@ -1671,6 +1676,15 @@ const struct m68k_opcode m68k_opcodes[] =
 {"mvzb", 2,	one(0070600),	one(0170700), "*bDd", mcfisa_b | mcfisa_c },
 {"mvzw", 2,	one(0070700),	one(0170700), "*wDd", mcfisa_b | mcfisa_c },
 
+{"moviwl",4,    one(0121000),   one(0177700), "#w$s", m68080 }, // Apollo 68080
+{"mov3ql", 2,   one(0120100),   one(0170700), "xd%s", m68080 }, // Apollo 68080
+{"mvsb", 2,     one(0120400),   one(0170700), "*bDd", m68080 }, // Apollo 68080
+{"mvsw", 2,     one(0120500),   one(0170700), "*wDd", m68080 }, // Apollo 68080
+{"mvzb", 2,     one(0120600),   one(0170700), "*bDd", m68080 }, // Apollo 68080
+{"mvzw", 2,     one(0120700),   one(0170700), "*wDd", m68080 }, // Apollo 68080
+{"move2l", 4,   two(0007200, 000021), two(0177700, 006077), "$sR1R2", m68080 }, // APOLLO 68080 
+{"move2l", 4,   two(0007200, 004021), two(0177700, 006077), "R1R2$s", m68080 }, // APOLLO 68080
+
 {"movesb", 4,	two(0007000, 0),     two(0177700, 07777), "~sR1", m68010up },
 {"movesb", 4,	two(0007000, 04000), two(0177700, 07777), "R1~s", m68010up },
 {"movesw", 4,	two(0007100, 0),     two(0177700, 07777), "~sR1", m68010up },
@@ -2146,9 +2160,9 @@ const struct m68k_opcode m68k_opcodes[] =
 {"subil", 6,	one(0002200),	one(0177700), "#l$s", m68000up },
 {"subil", 6,	one(0002200),	one(0177700), "#lDs", mcfisa_a },
 
-{"subqb", 2,	one(0050400),	one(0170700), "Qd%s", m68000up },
-{"subqw", 2,	one(0050500),	one(0170700), "Qd%s", m68000up },
-{"subql", 2,	one(0050600),	one(0170700), "Qd%s", m68000up | mcfisa_a },
+{"subqb", 2,	one(0050400),	one(0170700), "Qd$b", m68000up },
+{"subqw", 2,	one(0050500),	one(0170700), "Qd%w", m68000up },
+{"subql", 2,	one(0050600),	one(0170700), "Qd%l", m68000up | mcfisa_a },
 
 /* The sub opcode can generate the suba, subi, and subq instructions.  */
 {"subb", 2,	one(0050400),	one(0170700), "Qd%s", m68000up },

@@ -2365,8 +2365,8 @@ bfd_get_sign_extend_vma (bfd *abfd)
       || strcmp (name, "aix5coff64-rs6000") == 0)
     return 1;
 
-  if (startswith (name, "mach-o"))
-    return 0;
+  if (startswith (name, "mach-o") || startswith(name, "amiga"))
+      return 0;
 
   bfd_set_error (bfd_error_wrong_format);
   return -1;

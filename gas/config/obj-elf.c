@@ -843,7 +843,7 @@ change_section (const char *name,
 	      if (ssect != NULL)
 		as_warn (_("ignoring changed section attributes for %s"), name);
 	      else
-		as_bad (_("changed section attributes for %s"), name);
+		as_bad (_("changed section attributes for %s old=%08lx new=%08lx"), name, old_sec->flags, flags);
 	    }
 	  else
 	    /* FIXME: Maybe we should consider removing a previously set
@@ -2019,7 +2019,7 @@ obj_elf_get_vtable_inherit (void)
   gas_assert (symbol_get_value_expression (csym)->X_op == O_constant);
   return fix_new (symbol_get_frag (csym),
 		  symbol_get_value_expression (csym)->X_add_number,
-		  0, psym, 0, 0, BFD_RELOC_VTABLE_INHERIT);
+		  0, psym, 0, 0, BFD_RELOC_VTABLE_INHERIT, 0);
 }
 
 /* This is a version of obj_elf_get_vtable_inherit() that is
@@ -2061,7 +2061,7 @@ obj_elf_get_vtable_entry (void)
   demand_empty_rest_of_line ();
 
   return fix_new (frag_now, frag_now_fix (), 0, sym, offset, 0,
-		  BFD_RELOC_VTABLE_ENTRY);
+		  BFD_RELOC_VTABLE_ENTRY, 0);
 }
 
 /* This is a version of obj_elf_get_vtable_entry() that is

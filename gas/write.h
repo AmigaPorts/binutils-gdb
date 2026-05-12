@@ -181,11 +181,11 @@ extern int relax_segment (struct frag *, segT, int);
 extern void number_to_chars_littleendian (char *, valueT, int);
 extern void number_to_chars_bigendian (char *, valueT, int);
 extern fixS *fix_new (fragS *, unsigned long, unsigned long, symbolS *,
-		      offsetT, int, bfd_reloc_code_real_type);
+		      offsetT, int, bfd_reloc_code_real_type, int baserel);
 extern fixS *fix_at_start (fragS *, unsigned long, symbolS *,
 			   offsetT, int, bfd_reloc_code_real_type);
 extern fixS *fix_new_exp (fragS *, unsigned long, unsigned long,
-			  const expressionS *, int, bfd_reloc_code_real_type);
+			  const expressionS *, int, bfd_reloc_code_real_type, int baserel);
 extern void write_print_statistics (FILE *);
 extern void as_bad_subtract (fixS *);
 

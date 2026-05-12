@@ -645,7 +645,8 @@ disassemble_init_for_target (struct disassemble_info * info)
 #ifdef ARCH_m68k
     case bfd_arch_m68k:
       info->created_styled_output = true;
-      break;
+      info->disassembler_needs_relocs = true;
+      break;      
 #endif
 #ifdef ARCH_mep
     case bfd_arch_mep:
@@ -720,7 +721,7 @@ disassemble_init_for_target (struct disassemble_info * info)
     case bfd_arch_nds32:
       disassemble_init_nds32 (info);
       break;
- #endif
+#endif
     default:
       break;
     }

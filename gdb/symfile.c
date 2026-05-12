@@ -3662,7 +3662,7 @@ symfile_find_segment_sections (struct objfile *objfile)
   if (data == NULL)
     return;
 
-  if (data->segments.size () != 1 && data->segments.size () != 2)
+  if (data->segments.size () != 1 && data->segments.size () != 2 && data->segments.size () != 3)
     return;
 
   for (i = 0, sect = abfd->sections; sect != NULL; i++, sect = sect->next)
@@ -3683,6 +3683,11 @@ symfile_find_segment_sections (struct objfile *objfile)
 	    objfile->sect_index_data = sect->index;
 
 	  if (objfile->sect_index_bss == -1)
+	    objfile->sect_index_bss = sect->index;
+	}
+      else if (which == 3)
+	{
+	  if (objfile->sect_index_bss == objfile->sect_index_data)
 	    objfile->sect_index_bss = sect->index;
 	}
     }

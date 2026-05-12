@@ -128,6 +128,16 @@ segT text_section;
 segT data_section;
 segT bss_section;
 
+#ifdef OBJ_AMIGAHUNK
+segT data_chip_section;
+segT data_fast_section;
+segT data_far_section;
+segT bss_chip_section;
+segT bss_fast_section;
+segT bss_far_section;
+#endif
+
+
 /* Name of listing file.  */
 static char *listing_filename = NULL;
 

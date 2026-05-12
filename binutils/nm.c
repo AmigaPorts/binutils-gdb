@@ -973,6 +973,12 @@ size_forward1 (const void *P_x, const void *P_y)
   if (bfd_is_und_section (ys))
     abort ();
 
+#ifdef TARGET_AMIGA
+  xf = strcmp(xs->name, ys->name);
+  if (xf)
+    return xf;
+#endif
+
   if (valueof (x) != valueof (y))
     return valueof (x) < valueof (y) ? -1 : 1;
 

@@ -674,6 +674,8 @@ ALL_EMULATION_SOURCES = \
 	eaixrs6.c \
 	ealpha.c \
 	ealphavms.c \
+	eamiga.c \
+	eamiga_bss.c \
 	earcelf.c \
 	earclinux.c \
 	earclinux_nps.c \
@@ -832,6 +834,7 @@ ALL_EMULATION_SOURCES = \
 	em68hc12elf.c \
 	em68hc12elfb.c \
 	em68kelf.c \
+	em68kelfamiga.c \
 	em68kelfnbsd.c \
 	em9s12zelf.c \
 	emcorepe.c \
@@ -1287,6 +1290,8 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eaixrs6.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ealpha.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/ealphavms.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eamiga.Po@am__quote@
+@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/eamiga_bss.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/earcelf.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/earclinux.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/earclinux_nps.Po@am__quote@
