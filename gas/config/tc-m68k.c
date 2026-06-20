@@ -8108,6 +8108,7 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
   if (adjust == 64)
     adjust = -1;
 
+#ifndef OBJ_ELF
 #ifdef TE_AMIGA
   /* Amiga Hunk adjusts to current address. */
   if (stdoutput->xvec == &amiga_vec)
@@ -8128,6 +8129,7 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
 
       // fall through
     }
+#endif
 #endif
 
   return fixP->fx_where + fixP->fx_frag->fr_address - adjust;

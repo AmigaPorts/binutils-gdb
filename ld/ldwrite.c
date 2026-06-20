@@ -160,6 +160,17 @@ build_link_order (lang_statement_union_type *statement)
 	output_section = rs->output_section;
 	ASSERT (output_section->owner == link_info.output_bfd);
 
+	fprintf(stderr,
+	        "[lang_reloc] sec=%s off=%08lx howto=%d type=%s name=%s addend=%ld flags=%08x\n",
+	        output_section ? output_section->name : "<NULL>",
+	        (unsigned long) rs->output_offset,
+	        rs->reloc,
+	        rs->name ? "symbol" : "section",
+	        rs->name ? rs->name : "<none>",
+	        (long) rs->addend_value,
+		output_section->flags);
+
+
 	if (!((output_section->flags & SEC_HAS_CONTENTS) != 0
 	      || ((output_section->flags & SEC_LOAD) != 0
 		  && (output_section->flags & SEC_THREAD_LOCAL))))

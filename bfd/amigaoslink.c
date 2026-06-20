@@ -151,6 +151,21 @@ static unsigned r_datadata_count;
 static unsigned r_datadata_max;
 static int datadata_addend;
 
+static bool
+amiga_is_dwarf_section (asection *sec)
+{
+  const char *name = sec->name;
+  if (!name)
+    return false;
+
+  /* Classic DWARF2 sections. Extend if you add more. */
+  if (strncmp (name, ".debug_", 7) == 0)
+    return true;
+
+  /* You can add .eh_frame or others here if needed. */
+  return false;
+}
+
 static void
 insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bfd_link_order *link_order,
 		   bfd_byte **datap)
@@ -614,14 +629,14 @@ get_relocated_section_contents (
 	      if (0 == strcmp("___libName", asym->name))
 		{
 		  char * to = (char *)data + asym->value;
-		  strncpy(to, libName, 20); // leave room for .library
+		  strncpy(to, libName, 24); // leave room for .library
 		  strcat(to, ".library");
 		  int l = strlen(to);
 		  to += l + 1;
 		  time_t t = time(NULL);
 		  struct tm * tm = localtime(&t);
-		  snprintf(to, 40, "%s %d.%d (%d-%02d-%02d)", libName, major, minor,
-			   tm->tm_year + 1900, tm->tm_mon + 1, tm->tm_mday);
+		  snprintf(to, 40, "%s %d.%d (%02d.%02d.%d)", libName, major, minor,
+			   tm->tm_mday, tm->tm_mon + 1, tm->tm_year + 1900);
 		  to += strlen(to) + 1;
 		  // insert an ID
 		  *to++ = 0x0b;
@@ -647,10 +662,10 @@ get_relocated_section_contents (
 	      if (0 == strcmp("___lib", asym->name))
 		{
 		  // 16, 18
-		  data[asym->value + 16] = major >> 8;
-		  data[asym->value + 17] = major;
-		  data[asym->value + 18] = minor >> 8;
-		  data[asym->value + 19] = minor;
+		  data[asym->value + 20] = major >> 8;
+		  data[asym->value + 21] = major;
+		  data[asym->value + 22] = minor >> 8;
+		  data[asym->value + 23] = minor;
 		}
             }
 	  dataDone = true;
@@ -878,6 +893,12 @@ amiga_perform_reloc (
   int flags;
   bool hard_reloc = AMIGA_DATA(sec->output_section->owner)->vma_reloc;
 
+  /* For DWARF sections we always want fully linked, absolute-style
+     addresses relative to the final layout, not runtime relocation
+     tables. */
+  if (amiga_is_dwarf_section (sec))
+    hard_reloc = true;
+
   DPRINT(5,("Entering APR\nflavour is %d (amiga_flavour=%d, aout_flavour=%d)\n",
 	    bfd_get_flavour (sec->owner), bfd_target_amiga_flavour,
 	    bfd_target_aout_flavour));
@@ -914,6 +935,7 @@ amiga_perform_reloc (
     {
     case H_ABS16:
     case H_ABS32:
+AbsReloc:
       if (hard_reloc)
 	relocation= sym->value + target_section->output_offset + target_section->output_section->vma;
       else if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */
@@ -925,7 +947,9 @@ amiga_perform_reloc (
 	}
       else
 	{
-	  if (0 == strcmp(sec->name, ".stab") || 0 == strcmp(sec->name, ".stabstr"))
+	  if (0 == strcmp(sec->name, ".stab")
+	      || 0 == strcmp(sec->name, ".stabstr")
+	      || amiga_is_dwarf_section (sec))
 	    {
 	      relocation=sym->value + target_section->output_offset;
 //		  printf("stab: %s %s %d+%d=%d\n", sym->section->name, sym->name, sym->value, target_section->output_offset, relocation);
@@ -954,6 +978,21 @@ amiga_perform_reloc (
 	}
       else if (sec->output_section!=target_section->output_section) /* Error */
 	{
+	  // convert to absolute jmp/jsr and change reloc type
+	  if (r->howto->type == H_PC32) {
+	      uint16_t opcode = bfd_get_16(sec->owner, data + r->address - 2);
+	      if (opcode == 0x60FF) { // BRA.L
+	          bfd_put_16(sec->owner, 0x4EF9, data + r->address - 2);
+	          r->howto= &howto_table[0];
+	          goto AbsReloc;
+	      }
+	      if (opcode == 0x61FF) { // BSR.L
+	          bfd_put_16(sec->owner, 0x4EB9, data + r->address - 2);
+	          r->howto= &howto_table[0];
+	          goto AbsReloc;
+	      }
+	  }
+
 	  DPRINT(5,("pc relative, but out-of-range\n"));
 	  ret=bfd_reloc_outofrange;
 	}
