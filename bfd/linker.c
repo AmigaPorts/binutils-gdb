@@ -24,6 +24,9 @@
 #include "libbfd.h"
 #include "bfdlink.h"
 #include "genlink.h"
+#if BFD_SUPPORTS_PLUGINS
+#include "plugin.h"
+#endif
 
 /*
 SECTION
@@ -1037,15 +1040,24 @@ generic_link_check_archive_element (bfd *abfd,
 				    const char *name ATTRIBUTE_UNUSED,
 				    bool *pneeded)
 {
+  bfd *symbfd = abfd;
   asymbol **pp, **ppend;
 
   *pneeded = false;
 
-  if (!bfd_generic_link_read_symbols (abfd))
+#if BFD_SUPPORTS_PLUGINS
+  if (info->lto_plugin_active
+      && (abfd->plugin_format == bfd_plugin_yes
+	  || (abfd->plugin_format == bfd_plugin_unknown
+	      && bfd_link_plugin_object_p (abfd))))
+    symbfd = abfd->plugin_dummy_bfd;
+#endif
+
+  if (!bfd_generic_link_read_symbols (symbfd))
     return false;
 
-  pp = _bfd_generic_link_get_symbols (abfd);
-  ppend = pp + _bfd_generic_link_get_symcount (abfd);
+  pp = _bfd_generic_link_get_symbols (symbfd);
+  ppend = pp + _bfd_generic_link_get_symcount (symbfd);
   for (; pp < ppend; pp++)
     {
       asymbol *p;
@@ -1431,6 +1443,7 @@ _bfd_generic_link_add_one_symbol (struct bfd_link_info *info,
     {
       row = COMMON_ROW;
       if (!bfd_link_relocatable (info)
+	  && !info->lto_plugin_active
 	  && name != NULL
 	  && name[0] == '_'
 	  && name[1] == '_'

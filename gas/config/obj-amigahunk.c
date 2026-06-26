@@ -109,7 +109,7 @@ static void s_custom_section(char const * secname)
     {
       int flags;
       if (0 == strncmp(secname, ".gnu.lto", 8))
-	flags = SEC_DEBUGGING;
+	flags = SEC_DEBUGGING | SEC_HAS_CONTENTS;
       else if (strncmp(secname, ".gnu.", 5) == 0 || strncmp(secname, ".text", 5) == 0 || strncmp(secname, ".rodata", 7) == 0)
 	flags = SEC_ALLOC | SEC_LOAD | SEC_RELOC | SEC_CODE;
       else if (strncmp(secname, ".bss", 4) == 0)

@@ -965,6 +965,53 @@ armain (int argc, char **argv, int isran)
   return 0;
 }
 
+static bool
+is_lto_slim_symbol (const char *name)
+{
+  return (name != NULL
+	  && name[0] == '_'
+	  && name[1] == '_'
+	  && strcmp (name + (name[2] == '_'), "__gnu_lto_slim") == 0);
+}
+
+static bool
+is_lto_slim_object (bfd *abfd)
+{
+  asymbol **symbols;
+  long storage;
+  long symcount;
+  long i;
+  bool result = false;
+
+  storage = bfd_get_symtab_upper_bound (abfd);
+  if (storage <= 0)
+    return false;
+
+  symbols = (asymbol **) xmalloc (storage);
+  symcount = bfd_canonicalize_symtab (abfd, symbols);
+  if (symcount <= 0)
+    {
+      free (symbols);
+      return false;
+    }
+
+  for (i = 0; i < symcount; i++)
+    {
+      asymbol *sym = symbols[i];
+
+      if (sym != NULL
+	  && bfd_is_com_section (bfd_asymbol_section (sym))
+	  && is_lto_slim_symbol (bfd_asymbol_name (sym)))
+	{
+	  result = true;
+	  break;
+	}
+    }
+
+  free (symbols);
+  return result;
+}
+
 bfd *
 open_inarch (const char *archive_filename, const char *file)
 {
@@ -975,9 +1022,6 @@ open_inarch (const char *archive_filename, const char *file)
   char **matching;
 
   bfd_set_error (bfd_error_no_error);
-
-  if (target == NULL)
-    target = plugin_target;
 
   if (stat (archive_filename, &sbuf) != 0)
     {
@@ -1003,7 +1047,9 @@ open_inarch (const char *archive_filename, const char *file)
 	}
 
       /* If the target isn't set, try to figure out the target to use
-	 for the archive from the first object on the list.  */
+	 for the archive from the first object on the list.  Keep slim
+	 LTO objects on the plugin target so gcc-ar archives retain
+	 plugin-visible symbols.  */
       if (target == NULL && file != NULL)
 	{
 	  bfd *obj;
@@ -1011,11 +1057,15 @@ open_inarch (const char *archive_filename, const char *file)
 	  obj = bfd_openr (file, target);
 	  if (obj != NULL)
 	    {
-	      if (bfd_check_format (obj, bfd_object))
+	      if (bfd_check_format (obj, bfd_object)
+		  && (plugin_target == NULL || !is_lto_slim_object (obj)))
 		target = bfd_get_target (obj);
 	      (void) bfd_close (obj);
 	    }
 	}
+
+      if (target == NULL)
+	target = plugin_target;
 
       /* Create an empty archive.  */
       arch = bfd_openw (archive_filename, target);
@@ -1029,6 +1079,9 @@ open_inarch (const char *archive_filename, const char *file)
       /* If we die creating a new archive, don't leave it around.  */
       output_filename = archive_filename;
     }
+
+  if (target == NULL)
+    target = plugin_target;
 
   arch = bfd_openr (archive_filename, target);
   if (arch == NULL)
