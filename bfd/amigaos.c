@@ -3378,7 +3378,7 @@ static long amiga_canonicalize_symtab (
       unsigned int i;
       for (i = 0; i < bfd_get_symcount (abfd); i++, symp++)
 	*location++ = &symp->symbol;
-      *location = 0;
+
     }
   return bfd_get_symcount (abfd);
 }
