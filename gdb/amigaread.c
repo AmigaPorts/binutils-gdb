@@ -32,6 +32,15 @@
 #include "gdbtypes.h"
 #include "dwarf2/public.h"
 
+/* Debug macro - set to 0 to disable, 1 to enable */
+#define DBG_ENABLED 0
+
+#if DBG_ENABLED
+#define DBG(fmt, ...) fprintf(stderr, "[amiga-gdb] " fmt "\n", ##__VA_ARGS__)
+#else
+#define DBG(fmt, ...)
+#endif
+
 /* The struct amigainfo is available only during AmigaHunk symbol table and
    psymtab reading.  It is destroyed at the completion of psymtab-reading.
    It's local to amiga_symfile_read.
@@ -286,64 +295,8 @@ amiga_read_minimal_symbols (struct objfile *objfile,
   reader.install ();
 }
 
-struct amiga_dwarf_chunk
-{
-  const char *name;      /* ".debug_info", ".debug_abbrev", ... */
-  bfd_vma      offset;   /* Offset relativ zur .dwarf2-Section   */
-  bfd_size_type size;    /* wird später berechnet                */
-};
-#if 0
-void _dump(char const *txt, void const *_data, unsigned len) {
-    uint8_t *data = (uint8_t*) _data;
-    char s[18];
-    s[0] = ' ';
-    s[17] = 0;
-    unsigned int i = 0;
-    int j = 1;
-    printf("%s: length = %ld", txt, len);
-    for (; i < len; ++i, ++j) {
-        if (j == 1) {
-            printf("\n%04lx", i);
-            fflush(stdout);
-        }
-        putchar(' ');
-        int c = data[i];
-        int x = (c & 0xff) >> 4;
-        if (x > 9)
-            putchar((char) (55 + x));
-        else
-            putchar((char) (48 + x));
+/* Helper: create a DWARF section from the .dwarf2 container. */
 
-        x = (c & 0xf);
-        if (x > 9)
-            putchar((char) (55 + x));
-        else
-            putchar((char) (48 + x));
-
-        if (c < 32 || c > 127)
-            c = '.';
-        s[j] = c;
-
-        if (j == 16) {
-            printf(" %s", s);
-            fflush(stdout);
-            j = 0;
-        } else if (j == 8)
-            putchar(' ');
-    }
-    if (j) {
-        s[j] = 0;
-        if (j < 9)
-            putchar(' ');
-
-        while (++j <= 17)
-            printf("   ");
-        printf(" %s", s);
-    }
-    fflush(stdout);
-    puts("");
-}
-#endif
 static asection *
 amiga_make_dwarf_section (bfd *abfd,
                           const char *name,
@@ -351,6 +304,15 @@ amiga_make_dwarf_section (bfd *abfd,
                           bfd_vma offset,
                           bfd_size_type size)
 {
+    DBG("amiga_make_dwarf_section: %s size=%ld offset=%ld",
+        name, (long)size, (long)offset);
+
+    if (size == 0)
+      {
+        DBG("  skipping zero-length section %s", name);
+        return NULL;
+      }
+
     asection *sec =
         bfd_make_section_anyway_with_flags (abfd, name,
                                             SEC_DEBUGGING
@@ -358,28 +320,36 @@ amiga_make_dwarf_section (bfd *abfd,
                                             | SEC_READONLY
                                             | SEC_IN_MEMORY);
     if (!sec)
+      {
+        DBG("  ERROR: failed to create section %s", name);
         return NULL;
+      }
 
     /* Immer bfd_alloc verwenden */
     bfd_byte *contents = (bfd_byte *) bfd_alloc (abfd, size);
     if (!contents)
+      {
+        DBG("  ERROR: failed to allocate %ld bytes for %s",
+            (long)size, name);
         return NULL;
+      }
 
- 	memcpy(contents, base + offset, size);
-
+    memcpy(contents, base + offset, size);
     bfd_set_section_size (sec, size);
     sec->contents = contents;
-
-//    _dump(name, contents, size);
-
     sec->vma = 0;
     sec->lma = 0;
 
+    DBG("  created section %s (size=%ld)", name, (long)size);
     return sec;
 }
 
-/* Aus der vom Linker erzeugten .dwarf2-Section echte .debug_*-Sections bauen.
-*/
+/* 
+ * Aus der vom Linker erzeugten .dwarf2-Section echte .debug_*-Sections bauen.
+ * 
+ * Die Reihenfolge muss exakt der in amigaos.c (debug_names[]) und der
+ * Linker-Script-Reihenfolge entsprechen.
+ */
 static bool
 amiga_split_dwarf2_section (struct objfile *objfile)
 {
@@ -388,20 +358,34 @@ amiga_split_dwarf2_section (struct objfile *objfile)
 
   asection *dsect = bfd_get_section_by_name (abfd, dname);
   if (!dsect)
-    return false;
+    {
+      DBG("amiga_split_dwarf2_section: no .dwarf2 section found");
+      return false;
+    }
 
   bfd_size_type total = bfd_section_size (dsect);
+  DBG("amiga_split_dwarf2_section: .dwarf2 size=%ld", (long)total);
+
   if (total < 4)
-    return false;
+    {
+      DBG("  .dwarf2 too small (%ld), skipping", (long)total);
+      return false;
+    }
 
   /* Container einlesen */
   gdb::unique_xmalloc_ptr<bfd_byte> buf
     ((bfd_byte *) xmalloc (total));
 
   if (!bfd_get_section_contents (abfd, dsect, buf.get (), 0, total))
-    return false;
+    {
+      DBG("  ERROR: failed to read .dwarf2 section");
+      return false;
+    }
 
-  /* Reihenfolge fix wie im Linker */
+  /* 
+   * Reihenfolge fix wie im Linker und in amigaos.c.
+   * MUSS mit debug_names[] in amigaos.c übereinstimmen!
+   */
   static const char *debug_names[] =
   {
     ".debug_frame",
@@ -413,43 +397,79 @@ amiga_split_dwarf2_section (struct objfile *objfile)
     ".debug_line",
     ".debug_str",
     ".debug_line_str",
+    ".debug_types",
+    ".debug_macro",
+    ".debug_ranges",
+    ".debug_addr",
+    ".debug_str_offsets",
     NULL
   };
 
   bfd_size_type pos = 0;
+  int section_count = 0;
 
   for (int i = 0; debug_names[i]; ++i)
     {
       if (pos + 4 > total)
-        break;
+        {
+          DBG("  WARNING: reached end of .dwarf2 at section %s (pos=%ld, total=%ld)",
+              debug_names[i], (long)pos, (long)total);
+          break;
+        }
 
       /* Länge lesen */
       bfd_size_type len = bfd_getb32 (buf.get () + pos);
       bfd_size_type payload = pos + 4;
 
-      if (payload + len > total)
-        break;
+      DBG("  section [%d]: %s len=%ld at pos=%ld",
+          i, debug_names[i], (long)len, (long)pos);
 
-      /* Section erzeugen */
-      amiga_make_dwarf_section (abfd,
-                                debug_names[i],
-                                buf.get (),
-                                payload,
-                                len);
+      if (len > 0)
+        {
+          if (payload + len > total)
+            {
+              DBG("    WARNING: payload overflows .dwarf2 (payload+len=%ld, total=%ld)",
+                  (long)(payload + len), (long)total);
+              /* Try to recover: if we're near the end, use remaining data */
+              if (payload < total)
+                {
+                  bfd_size_type remaining = total - payload;
+                  DBG("    using remaining %ld bytes", (long)remaining);
+                  len = remaining;
+                }
+              else
+                {
+                  break;
+                }
+            }
+
+          /* Section erzeugen */
+          asection *sec = amiga_make_dwarf_section (abfd,
+                                                    debug_names[i],
+                                                    buf.get (),
+                                                    payload,
+                                                    len);
+          if (sec)
+            section_count++;
+        }
+      else
+        {
+          DBG("    zero length, skipping");
+        }
 
       /* Nächsten Block finden (4-byte aligned) */
       pos = payload + len;
       pos = (pos + 3) & ~ (bfd_size_type) 3;
     }
 
+  DBG("amiga_split_dwarf2_section: created %d DWARF sections", section_count);
+
   /* Section-Offsets neu berechnen */
   objfile->section_offsets.resize
     (gdb_bfd_count_sections (objfile->obfd.get ()));
 
-  return true;
+  return (section_count > 0);
 }
-
-
 
 /* Haupt-Einstieg: Symbole aus einem AmigaHunk-Objekt lesen.
 
@@ -461,18 +481,26 @@ amiga_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 {
   struct amigainfo ei {};
 
+  DBG("amiga_symfile_read: %s", objfile->original_name);
+
   /* Minimale Symbole (dynsym/symtab) lesen.  */
   amiga_read_minimal_symbols (objfile, symfile_flags, &ei);
 
   /* DWARF aus der vom Linker erzeugten .dwarf2-Section in echte .debug_*-Sections splitten. */
-  /* DWARF2-Debug-Info initialisieren, falls vorhanden.  */
   if (amiga_split_dwarf2_section (objfile))
-    dwarf2_initialize_objfile (objfile);
+    {
+      DBG("  initializing DWARF2");
+      dwarf2_initialize_objfile (objfile);
+    }
+  else
+    {
+      DBG("  no DWARF2 found");
+    }
 }
 
 static void
 amiga_symfile_init(struct objfile *objfile) {
-
+  DBG("amiga_symfile_init: %s", objfile->original_name);
 }
 
 /* Symfile-Callbacks für AmigaHunk.  */

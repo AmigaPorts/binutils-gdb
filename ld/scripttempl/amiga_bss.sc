@@ -64,42 +64,101 @@ SECTIONS
   .bsschip :
   {
     *(.bsschip)
-  }  
+  }
+  
+  /* 
+   * Individual DWARF sections are collected here.
+   * The BFD backend (amigaos.c) will merge them into a single .dwarf2
+   * section with length prefixes for the AmigaOS debug format.
+   * The order here must match the order expected by amiga_pack_dwarf_sections()
+   * in amigaos.c
+   */
   .debug_frame :
   {
+    __debug_frame_start = .;
     *(.debug_frame)
+    __debug_frame_end = .;
   }
   .debug_info :
   {
+    __debug_info_start = .;
     *(.debug_info)
+    *(.gnu.linkonce.wi.*)
+    __debug_info_end = .;
   }
   .debug_abbrev :
   {
+    __debug_abbrev_start = .;
     *(.debug_abbrev)
+    __debug_abbrev_end = .;
   }
-  .debugloclists :
+  .debug_loclists :
   {
+    __debug_loclists_start = .;
     *(.debug_loclists)
+    __debug_loclists_end = .;
   }
   .debug_aranges :
   {
+    __debug_aranges_start = .;
     *(.debug_aranges)
+    __debug_aranges_end = .;
   }
   .debug_rnglists :
   {
+    __debug_rnglists_start = .;
     *(.debug_rnglists)
+    __debug_rnglists_end = .;
   }
   .debug_line :
   {
+    __debug_line_start = .;
     *(.debug_line)
+    *(.debug_line.*)
+    __debug_line_end = .;
   }
   .debug_str :
   {
+    __debug_str_start = .;
     *(.debug_str)
+    __debug_str_end = .;
   }
   .debug_line_str :
   {
+    __debug_line_str_start = .;
     *(.debug_line_str)
-  }  
+    __debug_line_str_end = .;
+  }
+  /* Additional DWARF sections for completeness */
+  .debug_types :
+  {
+    __debug_types_start = .;
+    *(.debug_types)
+    __debug_types_end = .;
+  }
+  .debug_macro :
+  {
+    __debug_macro_start = .;
+    *(.debug_macro)
+    __debug_macro_end = .;
+  }
+  .debug_ranges :
+  {
+    __debug_ranges_start = .;
+    *(.debug_ranges)
+    __debug_ranges_end = .;
+  }
+  .debug_addr :
+  {
+    __debug_addr_start = .;
+    *(.debug_addr)
+    __debug_addr_end = .;
+  }
+  .debug_str_offsets :
+  {
+    __debug_str_offsets_start = .;
+    *(.debug_str_offsets)
+    __debug_str_offsets_end = .;
+  }
 }
 EOF

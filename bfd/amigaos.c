@@ -123,8 +123,10 @@ BFD:
 #include "libbfd.h"
 #include "libamiga.h"
 
-#if 0
-#define DBG(fmt, ...) fprintf(stderr, "[amiga-gc] " fmt "\n", ##__VA_ARGS__)
+#define DBG_ENABLED 0  /* Set to 1 to enable debugging, 0 to disable */
+
+#if DBG_ENABLED
+#define DBG(fmt, ...) fprintf(stderr, "[bfd-amigaos] " fmt "\n", ##__VA_ARGS__)
 #else
 #define DBG(fmt, ...)
 #endif
@@ -1733,6 +1735,11 @@ static char const * debug_names[] =
   ".debug_line",
   ".debug_str",
   ".debug_line_str",
+  ".debug_types",
+  ".debug_macro",
+  ".debug_ranges",
+  ".debug_addr",
+  ".debug_str_offsets",
   0
 };
 
@@ -1742,26 +1749,48 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
     /* Dwarf-Liste in Array nach Namen einsortieren */
     asection *ordered[sizeof(debug_names)/sizeof(debug_names[0]) - 1] = { 0 };
     asection *s;
+    int section_count = 0;
 
+    DBG("amiga_pack_dwarf_sections: starting merge");
+
+    /* First pass: order sections and collect debug info */
     for (s = dwarf; s; s = s->next)
       {
         for (int i = 0; debug_names[i]; ++i)
-          if (strcmp (s->name, debug_names[i]) == 0)
-            {
-              ordered[i] = s;
-              break;
-            }
+          {
+            if (strcmp (s->name, debug_names[i]) == 0)
+              {
+                ordered[i] = s;
+                section_count++;
+                DBG("  found section [%d]: %s (size=%ld, rawsize=%ld)",
+                    i, s->name, (long)s->size, (long)s->rawsize);
+                break;
+              }
+          }
+      }
+
+    DBG("  total DWARF sections found: %d", section_count);
+
+    /* If no sections found, nothing to do */
+    if (section_count == 0)
+      {
+        DBG("  no DWARF sections found, skipping merge");
+        return true;
       }
 
     /* Gesamtgröße berechnen */
     bfd_size_type total = 0;
+    int missing_count = 0;
 
     for (int i = 0; debug_names[i]; ++i)
       {
         s = ordered[i];
         if (!s)
           {
-        	total += 4;
+            total += 4;  /* length field for missing section */
+            missing_count++;
+            DBG("  section [%d]: %s - MISSING (adding 4 bytes for zero length)",
+                i, debug_names[i]);
             continue;
           }
 
@@ -1769,12 +1798,21 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
         total += 4;                  /* Längenfeld */
         total += len;
         total = (total + 3) & ~ (bfd_size_type) 3; /* 4-byte align */
+
+        DBG("  section [%d]: %s - size=%ld, aligned total=%ld",
+            i, s->name, (long)len, (long)total);
       }
+
+    DBG("  total merged size: %ld bytes, %d missing sections",
+        (long)total, missing_count);
 
     /* Buffer allokieren */
     bfd_byte *buf = (bfd_byte *) bfd_alloc (abfd, total);
     if (!buf)
-      return false;
+      {
+        DBG("  ERROR: failed to allocate buffer of %ld bytes", (long)total);
+        return false;
+      }
 
     /* Inhalte packen */
     bfd_size_type pos = 0;
@@ -1783,14 +1821,14 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
       {
         s = ordered[i];
         if (!s)
-        {
+          {
             /* Fehlende Section -> Länge 0 schreiben */
             bfd_putb32 (0, buf + pos);
             pos += 4;
-
-            /* Kein Payload, kein Padding nötig */
+            DBG("  writing [%d]: %s - zero length at offset %ld",
+                i, debug_names[i], (long)pos - 4);
             continue;
-        }
+          }
 
         bfd_size_type len = s->size;
 
@@ -1798,54 +1836,103 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
         bfd_putb32 (len, buf + pos);
         pos += 4;
 
+        DBG("  writing [%d]: %s - length=%ld at offset %ld",
+            i, s->name, (long)len, (long)pos - 4);
+
         /* Payload */
-        memcpy (buf + pos, s->contents, len);
+        if (s->contents)
+          {
+            memcpy (buf + pos, s->contents, len);
+            DBG("    copied %ld bytes from section contents", (long)len);
+          }
+        else
+          {
+            /* Section has no contents (shouldn't happen for debug sections) */
+            DBG("    WARNING: section %s has no contents, zero-filling %ld bytes",
+                s->name, (long)len);
+            memset (buf + pos, 0, len);
+          }
         pos += len;
 
         /* Padding bis 4-byte aligned */
         bfd_size_type aligned = (pos + 3) & ~ (bfd_size_type) 3;
         while (pos < aligned)
-          buf[pos++] = 0;
+          {
+            buf[pos++] = 0;
+            DBG("    padding at offset %ld", (long)pos - 1);
+          }
       }
 
     /* Erste existierende Dwarf-Section als Container verwenden */
     asection *first = NULL;
+    int first_idx = -1;
     for (int i = 0; debug_names[i]; ++i)
-      if (ordered[i])
-        {
-          first = ordered[i];
-          break;
-        }
+      {
+        if (ordered[i])
+          {
+            first = ordered[i];
+            first_idx = i;
+            break;
+          }
+      }
 
     if (!first)
-      return true; /* keine Dwarf-Sections */
+      {
+        DBG("  ERROR: no DWARF sections found (should not happen)");
+        return false;
+      }
+
+    DBG("  using section [%d] %s as container", first_idx, first->name);
 
     first->contents = buf;
     first->size = first->rawsize = total;
-    /* Optional: Name ändern */
-    /* first->name = ".dwarf2"; */
+    first->name = ".dwarf2";
 
-    /* Restliche Dwarf-Sections aus der Liste entfernen */
+    DBG("  container section now: %s (size=%ld)", first->name, (long)total);
+
+    /* Restliche Dwarf-Sections aus der Liste entfernen und markieren */
+    int removed_count = 0;
     for (s = dwarf; s; s = s->next)
       {
         if (s == first)
           continue;
 
-        /* aus abfd->sections ausketten */
-        sec_ptr *pp;
-        for (pp = &abfd->sections; *pp; pp = &(*pp)->next)
-          if (*pp == s)
-            {
-              *pp = s->next;
-              break;
-            }
+        /* Mark as removed and clear flags */
+        s->flags &= ~(SEC_HAS_CONTENTS | SEC_ALLOC | SEC_LOAD | SEC_DEBUGGING);
+        s->size = 0;
+        s->rawsize = 0;
+        s->contents = NULL;
+        removed_count++;
       }
 
-    first->name = ".dwarf2";
+    /* aus abfd->sections ausketten */
+    sec_ptr *pp;
+    for (pp = &abfd->sections; *pp; pp = &(*pp)->next)
+      {
+        if (*pp == first)
+          {
+            /* Remove first from current position */
+            *pp = first->next;
+            break;
+          }
+      }
 
     /* Container ans Ende hängen */
-    tail->next = first;
-    first->next = NULL;
+    if (tail)
+      {
+        tail->next = first;
+        first->next = NULL;
+        DBG("  appended container to end of section list");
+      }
+    else
+      {
+        DBG("  WARNING: tail is NULL, container not appended");
+      }
+
+    DBG("  removed %d DWARF sections, merged into single .dwarf2 section",
+        removed_count);
+    DBG("amiga_pack_dwarf_sections: merge complete (total=%ld, removed=%d)",
+        (long)total, removed_count);
 
     return true;
 }
