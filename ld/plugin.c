@@ -106,6 +106,8 @@ typedef struct plugin_input_file
   bfd *abfd;
   /* The original input BFD.  Non-NULL if it is an archive member.  */
   bfd *ibfd;
+  struct ld_plugin_symbol *amiga_syms;
+  int amiga_nsyms;
   view_buffer_t view_buffer;
   char *name;
   int fd;
@@ -354,6 +356,47 @@ is_ir_dummy_bfd (const bfd *abfd)
   return abfd != NULL && (abfd->flags & BFD_PLUGIN) != 0;
 }
 
+static const char *
+amiga_lto_bfd_symbol_name (bfd *abfd, const char *name)
+{
+  char leading = bfd_get_symbol_leading_char (abfd);
+  char prefix[2];
+
+  if (leading == '\0' || name[0] == leading)
+    return name;
+
+  prefix[0] = leading;
+  prefix[1] = '\0';
+  return concat (prefix, name, (const char *) NULL);
+}
+
+static void
+amiga_lto_save_symbols (plugin_input_file_t *input, int nsyms,
+			const struct ld_plugin_symbol *syms)
+{
+  struct ld_plugin_symbol *copy;
+  int n;
+
+  /* The Amiga HUNK backend does not round-trip the synthetic plugin
+     symbols through bfd_make_readable, but the generic archive scanner
+     needs them after the file has been claimed.  */
+  copy = xmalloc (nsyms * sizeof *copy);
+  for (n = 0; n < nsyms; n++)
+    {
+      copy[n] = syms[n];
+      copy[n].name = syms[n].name != NULL ? xstrdup (syms[n].name) : NULL;
+      copy[n].version = (syms[n].version != NULL
+			 ? xstrdup (syms[n].version)
+			 : NULL);
+      copy[n].comdat_key = (syms[n].comdat_key != NULL
+			    ? xstrdup (syms[n].comdat_key)
+			    : NULL);
+    }
+
+  input->amiga_syms = copy;
+  input->amiga_nsyms = nsyms;
+}
+
 /* Helpers to convert between BFD and GOLD symbol formats.  */
 static enum ld_plugin_status
 asymbol_from_plugin_symbol (bfd *abfd, asymbol *asym,
@@ -361,11 +404,12 @@ asymbol_from_plugin_symbol (bfd *abfd, asymbol *asym,
 {
   flagword flags = BSF_NO_FLAGS;
   struct bfd_section *section;
+  const char *name = amiga_lto_bfd_symbol_name (abfd, ldsym->name);
 
   asym->the_bfd = abfd;
   asym->name = (ldsym->version
-		? concat (ldsym->name, "@", ldsym->version, (const char *) NULL)
-		: ldsym->name);
+		? concat (name, "@", ldsym->version, (const char *) NULL)
+		: name);
   asym->value = 0;
   switch (ldsym->def)
     {
@@ -394,7 +438,20 @@ asymbol_from_plugin_symbol (bfd *abfd, asymbol *asym,
 	    }
 	}
       else
-	section = bfd_get_section_by_name (abfd, ".text");
+	{
+	  section = bfd_get_section_by_name (abfd, ".text");
+	  if (section == NULL)
+	    {
+	      flagword sflags;
+
+	      sflags = (SEC_CODE | SEC_HAS_CONTENTS | SEC_READONLY
+			| SEC_ALLOC | SEC_LOAD | SEC_KEEP | SEC_EXCLUDE);
+	      section = bfd_make_section_anyway_with_flags (abfd, ".text",
+							    sflags);
+	      if (section == NULL)
+		return LDPS_ERR;
+	    }
+	}
       break;
 
     case LDPK_WEAKUNDEF:
@@ -456,6 +513,35 @@ asymbol_from_plugin_symbol (bfd *abfd, asymbol *asym,
   return LDPS_OK;
 }
 
+static enum ld_plugin_status
+amiga_lto_rebuild_symbols (plugin_input_file_t *input)
+{
+  asymbol **symptrs;
+  bfd *abfd = input->abfd;
+  int n;
+
+  if (input->amiga_syms == NULL)
+    return LDPS_OK;
+
+  symptrs = xmalloc (input->amiga_nsyms * sizeof *symptrs);
+  for (n = 0; n < input->amiga_nsyms; n++)
+    {
+      enum ld_plugin_status rv;
+      asymbol *bfdsym;
+
+      bfdsym = bfd_make_empty_symbol (abfd);
+      symptrs[n] = bfdsym;
+      rv = asymbol_from_plugin_symbol (abfd, bfdsym,
+				       input->amiga_syms + n);
+      if (rv != LDPS_OK)
+	return rv;
+    }
+
+  abfd->outsymbols = symptrs;
+  abfd->symcount = input->amiga_nsyms;
+  return LDPS_OK;
+}
+
 /* Register a claim-file handler.  */
 static enum ld_plugin_status
 register_claim_file (ld_plugin_claim_file_handler handler)
@@ -493,6 +579,8 @@ add_symbols (void *handle, int nsyms, const struct ld_plugin_symbol *syms)
   int n;
 
   ASSERT (called_plugin);
+  if (bfd_get_flavour (abfd) == bfd_target_amiga_flavour)
+    amiga_lto_save_symbols (input, nsyms, syms);
   symptrs = xmalloc (nsyms * sizeof *symptrs);
   for (n = 0; n < nsyms; n++)
     {
@@ -752,8 +840,10 @@ get_symbols (const void *handle, int nsyms, struct ld_plugin_symbol *syms,
       struct bfd_link_hash_entry *blhe;
       asection *owner_sec;
       int res;
+      const char *name = amiga_lto_bfd_symbol_name ((bfd *) abfd,
+						    syms[n].name);
       struct bfd_link_hash_entry *h
-	= bfd_link_hash_lookup (link_info.hash, syms[n].name,
+	= bfd_link_hash_lookup (link_info.hash, name,
 				false, false, true);
       enum { wrap_none, wrapper, wrapped } wrap_status = wrap_none;
 
@@ -772,7 +862,7 @@ get_symbols (const void *handle, int nsyms, struct ld_plugin_symbol *syms,
       else
 	{
 	  blhe = bfd_wrapped_link_hash_lookup (link_info.output_bfd,
-					       &link_info, syms[n].name,
+					       &link_info, name,
 					       false, false, true);
 	  /* Check if a symbol is a wrapped symbol.  */
 	  if (blhe && blhe != h)
@@ -1226,6 +1316,8 @@ plugin_object_p (bfd *ibfd)
   file.handle = input;
   input->abfd = abfd;
   input->ibfd = ibfd->my_archive != NULL ? ibfd : NULL;
+  input->amiga_syms = NULL;
+  input->amiga_nsyms = 0;
   input->view_buffer.addr = NULL;
   input->view_buffer.filesize = 0;
   input->view_buffer.offset = 0;
@@ -1260,6 +1352,8 @@ plugin_object_p (bfd *ibfd)
       ibfd->plugin_format = bfd_plugin_yes;
       ibfd->plugin_dummy_bfd = abfd;
       bfd_make_readable (abfd);
+      if (amiga_lto_rebuild_symbols (input) != LDPS_OK)
+	einfo (_("%F%P: %pB: failed to rebuild plugin symbols\n"), ibfd);
       abfd->no_export = ibfd->no_export;
       return plugin_cleanup;
     }
