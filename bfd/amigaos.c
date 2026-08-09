@@ -583,7 +583,9 @@ amiga_make_unique_section (
 static bool
 amiga_is_lto_section_name (const char *name)
 {
-  return name != NULL && strncmp (name, ".gnu.lto", 8) == 0;
+  return (name != NULL
+	  && (strncmp (name, ".gnu.lto", 8) == 0
+	      || strncmp (name, ".gnu.debuglto", 13) == 0));
 }
 
 static bool
@@ -2500,8 +2502,13 @@ amiga_write_section_contents (
       if (!write_longs (n, 1, abfd) || !write_name (abfd, section->name, 0))
 	return false;
     }
-  if (0 == strncmp(section->name, ".debug_", 7) || 0 == strcmp(section->name, ".dwarf2"))
-    section->flags = (section->flags & ~(SEC_CODE | SEC_DATA | SEC_ALLOC | SEC_LOAD)) | SEC_DEBUGGING;
+  /* LTO sections are compiler metadata, not loadable program data.  */
+  if (0 == strncmp (section->name, ".debug_", 7)
+      || 0 == strcmp (section->name, ".dwarf2")
+      || amiga_is_lto_section_name (section->name))
+    section->flags = ((section->flags
+		       & ~(SEC_CODE | SEC_DATA | SEC_ALLOC | SEC_LOAD))
+		      | SEC_DEBUGGING);
 
   /* Depending on the type of the section, write out HUNK_{CODE|DATA|BSS} */
   if (section->flags & SEC_CODE) /* Code section */
@@ -3447,7 +3454,9 @@ amiga_slurp_symbol_table (
 	  }
 	if (i == asect->amiga_symbol_count)
 	  section->symbol->name = section->name;
-	if (i && all_weak)
+	/* Early LTO debug sections contain a weak compilation-unit marker,
+	   but each section still has distinct contents that must be kept.  */
+	if (i && all_weak && (section->flags & SEC_DEBUGGING) == 0)
 	  {
 	    /* SBF: mark the section optional */
 	    section->flags |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD | SEC_LINK_DUPLICATES_SAME_CONTENTS;
