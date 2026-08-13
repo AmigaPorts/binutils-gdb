@@ -8118,21 +8118,25 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
   /* Amiga Hunk adjusts to current address. */
   if (stdoutput->xvec == &amiga_vec)
     {
-      if (!fixP->fx_addsy)
-	return -adjust;
+      /*
+       * RELRELOC32 is resolved by the Amiga linker.
+       *
+       * The generic GAS code starts with:
+       *
+       *     add_number = fixP->fx_offset;
+       *
+       * and subsequently does:
+       *
+       *     add_number -= MD_PCREL_FROM_SECTION(...);
+       *
+       * For a deferred Amiga PC-relative relocation, cancel the
+       * symbol/section offset in fx_offset so that the object file
+       * contains a zero relocation addend.
+       */
+      if (fixP->fx_addsy)
+        return fixP->fx_offset;
 
-      asymbol * sym = symbol_get_bfdsym (fixP->fx_addsy);
-      if (adjust != -1 && sym->section != current_section)
-	{
-	  if (strcmp(sym->section->name, "*UND*") && strcmp(sym->section->name, current_section->name))
-	    {
-	      long addsy_fix = fixP->fx_addsy ? symbol_get_frag(fixP->fx_addsy)->fr_fix : 0;
-	      return -adjust + fixP->fx_frag->fr_address + addsy_fix;
-	    }
-	  return -adjust;
-	}
-
-      // fall through
+      return 0;
     }
 #endif
 #endif
