@@ -998,10 +998,25 @@ _bfd_generic_link_add_archive_symbols
 	      && startswith (arsym->name, "__imp_"))
 	    h = bfd_link_hash_lookup (info->hash, arsym->name + 6,
 				      false, false, true);
+
+	  bool fail = true;
+	  if (h == NULL)
+	    {
+		  /* Check if this is the LTO marker symbol */
+		  if (strcmp (arsym->name, "___gnu_lto_slim") == 0)
+		    {
+			  h = bfd_link_hash_lookup (info->hash, arsym->name,
+			  				      true, false, true);
+			  fail = false;
+			  included[indx] = 1;
+		    }
+	    }
+
 	  if (h == NULL)
 	    continue;
 
-	  if (h->type != bfd_link_hash_undefined
+	  if (fail
+		  && h->type != bfd_link_hash_undefined
 	      && h->type != bfd_link_hash_common)
 	    {
 	      if (h->type != bfd_link_hash_undefweak)

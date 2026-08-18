@@ -3344,13 +3344,182 @@ amiga_new_section_hook (
   return true;
 }
 
-static bool
-amiga_slurp_symbol_table (
-  bfd *abfd)
+static unsigned long
+amiga_count_lto_symbols (bfd *abfd)
 {
-  amiga_data_type *amiga_data=AMIGA_DATA(abfd);
+  sec_ptr sec;
+  unsigned long count = 0;
+  
+  for (sec = abfd->sections; sec != NULL; sec = sec->next)
+    {
+      if (sec->name == NULL || strncmp (sec->name, ".gnu.lto_.symtab", 16) != 0)
+	continue;
+      
+      bfd_size_type size = bfd_section_size (sec);
+      if (size == 0)
+	continue;
+      
+      bfd_byte *data = bfd_malloc (size);
+      if (data == NULL)
+	continue;
+      
+      if (!bfd_get_section_contents (abfd, sec, data, 0, size))
+	{
+	  free (data);
+	  continue;
+	}
+
+      bfd_byte *p = data;
+      bfd_byte *end = p + size;
+      
+      /* Check for LTO1 magic header */
+      if (size >= 8 && bfd_getb32 (p) == AMIGA_LTO_DEBUG_MAGIC)
+	{
+	  unsigned long payload_size = bfd_getb32 (p + 4);
+	  if (payload_size > size - 8)
+	    {
+	      free (data);
+	      continue;
+	    }
+	  p += 8;
+	  end = p + payload_size;
+	}
+      
+      /* Parse null-terminated strings */
+      while (p < end)
+	{
+	  /* Skip any leading zeros */
+	  while (p < end && *p == 0)
+	    p++;
+
+	  if (p >= end)
+	    break;
+
+	  /* Find the end of the string */
+	  bfd_byte *name_end = memchr (p, '\0', end - p);
+	  if (name_end == NULL)
+	    break;
+
+	  const char *symname = (const char *) p;
+
+	  /* Skip ___gnu_lto_slim - it's already in HUNK_EXT */
+	  if (strcmp (symname, "___gnu_lto_slim") != 0)
+	    count++;
+
+	  p = name_end + 1;
+	}
+
+      free (data);
+    }
+
+  return count;
+}
+
+static unsigned long
+amiga_add_lto_symbols (bfd *abfd, amiga_symbol_type **symptrs)
+{
+  sec_ptr sec;
+  unsigned long count = 0;
+  amiga_symbol_type *asp = *symptrs;
+
+  for (sec = abfd->sections; sec != NULL; sec = sec->next)
+    {
+      if (sec->name == NULL || strncmp (sec->name, ".gnu.lto_.symtab", 16) != 0)
+	continue;
+
+      bfd_size_type size = bfd_section_size (sec);
+      if (size == 0)
+	continue;
+
+      bfd_byte *data = bfd_malloc (size);
+      if (data == NULL)
+	continue;
+
+      if (!bfd_get_section_contents (abfd, sec, data, 0, size))
+	{
+	  free (data);
+	  continue;
+	}
+
+      bfd_byte *p = data;
+      bfd_byte *end = p + size;
+
+      /* Check for LTO1 magic header */
+      if (size >= 8 && bfd_getb32 (p) == AMIGA_LTO_DEBUG_MAGIC)
+	{
+	  unsigned long payload_size = bfd_getb32 (p + 4);
+	  if (payload_size > size - 8)
+	    {
+	      free (data);
+	      continue;
+	    }
+	  p += 8;
+	  end = p + payload_size;
+	}
+
+      /* Parse null-terminated strings */
+      while (p < end)
+	{
+	  /* Skip any leading zeros */
+	  while (p < end && *p == 0)
+	    p++;
+
+	  if (p >= end)
+	    break;
+
+	  /* Find the end of the string */
+	  bfd_byte *name_end = memchr (p, '\0', end - p);
+	  if (name_end == NULL)
+	    break;
+
+	  const char *symname = (const char *) p;
+	  size_t namelen = name_end - p;
+
+	  /* Skip ___gnu_lto_slim - it's already in HUNK_EXT */
+	  if (strcmp (symname, "___gnu_lto_slim") == 0)
+	    {
+	      p = name_end + 1;
+	      continue;
+	    }
+
+	  /* Add this symbol as undefined (since it's in the .symtab) */
+	  char *name_copy = bfd_alloc (abfd, namelen + 1);
+	  if (name_copy == NULL)
+	    {
+	      free (data);
+	      return count;
+	    }
+	  memcpy (name_copy, symname, namelen);
+	  name_copy[namelen] = '\0';
+
+	  asp->symbol.name = name_copy;
+	  asp->symbol.the_bfd = abfd;
+	  asp->symbol.section = bfd_und_section_ptr;
+	  asp->symbol.flags = 0;  /* undefined */
+	  asp->symbol.value = 0;
+	  asp->type = EXT_ABSREF32;
+	  asp->index = asp - AMIGA_DATA(abfd)->symbols;
+	  asp->refnum = 0;
+
+	  count++;
+	  asp++;
+
+	  p = name_end + 1;
+	}
+
+      free (data);
+    }
+
+  *symptrs = asp;
+  return count;
+}
+
+static bool
+amiga_slurp_symbol_table (bfd *abfd)
+{
+  amiga_data_type *amiga_data = AMIGA_DATA(abfd);
   amiga_symbol_type *asp;
-  unsigned long l,len,type;
+  unsigned long l, len, type;
   sec_ptr section;
   sec_ptr stab = 0;
   sec_ptr stabstr = 0;
@@ -3362,24 +3531,32 @@ amiga_slurp_symbol_table (
     return true; /* already read */
 
   unsigned totalsymcount = bfd_get_symcount(abfd);
-  for (section=abfd->sections; section!=NULL; section=section->next)
+
+  /* Count STAB symbols */
+  for (section = abfd->sections; section != NULL; section = section->next)
     {
-	  if (0 == strcmp (section->name, ".stab"))
-	    {
-	      amiga_per_section_type *astab = amiga_per_section(section);
-	      totalsymcount += astab->disk_size / 12;
-	      break;
-	    }
+      if (strcmp (section->name, ".stab") == 0)
+	{
+	  amiga_per_section_type *astab = amiga_per_section(section);
+	  totalsymcount += astab->disk_size / 12;
+	  break;
+	}
     }
-  if (!totalsymcount)
-	return true;
 
+  /* Count LTO symbols */
+  unsigned long lto_count = amiga_count_lto_symbols (abfd);
 
-  asp = (amiga_symbol_type *) bfd_zalloc (abfd, sizeof(amiga_symbol_type) * totalsymcount);
+  if (totalsymcount == 0 && lto_count == 0)
+    return true;
+
+  /* Allocate space for ALL symbols at once */
+  asp = (amiga_symbol_type *) bfd_zalloc (abfd,
+	sizeof(amiga_symbol_type) * (totalsymcount + lto_count));
   if ((amiga_data->symbols = asp) == NULL)
     return false;
 
   /* Symbols are associated with every section */
+  if (totalsymcount)
   for (section=abfd->sections; section!=NULL; section=section->next)
     {
       amiga_per_section_type *asect=amiga_per_section(section);
@@ -3549,7 +3726,7 @@ amiga_slurp_symbol_table (
 	      continue;
 
 	    case N_WARNING:
-	      section = bfd_und_section_ptr;
+	      asp->symbol.section = bfd_und_section_ptr;
 	      flags |= BSF_WARNING;
 	      break;
 	    case N_INDR | N_EXT:
@@ -3640,6 +3817,14 @@ amiga_slurp_symbol_table (
 	  ++asp;
 	}}
     }
+
+  /* Add LTO symbols at the end */
+  amiga_add_lto_symbols (abfd, &asp);
+
+  /* Update symbol count */
+  if (lto_count)
+	  abfd->symcount = totalsymcount + lto_count;
+
   return true;
 }
 
