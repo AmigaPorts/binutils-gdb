@@ -8134,9 +8134,23 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
        * contains a zero relocation addend.
        */
       if (fixP->fx_addsy)
-        return fixP->fx_offset;
+	{
+	  asymbol *sym = symbol_get_bfdsym (fixP->fx_addsy);
 
-      return 0;
+	  /* Only relocations against other sections or undefined
+	     symbols are deferred.  A fixup against a symbol in the
+	     current section (e.g. a relaxed branch to a local label)
+	     is applied by GAS itself and needs the normal PC base.  */
+	  if (sym->section != current_section
+	      && strcmp (sym->section->name, current_section->name))
+	    return fixP->fx_offset;
+
+	  return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
+	}
+
+      /* No symbol: the value was already resolved by GAS, only the
+	 PC base is left to subtract (as before f96db0cf).  */
+      return -adjust;
     }
 #endif
 #endif
