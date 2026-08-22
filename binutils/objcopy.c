@@ -4508,8 +4508,10 @@ handle_remove_section_option (const char *section_pattern)
 }
 
 /* Copy relocations in input section ISECTION of IBFD to an output
-   section with the same name in OBFDARG.  If stripping then don't
-   copy any relocation info.  */
+   section with the same name in OBFD.  If stripping then don't copy
+   any relocation info, except for Amiga hunk output, whose
+   relocations are applied by LoadSeg at run time and must survive
+   stripping.  */
 
 static bool
 copy_relocations_in_section (bfd *ibfd, sec_ptr isection, bfd *obfd)
@@ -4528,7 +4530,10 @@ copy_relocations_in_section (bfd *ibfd, sec_ptr isection, bfd *obfd)
   if (bfd_get_format (obfd) == bfd_core
       || strip_symbols == STRIP_NONDWO
       || (strip_symbols == STRIP_ALL
-	  && htab_elements (keep_specific_htab) == 0)
+	  && htab_elements (keep_specific_htab) == 0
+	  /* Amiga hunk relocations are applied by LoadSeg at run time,
+	     so stripping the symbols must not discard them.  */
+	  && bfd_get_flavour (obfd) != bfd_target_amiga_flavour)
       || discard_relocations (ibfd, isection))
     relsize = 0;
   else
@@ -4574,7 +4579,10 @@ copy_relocations_in_section (bfd *ibfd, sec_ptr isection, bfd *obfd)
 	    }
 	}
 
-      if (strip_symbols == STRIP_ALL)
+      if (strip_symbols == STRIP_ALL
+	  /* Amiga hunk relocations are applied by LoadSeg at run time,
+	     so stripping the symbols must not discard them.  */
+	  && bfd_get_flavour (obfd) != bfd_target_amiga_flavour)
 	{
 	  /* Remove relocations which are not in
 	     keep_strip_specific_list.  */
