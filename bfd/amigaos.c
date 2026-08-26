@@ -1715,14 +1715,28 @@ write_words (
 static bool
 write_bfd_size_long (bfd_size_type in, bfd *abfd)
 {
-  unsigned long value = (unsigned long) in;
+  unsigned long value;
+
+  if (in > 0xffffffffUL)
+    {
+      bfd_set_error (bfd_error_bad_value);
+      return false;
+    }
+  value = (unsigned long) in;
   return write_longs (&value, 1, abfd);
 }
 
 static bool
 write_bfd_size_word (bfd_size_type in, bfd *abfd)
 {
-  unsigned long value = (unsigned long) in;
+  unsigned long value;
+
+  if (in > 0xffffUL)
+    {
+      bfd_set_error (bfd_error_bad_value);
+      return false;
+    }
+  value = (unsigned long) in;
   return write_words (&value, 1, abfd);
 }
 
