@@ -97,7 +97,7 @@ _bfd_bool_bfd_bfd_true (bfd *ibfd ATTRIBUTE_UNUSED,
 
 bool
 _bfd_bool_bfd_uint_true (bfd *abfd ATTRIBUTE_UNUSED,
-			 unsigned int flags ATTRIBUTE_UNUSED)
+			 flagword flags ATTRIBUTE_UNUSED)
 {
   return true;
 }
