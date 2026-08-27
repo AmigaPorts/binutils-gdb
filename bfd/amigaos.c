@@ -1832,7 +1832,7 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
         return true;
       }
 
-    /* Gesamtgr��e berechnen */
+    /* Gesamtgröße berechnen */
     bfd_size_type total = 0;
     int missing_count = 0;
 
@@ -1849,7 +1849,7 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
           }
 
         bfd_size_type len = s->size; /* nur Payload */
-        total += 4;                  /* L�ngenfeld */
+        total += 4;                  /* Längenfeld */
         total += len;
         total = (total + 3) & ~ (bfd_size_type) 3; /* 4-byte align */
 
@@ -1876,7 +1876,7 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
         s = ordered[i];
         if (!s)
           {
-            /* Fehlende Section -> L�nge 0 schreiben */
+            /* Fehlende Section -> Länge 0 schreiben */
             bfd_putb32 (0, buf + pos);
             pos += 4;
             DBG("  writing [%d]: %s - zero length at offset %ld",
@@ -1886,7 +1886,7 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
 
         bfd_size_type len = s->size;
 
-        /* L�nge (nur Payload) */
+        /* Länge (nur Payload) */
         bfd_putb32 (len, buf + pos);
         pos += 4;
 
@@ -1971,7 +1971,7 @@ amiga_pack_dwarf_sections (bfd *abfd, asection *dwarf, asection *tail)
           }
       }
 
-    /* Container ans Ende h�ngen */
+    /* Container ans Ende hängen */
     if (tail)
       {
         tail->next = first;
