@@ -3487,7 +3487,7 @@ amiga_slurp_symbol_table (
 	  section->symbol->name = section->name;
 	/* Early LTO debug sections contain a weak compilation-unit marker,
 	   but each section still has distinct contents that must be kept.  */
-	if (i && all_weak && (section->flags & SEC_DEBUGGING) == 0)
+	if (plink_info && i && all_weak && (section->flags & SEC_DEBUGGING) == 0)
 	  {
 	    /* SBF: mark the section optional */
 	    section->flags |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD | SEC_LINK_DUPLICATES_SAME_CONTENTS;
