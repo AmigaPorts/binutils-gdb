@@ -444,7 +444,7 @@ changequote([,])dnl
 	done
 	;;
 	m68k)
-	    case ${targ} in
+	    case ${target} in
 	      m68*-*-amigaos* ) ;;   # Amiga: keine ELF-Attributes
 	      * )
 	        for f in config/obj-elf-attr.o; do
