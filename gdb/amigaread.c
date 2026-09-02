@@ -45,8 +45,8 @@
    psymtab reading.  It is destroyed at the completion of psymtab-reading.
    It's local to amiga_symfile_read.
 
-   DWARF-only: aktuell leer, wird nur für die Signatur von
-   amiga_read_minimal_symbols vorgehalten.  */
+   DWARF-only: currently empty, kept only for the signature of
+   amiga_read_minimal_symbols.  */
 
 struct amigainfo
 {
@@ -55,9 +55,9 @@ struct amigainfo
 
 /* Provide segment information for AmigaHunk files.
 
-   AmigaHunk kennt keine ELF-Programmheader, GDB erwartet aber
-   Segment-Informationen für die Adressabbildung.  Wir erzeugen daher
-   künstliche "Segmente" aus den nicht-Debug-Sektionen.  */
+   AmigaHunk has no ELF program headers, but GDB expects segment
+   information for the address mapping, so synthesize "segments" from
+   the non-debug sections.  */
 
 static symfile_segment_data_up
 amiga_symfile_segments (bfd *abfd)
@@ -68,7 +68,7 @@ amiga_symfile_segments (bfd *abfd)
   asection *sect;
   int i, j;
 
-  /* Zähle alle Sektionen und alle "echten" (nicht-Debug) Sektionen.  */
+  /* Count all sections and the "real" (non-debug) ones.  */
   for (sect = abfd->sections; sect != nullptr; sect = sect->next)
     {
       ++num_sections;
@@ -81,7 +81,7 @@ amiga_symfile_segments (bfd *abfd)
 
   segments = XALLOCAVEC (Elf_Internal_Phdr *, num_segments);
 
-  /* Erzeuge künstliche "Program Header" für jede nicht-Debug-Sektion.  */
+  /* Synthesize a "program header" for every non-debug section.  */
   i = 0;
   for (sect = abfd->sections; sect != nullptr; sect = sect->next)
     {
@@ -97,7 +97,7 @@ amiga_symfile_segments (bfd *abfd)
       phdrs->p_offset = 0;
       phdrs->p_type   = PT_LOAD;
 
-      /* VMA/LMA werden später von BFD/GDB passend gesetzt.  */
+      /* BFD/GDB set the VMA/LMA properly later.  */
       sect->vma = sect->lma = 0;
 
       ++i;
@@ -109,8 +109,8 @@ amiga_symfile_segments (bfd *abfd)
   for (i = 0; i < num_segments; ++i)
     data->segments.emplace_back (segments[i]->p_vaddr, segments[i]->p_memsz);
 
-  /* segment_info: 1-basiert, 0 = kein Segment.  Wir mappen der Einfachheit
-     halber die ersten drei nicht-Debug-Sektionen auf 1=text, 2=data, 3=bss.  */
+  /* segment_info is 1-based, 0 = no segment.  For simplicity map the first
+     three non-debug sections to 1=text, 2=data, 3=bss.  */
   data->segment_info.resize (num_sections);
 
   i = 0;
@@ -143,7 +143,7 @@ record_minimal_symbol (minimal_symbol_reader &reader,
       = unrelocated_addr (gdbarch_addr_bits_remove (gdbarch,
                                                     CORE_ADDR (address)));
 
-  /* Wir setzen nur für allocierbare Sektionen einen Section-Index.  */
+  /* Only allocatable sections get a section index.  */
   int section_index = 0;
   if ((bfd_section_flags (bfd_section) & SEC_ALLOC) == SEC_ALLOC
       || bfd_section == bfd_abs_section_ptr)
@@ -152,11 +152,11 @@ record_minimal_symbol (minimal_symbol_reader &reader,
   return reader.record_full (name, copy_name, address, ms_type, section_index);
 }
 
-/* DWARF-only Minimal-Symbol-Leser für AmigaHunk.
+/* DWARF-only minimal symbol reader for AmigaHunk.
 
-   - keine STABS/ECOFF/CTF
-   - nur reguläre BFD-Symbole aus .symtab/.dynsym
-   - einfache Heuristik: CODE -> text, ALLOC+LOAD -> data, ALLOC+!LOAD -> bss
+   - no STABS/ECOFF/CTF
+   - only regular BFD symbols from .symtab/.dynsym
+   - simple heuristic: CODE -> text, ALLOC+LOAD -> data, ALLOC+!LOAD -> bss
 */
 
 #define ST_REGULAR   0
@@ -184,7 +184,7 @@ amiga_symtab_read (minimal_symbol_reader &reader,
       if (sym->name == nullptr || *sym->name == '\0')
         continue;
 
-      /* Keine dynamischen Symbole in nicht-gestrippten Binaries doppelt.  */
+      /* Do not duplicate dynamic symbols in unstripped binaries.  */
       if (type == ST_DYNAMIC && !stripped)
         continue;
 
@@ -203,7 +203,7 @@ amiga_symtab_read (minimal_symbol_reader &reader,
       if (sym->section == nullptr)
         continue;
 
-      /* BFD-Symbole sind sektionrelativ.  */
+      /* BFD symbols are section-relative.  */
       symaddr = sym->value; // + sym->section->vma; // + vma might be wrong
 
       if (sym->section == bfd_abs_section_ptr)
@@ -236,7 +236,7 @@ amiga_symtab_read (minimal_symbol_reader &reader,
         }
       else
         {
-          /* Nicht zuordenbare Symbole ignorieren.  */
+          /* Ignore symbols that cannot be classified.  */
           continue;
         }
 
@@ -249,16 +249,16 @@ amiga_symtab_read (minimal_symbol_reader &reader,
         msym->filename = filesymname;
     }
 
-  (void) gdbarch; /* aktuell unbenutzt, aber für spätere Erweiterungen da.  */
+  (void) gdbarch; /* currently unused, kept for later extensions.  */
 }
 
 /* Read minimal symbols for an AmigaHunk BFD.
 
-   DWARF-only Variante:
-   - keine STABS
-   - keine CTF
-   - keine ECOFF
-   - nur reguläre BFD-Symbole aus .symtab/.dynsym
+   DWARF-only variant:
+   - no STABS
+   - no CTF
+   - no ECOFF
+   - only regular BFD symbols from .symtab/.dynsym
 */
 
 static void
@@ -267,7 +267,7 @@ amiga_read_minimal_symbols (struct objfile *objfile,
                             struct amigainfo *ei)
 {
   bfd *abfd = objfile->obfd.get ();
-  (void) ei; /* derzeit unbenutzt, Signatur bleibt stabil.  */
+  (void) ei; /* currently unused, keeps the signature stable.  */
 
   minimal_symbol_reader reader (objfile);
 
@@ -302,7 +302,8 @@ amiga_make_dwarf_section (bfd *abfd,
                           const char *name,
                           const bfd_byte *base,
                           bfd_vma offset,
-                          bfd_size_type size)
+                          bfd_size_type size,
+                          file_ptr filepos)
 {
     DBG("amiga_make_dwarf_section: %s size=%ld offset=%ld",
         name, (long)size, (long)offset);
@@ -325,7 +326,7 @@ amiga_make_dwarf_section (bfd *abfd,
         return NULL;
       }
 
-    /* Immer bfd_alloc verwenden */
+    /* Always use bfd_alloc */
     bfd_byte *contents = (bfd_byte *) bfd_alloc (abfd, size);
     if (!contents)
       {
@@ -339,16 +340,22 @@ amiga_make_dwarf_section (bfd *abfd,
     sec->contents = contents;
     sec->vma = 0;
     sec->lma = 0;
+    /* gdb_bfd_map_section mmaps sections larger than a few pages straight
+       from the file and ignores sec->contents, so point filepos at the
+       payload inside the .dwarf2 hunk on disk (the in-memory buffer is a
+       verbatim copy of it) or those reads see the length prefix instead.  */
+    sec->filepos = filepos;
 
-    DBG("  created section %s (size=%ld)", name, (long)size);
+    DBG("  created section %s (size=%ld) filepos=%ld", name, (long)size,
+        (long)filepos);
     return sec;
 }
 
-/* 
- * Aus der vom Linker erzeugten .dwarf2-Section echte .debug_*-Sections bauen.
- * 
- * Die Reihenfolge muss exakt der in amigaos.c (debug_names[]) und der
- * Linker-Script-Reihenfolge entsprechen.
+/*
+ * Build real .debug_* sections from the .dwarf2 section the linker made.
+ *
+ * The order must match debug_names[] in amigaos.c and the linker script
+ * exactly.
  */
 static bool
 amiga_split_dwarf2_section (struct objfile *objfile)
@@ -372,7 +379,7 @@ amiga_split_dwarf2_section (struct objfile *objfile)
       return false;
     }
 
-  /* Container einlesen */
+  /* Read the container */
   gdb::unique_xmalloc_ptr<bfd_byte> buf
     ((bfd_byte *) xmalloc (total));
 
@@ -382,9 +389,9 @@ amiga_split_dwarf2_section (struct objfile *objfile)
       return false;
     }
 
-  /* 
-   * Reihenfolge fix wie im Linker und in amigaos.c.
-   * MUSS mit debug_names[] in amigaos.c übereinstimmen!
+  /*
+   * Fixed order, as in the linker and in amigaos.c.
+   * MUST match debug_names[] in amigaos.c!
    */
   static const char *debug_names[] =
   {
@@ -417,7 +424,7 @@ amiga_split_dwarf2_section (struct objfile *objfile)
           break;
         }
 
-      /* Länge lesen */
+      /* Read the length */
       bfd_size_type len = bfd_getb32 (buf.get () + pos);
       bfd_size_type payload = pos + 4;
 
@@ -448,7 +455,8 @@ amiga_split_dwarf2_section (struct objfile *objfile)
                                                     debug_names[i],
                                                     buf.get (),
                                                     payload,
-                                                    len);
+                                                    len,
+                                                    dsect->filepos + payload);
           if (sec)
             section_count++;
         }
@@ -457,24 +465,24 @@ amiga_split_dwarf2_section (struct objfile *objfile)
           DBG("    zero length, skipping");
         }
 
-      /* Nächsten Block finden (4-byte aligned) */
+      /* Find the next block (4-byte aligned) */
       pos = payload + len;
       pos = (pos + 3) & ~ (bfd_size_type) 3;
     }
 
   DBG("amiga_split_dwarf2_section: created %d DWARF sections", section_count);
 
-  /* Section-Offsets neu berechnen */
+  /* Recompute the section offsets */
   objfile->section_offsets.resize
     (gdb_bfd_count_sections (objfile->obfd.get ()));
 
   return (section_count > 0);
 }
 
-/* Haupt-Einstieg: Symbole aus einem AmigaHunk-Objekt lesen.
+/* Main entry point: read the symbols of an AmigaHunk object.
 
-   DWARF2-Debug-Information wird über den generischen DWARF2-Reader
-   verarbeitet; AmigaHunk liefert nur noch DWARF2 (keine STABS/ECOFF/CTF).  */
+   DWARF2 debug information goes through the generic DWARF2 reader;
+   AmigaHunk only provides DWARF2 now (no STABS/ECOFF/CTF).  */
 
 static void
 amiga_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
@@ -483,10 +491,10 @@ amiga_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 
   DBG("amiga_symfile_read: %s", objfile->original_name);
 
-  /* Minimale Symbole (dynsym/symtab) lesen.  */
+  /* Read the minimal symbols (dynsym/symtab).  */
   amiga_read_minimal_symbols (objfile, symfile_flags, &ei);
 
-  /* DWARF aus der vom Linker erzeugten .dwarf2-Section in echte .debug_*-Sections splitten. */
+  /* Split the DWARF in the linker's .dwarf2 section into real .debug_* sections.  */
   if (amiga_split_dwarf2_section (objfile))
     {
       DBG("  initializing DWARF2");
@@ -503,7 +511,7 @@ amiga_symfile_init(struct objfile *objfile) {
   DBG("amiga_symfile_init: %s", objfile->original_name);
 }
 
-/* Symfile-Callbacks für AmigaHunk.  */
+/* Symfile callbacks for AmigaHunk.  */
 
 static const struct sym_fns amiga_sym_fns =
 {
