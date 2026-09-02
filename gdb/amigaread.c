@@ -302,7 +302,8 @@ amiga_make_dwarf_section (bfd *abfd,
                           const char *name,
                           const bfd_byte *base,
                           bfd_vma offset,
-                          bfd_size_type size)
+                          bfd_size_type size,
+                          file_ptr filepos)
 {
     DBG("amiga_make_dwarf_section: %s size=%ld offset=%ld",
         name, (long)size, (long)offset);
@@ -339,8 +340,14 @@ amiga_make_dwarf_section (bfd *abfd,
     sec->contents = contents;
     sec->vma = 0;
     sec->lma = 0;
+    /* gdb_bfd_map_section mmaps sections larger than a few pages straight
+       from the file and ignores sec->contents, so point filepos at the
+       payload inside the .dwarf2 hunk on disk (the in-memory buffer is a
+       verbatim copy of it) or those reads see the length prefix instead.  */
+    sec->filepos = filepos;
 
-    DBG("  created section %s (size=%ld)", name, (long)size);
+    DBG("  created section %s (size=%ld) filepos=%ld", name, (long)size,
+        (long)filepos);
     return sec;
 }
 
@@ -448,7 +455,8 @@ amiga_split_dwarf2_section (struct objfile *objfile)
                                                     debug_names[i],
                                                     buf.get (),
                                                     payload,
-                                                    len);
+                                                    len,
+                                                    dsect->filepos + payload);
           if (sec)
             section_count++;
         }
