@@ -2093,9 +2093,12 @@ amiga_write_object_contents (
 	  if ((amiga_base_relative || p->rawsize != 0 || p->size != 0)
 	      && !(amiga_base_relative && !strcmp (p->name, ".bss")))
 	    {
-	      if (amiga_skip_loadfile_section (p->name))
+	      if (amiga_is_lto_section_name (p->name))
 		remove_section_index (p, index_map);
-	      else
+	      /* Debug sections are written as HUNK_DEBUG, which LoadSeg
+		 skips: keep their index so they are still written, but
+		 do not count them in the header.  */
+	      else if (!amiga_skip_loadfile_section (p->name))
 		n[2]++;
 	    }
 	else
