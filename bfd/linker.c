@@ -999,24 +999,29 @@ _bfd_generic_link_add_archive_symbols
 	    h = bfd_link_hash_lookup (info->hash, arsym->name + 6,
 				      false, false, true);
 
-	  bool fail = true;
+	  /* A slim-LTO archive member exposes only the ___gnu_lto_slim
+	     marker in the archive map: its real symbols live in the LTO IR
+	     and are seen through the plugin.  Every such member defines the
+	     marker, so after the first one it is no longer undefined -- yet
+	     each later member still has to reach checkfn, which scans the
+	     whole element's plugin symbols, for the plugin to claim it.
+	     Detect the marker by name, independent of the hash state, never
+	     take the "already defined" shortcut for it, and leave marking
+	     it included to the normal needed path below so a later pass can
+	     still reconsider it.  */
+	  bool lto_marker = strcmp (arsym->name, "___gnu_lto_slim") == 0;
 	  if (h == NULL)
 	    {
-		  /* Check if this is the LTO marker symbol */
-		  if (strcmp (arsym->name, "___gnu_lto_slim") == 0)
-		    {
-			  h = bfd_link_hash_lookup (info->hash, arsym->name,
-			  				      true, false, true);
-			  fail = false;
-			  included[indx] = 1;
-		    }
+	      if (!lto_marker)
+		continue;
+	      h = bfd_link_hash_lookup (info->hash, arsym->name,
+					true, false, true);
+	      if (h == NULL)
+		continue;
 	    }
 
-	  if (h == NULL)
-	    continue;
-
-	  if (fail
-		  && h->type != bfd_link_hash_undefined
+	  if (!lto_marker
+	      && h->type != bfd_link_hash_undefined
 	      && h->type != bfd_link_hash_common)
 	    {
 	      if (h->type != bfd_link_hash_undefweak)
