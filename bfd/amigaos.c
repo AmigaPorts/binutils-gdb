@@ -3344,174 +3344,125 @@ amiga_new_section_hook (
   return true;
 }
 
-static unsigned long
-amiga_count_lto_symbols (bfd *abfd)
+/* Walk the LTO symbol records of every .gnu.lto_.symtab section of
+   ABFD.  A record is "name\0" "comdat\0" followed by 14 bytes of
+   metadata, kind first; see amiga_write_lto_undefined_symbols.  Only
+   the undefined kinds are exposed, matching what that function writes
+   to HUNK_EXT.
+
+   With SYMPTRS NULL only count the symbols; otherwise fill *SYMPTRS
+   and advance it.  Either way *COUNT receives the number of exposed
+   symbols.  Both passes run this same loop, so they cannot disagree,
+   and an unreadable section or a failed allocation fails the whole
+   load (false) instead of being silently skipped by one pass only.  */
+
+static bool
+amiga_walk_lto_symbols (bfd *abfd, amiga_symbol_type **symptrs,
+			unsigned long *count)
 {
   sec_ptr sec;
-  unsigned long count = 0;
-  
+  unsigned long n = 0;
+  amiga_symbol_type *asp = symptrs != NULL ? *symptrs : NULL;
+
   for (sec = abfd->sections; sec != NULL; sec = sec->next)
     {
+      bfd_byte *data, *p, *end;
+      bfd_size_type size;
+
       if (sec->name == NULL || strncmp (sec->name, ".gnu.lto_.symtab", 16) != 0)
 	continue;
-      
-      bfd_size_type size = bfd_section_size (sec);
+
+      size = bfd_section_size (sec);
       if (size == 0)
 	continue;
-      
-      bfd_byte *data = bfd_malloc (size);
+
+      data = bfd_malloc (size);
       if (data == NULL)
-	continue;
-      
+	return false;
       if (!bfd_get_section_contents (abfd, sec, data, 0, size))
 	{
 	  free (data);
-	  continue;
+	  return false;
 	}
 
-      bfd_byte *p = data;
-      bfd_byte *end = p + size;
-      
-      /* Check for LTO1 magic header */
+      p = data;
+      end = data + size;
       if (size >= 8 && bfd_getb32 (p) == AMIGA_LTO_DEBUG_MAGIC)
 	{
-	  unsigned long payload_size = bfd_getb32 (p + 4);
+	  bfd_size_type payload_size = bfd_getb32 (p + 4);
+
 	  if (payload_size > size - 8)
 	    {
 	      free (data);
-	      continue;
+	      return false;
 	    }
 	  p += 8;
 	  end = p + payload_size;
 	}
-      
-      /* Parse null-terminated strings */
+
       while (p < end)
 	{
-	  /* Skip any leading zeros */
-	  while (p < end && *p == 0)
-	    p++;
+	  const char *symname = (const char *) p;
+	  bfd_byte *name_end;
+	  size_t namelen;
+	  unsigned int kind;
 
-	  if (p >= end)
-	    break;
-
-	  /* Find the end of the string */
-	  bfd_byte *name_end = memchr (p, '\0', end - p);
+	  name_end = memchr (p, '\0', end - p);
 	  if (name_end == NULL)
 	    break;
-
-	  const char *symname = (const char *) p;
-
-	  /* Skip ___gnu_lto_slim - it's already in HUNK_EXT */
-	  if (strcmp (symname, "___gnu_lto_slim") != 0)
-	    count++;
-
+	  namelen = name_end - p;
 	  p = name_end + 1;
-	}
 
-      free (data);
-    }
-
-  return count;
-}
-
-static unsigned long
-amiga_add_lto_symbols (bfd *abfd, amiga_symbol_type **symptrs)
-{
-  sec_ptr sec;
-  unsigned long count = 0;
-  amiga_symbol_type *asp = *symptrs;
-
-  for (sec = abfd->sections; sec != NULL; sec = sec->next)
-    {
-      if (sec->name == NULL || strncmp (sec->name, ".gnu.lto_.symtab", 16) != 0)
-	continue;
-
-      bfd_size_type size = bfd_section_size (sec);
-      if (size == 0)
-	continue;
-
-      bfd_byte *data = bfd_malloc (size);
-      if (data == NULL)
-	continue;
-
-      if (!bfd_get_section_contents (abfd, sec, data, 0, size))
-	{
-	  free (data);
-	  continue;
-	}
-
-      bfd_byte *p = data;
-      bfd_byte *end = p + size;
-
-      /* Check for LTO1 magic header */
-      if (size >= 8 && bfd_getb32 (p) == AMIGA_LTO_DEBUG_MAGIC)
-	{
-	  unsigned long payload_size = bfd_getb32 (p + 4);
-	  if (payload_size > size - 8)
-	    {
-	      free (data);
-	      continue;
-	    }
-	  p += 8;
-	  end = p + payload_size;
-	}
-
-      /* Parse null-terminated strings */
-      while (p < end)
-	{
-	  /* Skip any leading zeros */
-	  while (p < end && *p == 0)
-	    p++;
-
-	  if (p >= end)
-	    break;
-
-	  /* Find the end of the string */
-	  bfd_byte *name_end = memchr (p, '\0', end - p);
+	  name_end = memchr (p, '\0', end - p);
 	  if (name_end == NULL)
 	    break;
+	  p = name_end + 1;
 
-	  const char *symname = (const char *) p;
-	  size_t namelen = name_end - p;
+	  if ((size_t) (end - p) < 14)
+	    break;
+	  kind = p[0];
+	  p += 2 + 8 + 4;
 
-	  /* Skip ___gnu_lto_slim - it's already in HUNK_EXT */
+	  if (kind != AMIGA_LTO_GCCPK_UNDEF
+	      && kind != AMIGA_LTO_GCCPK_WEAKUNDEF)
+	    continue;
+
+	  /* The marker is already in HUNK_EXT.  */
 	  if (strcmp (symname, "___gnu_lto_slim") == 0)
+	    continue;
+
+	  if (asp != NULL)
 	    {
-	      p = name_end + 1;
-	      continue;
+	      char *name_copy = bfd_alloc (abfd, namelen + 1);
+
+	      if (name_copy == NULL)
+		{
+		  free (data);
+		  return false;
+		}
+	      memcpy (name_copy, symname, namelen);
+	      name_copy[namelen] = '\0';
+
+	      asp->symbol.name = name_copy;
+	      asp->symbol.the_bfd = abfd;
+	      asp->symbol.section = bfd_und_section_ptr;
+	      asp->symbol.flags = 0;
+	      asp->symbol.value = 0;
+	      asp->type = EXT_ABSREF32;
+	      asp->index = asp - AMIGA_DATA(abfd)->symbols;
+	      asp->refnum = 0;
+	      asp++;
 	    }
-
-	  /* Add this symbol as undefined (since it's in the .symtab) */
-	  char *name_copy = bfd_alloc (abfd, namelen + 1);
-	  if (name_copy == NULL)
-	    {
-	      free (data);
-	      return count;
-	    }
-	  memcpy (name_copy, symname, namelen);
-	  name_copy[namelen] = '\0';
-
-	  asp->symbol.name = name_copy;
-	  asp->symbol.the_bfd = abfd;
-	  asp->symbol.section = bfd_und_section_ptr;
-	  asp->symbol.flags = 0;  /* undefined */
-	  asp->symbol.value = 0;
-	  asp->type = EXT_ABSREF32;
-	  asp->index = asp - AMIGA_DATA(abfd)->symbols;
-	  asp->refnum = 0;
-
-	  count++;
-	  asp++;
-
-	  p = name_end + 1;
+	  n++;
 	}
 
       free (data);
     }
 
-  *symptrs = asp;
-  return count;
+  if (symptrs != NULL)
+    *symptrs = asp;
+  *count = n;
+  return true;
 }
 
 static bool
@@ -3543,8 +3494,10 @@ amiga_slurp_symbol_table (bfd *abfd)
 	}
     }
 
-  /* Count LTO symbols */
-  unsigned long lto_count = amiga_count_lto_symbols (abfd);
+  /* Count LTO symbols.  The same loop fills them in below.  */
+  unsigned long lto_count;
+  if (!amiga_walk_lto_symbols (abfd, NULL, &lto_count))
+    return false;
 
   if (totalsymcount == 0 && lto_count == 0)
     return true;
@@ -3819,11 +3772,17 @@ amiga_slurp_symbol_table (bfd *abfd)
     }
 
   /* Add LTO symbols at the end */
-  amiga_add_lto_symbols (abfd, &asp);
-
-  /* Update symbol count */
   if (lto_count)
-	  abfd->symcount = totalsymcount + lto_count;
+    {
+      unsigned long added;
+
+      if (!amiga_walk_lto_symbols (abfd, &asp, &added))
+	return false;
+      BFD_ASSERT (added == lto_count);
+      /* Publish the number actually initialized, not the capacity
+	 reserved for it.  */
+      abfd->symcount = asp - amiga_data->symbols;
+    }
 
   return true;
 }
