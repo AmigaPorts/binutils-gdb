@@ -1021,9 +1021,30 @@ AbsReloc:
 	{
 	  DPRINT(5,("PC relative\n"));
 
-
-	      relocation = sym->value + target_section->output_offset
+	  relocation = sym->value + target_section->output_offset
 	    - sec->output_offset - r->address;
+
+	  /* my_add_to() below ADDS this displacement to the reloc field.  The
+	     reloc is against the target *section*, so the field must carry the
+	     target's offset within it.  gas leaves 0 for a strong target, but
+	     for a weak target it leaves the pc-relative "from" bias
+	     (r->address) on top of that offset, so the bias was counted twice
+	     and the branch misdirected: a gcc sibcall bra.l to a weak COMDAT
+	     function jumped into garbage.  A non-zero field is that weak
+	     encoding; cancel the bias once and keep the target offset.  */
+	  {
+	    bfd_byte *field = (bfd_byte *) data + r->address;
+	    bfd_signed_vma inplace;
+
+	    switch (bfd_get_reloc_size (r->howto))
+	      {
+	      case 1: inplace = (signed char) field[0]; break;
+	      case 2: inplace = bfd_getb_signed_16 (field); break;
+	      default: inplace = bfd_getb_signed_32 (field); break;
+	      }
+	    if (inplace != 0)
+	      relocation -= r->address;
+	  }
 	}
       break;
 
