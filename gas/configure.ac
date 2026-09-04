@@ -445,7 +445,7 @@ changequote([,])dnl
 	;;
 	m68k)
 	    case ${target} in
-	      m68*-*-amigaos* ) ;;   # Amiga: keine ELF-Attributes
+	      m68*-*-amigaos ) ;;   # hunk gas: no ELF attributes
 	      * )
 	        for f in config/obj-elf-attr.o; do
 	          case " $extra_objects " in
