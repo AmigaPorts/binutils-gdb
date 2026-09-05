@@ -675,7 +675,12 @@ get_relocated_section_contents (
 	}
     }
 
-  insert_long_jumps(abfd, input_bfd, input_section, link_order, &data);
+  /* Long jumps are inserted against the final layout. A relocatable link
+     keeps the out-of-range pc-relative relocs for the final link instead,
+     and ld runs no relaxation pass for it, so the output section's rawsize
+     the pass keys on is still zero and it would truncate the section.  */
+  if (!relocateable)
+    insert_long_jumps(abfd, input_bfd, input_section, link_order, &data);
 
   /* We're not relaxing the section, so just copy the size info.  */
   input_section->size = input_section->rawsize;
@@ -709,18 +714,19 @@ get_relocated_section_contents (
 			   input_section,
 			   relocateable ? abfd : (bfd *) NULL,
 			   &error_message);
-	  if (r != bfd_reloc_ok)
+	  if (relocateable)
 	    {
-	      if (relocateable)
-		{
-		  asection *os = input_section->output_section;
+	      asection *os = input_section->output_section;
 
-		  DPRINT(5,("Keeping reloc\n"));
-		  /* A partial link, so keep the relocs.  */
-		  os->orelocation[os->reloc_count] = *parent;
-		  os->reloc_count++;
-		}
-	      else switch (r)
+	      DPRINT(5,("Keeping reloc\n"));
+	      /* A partial link: amiga_perform_reloc only moved the reloc to
+		 its output offset, so keep every one for the final link.  */
+	      os->orelocation[os->reloc_count] = *parent;
+	      os->reloc_count++;
+	    }
+	  else if (r != bfd_reloc_ok)
+	    {
+	      switch (r)
 		{
 		case bfd_reloc_undefined:
 		  ((*link_info->callbacks->undefined_symbol)
