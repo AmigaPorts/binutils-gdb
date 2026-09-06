@@ -244,11 +244,11 @@ cat >>e${EMULATION_NAME}.c <<EOF
 {
   *isfile = 0;
 
-  if (link_info.type == 1 && config.build_constructors == true)
+  if (bfd_link_relocatable (&link_info) && config.build_constructors == true)
     return
 EOF
 sed $sc ldscripts/${EMULATION_NAME}.xu                     >> e${EMULATION_NAME}.c
-echo '  ; else if (link_info.type == 1) return' >> e${EMULATION_NAME}.c
+echo '  ; else if (bfd_link_relocatable (&link_info)) return' >> e${EMULATION_NAME}.c
 sed $sc ldscripts/${EMULATION_NAME}.xr                     >> e${EMULATION_NAME}.c
 echo '  ; else if (!config.text_read_only) return'         >> e${EMULATION_NAME}.c
 sed $sc ldscripts/${EMULATION_NAME}.xbn                    >> e${EMULATION_NAME}.c
@@ -265,9 +265,9 @@ cat >>e${EMULATION_NAME}.c <<EOF
 {
   *isfile = 1;
 
-  if (link_info.type == 1 && config.build_constructors == true)
+  if (bfd_link_relocatable (&link_info) && config.build_constructors == true)
     return "ldscripts/${EMULATION_NAME}.xu";
-  else if (link_info.type == 1)
+  else if (bfd_link_relocatable (&link_info))
     return "ldscripts/${EMULATION_NAME}.xr";
   else if (!config.text_read_only)
     return "ldscripts/${EMULATION_NAME}.xbn";

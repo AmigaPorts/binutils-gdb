@@ -2008,6 +2008,12 @@ amiga_write_object_contents (
 
   abfd->output_has_begun=true; /* Output has begun */
 
+  /* The writer sizes hunks from rawsize, which the long-jump pass keeps up
+     to date. A relocatable link never runs it, so take the plain size.  */
+  for (p = abfd->sections; p != NULL; p = p->next)
+    if (p->rawsize == 0)
+      p->rawsize = p->size;
+
   if (AMIGA_DATA(abfd)->IsLoadFile)
     {
       // remove .stab and .stabstr or handle dwarf2 debug sections
@@ -4082,7 +4088,12 @@ bfd_size_type count)
 
   if ((section->flags&SEC_IN_MEMORY)==0) /* Not in memory, so alloc space */
     {
-      section->contents = (bfd_byte *) bfd_zalloc (abfd, section->rawsize);
+      /* rawsize is only set once a section has been relaxed; a relocatable
+	 link never relaxes, so it is still zero there.  */
+      bfd_size_type alloc = section->rawsize > section->size
+			    ? section->rawsize : section->size;
+
+      section->contents = (bfd_byte *) bfd_zalloc (abfd, alloc);
       if (section->contents == NULL)
 	return false;
       section->flags |= SEC_IN_MEMORY;
