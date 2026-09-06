@@ -1227,7 +1227,7 @@ amiga_handle_cdb_hunk (
       if (!current_section)
 	return false;
 
-	  if (0 == strncmp(".debug_", current_section->name, 7))
+	  if (amiga_is_dwarf_section_name (current_section->name))
 	    {
 		  unsigned long real_len;
 		  bfd_vma cpos = bfd_tell(abfd);
@@ -1320,7 +1320,7 @@ amiga_handle_cdb_hunk (
     case HUNK_DEBUG:
       /* handle .stab and .stabs as real sections. */
       if (current_name && (0 == strcmp (current_name, ".stab") || 0 == strcmp (current_name, ".stabstr")
-	  || 0 == strncmp (current_name, ".debug_", 7) || 0 == strcmp (current_name, ".dwarf2")
+	  || amiga_is_dwarf_section_name (current_name)
 	  || amiga_is_lto_section_name (current_name)))
 	{
 	  secflags = SEC_DEBUGGING | SEC_HAS_CONTENTS;
@@ -2029,7 +2029,7 @@ amiga_write_object_contents (
 	      break;
 	      continue;
 	    }
-	  if (0 == strncmp (p->name, ".debug_", 7))
+	  if (amiga_is_dwarf_section_name (p->name))
 	    {
 	      q->next = p->next;
 	      p->next = dwarf;
@@ -2537,7 +2537,7 @@ amiga_write_section_contents (
 	return false;
     }
   /* LTO sections are compiler metadata, not loadable program data.  */
-  if (0 == strncmp (section->name, ".debug_", 7)
+  if (amiga_is_dwarf_section_name (section->name)
       || 0 == strcmp (section->name, ".dwarf2")
       || amiga_is_lto_section_name (section->name))
     section->flags = ((section->flags
@@ -2573,7 +2573,7 @@ amiga_write_section_contents (
     amiga_per_section(section)->disk_size = section->rawsize;
 
   /* SBF: prepend the unpadded section size: add 4 bytes */
-  if (n[0] == HUNK_DEBUG && 0 == strncmp(".debug", section->name, 6))
+  if (n[0] == HUNK_DEBUG && amiga_is_dwarf_section_name (section->name))
 	  amiga_per_section(section)->disk_size += 4;
 
   if (!AMIGA_DATA(abfd)->IsLoadFile
@@ -2722,7 +2722,7 @@ amiga_write_section_contents (
 	}
 
 	  /* SBF: prepend the unpadded section size: write length */
-	  if (n[0] == HUNK_DEBUG && 0 == strncmp(".debug", section->name, 6))
+	  if (n[0] == HUNK_DEBUG && amiga_is_dwarf_section_name (section->name))
 	    {
 		  if (!write_bfd_size_long (section->size, abfd))
 			  return false;

@@ -91,6 +91,18 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 /* EHF extensions */
 #define EXT_RELREF26		229
 
+/* DWARF input sections: the plain .debug_* ones plus the per-type-unit
+   COMDAT sections gcc -fdebug-types-section emits, which the linker
+   script folds into .debug_info.  ELF keys these off the name too.  */
+
+static inline bool
+amiga_is_dwarf_section_name (const char *name)
+{
+  return (name != NULL
+	  && (strncmp (name, ".debug_", 7) == 0
+	      || strncmp (name, ".gnu.linkonce.wi.", 17) == 0));
+}
+
 /* HOWTO types almost matching aoutx.h/howto_table_std.  */
 
 enum {

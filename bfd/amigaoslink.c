@@ -151,21 +151,6 @@ static unsigned r_datadata_count;
 static unsigned r_datadata_max;
 static int datadata_addend;
 
-static bool
-amiga_is_dwarf_section (asection *sec)
-{
-  const char *name = sec->name;
-  if (!name)
-    return false;
-
-  /* Classic DWARF2 sections. Extend if you add more. */
-  if (strncmp (name, ".debug_", 7) == 0)
-    return true;
-
-  /* You can add .eh_frame or others here if needed. */
-  return false;
-}
-
 static void
 insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bfd_link_order *link_order,
 		   bfd_byte **datap)
@@ -910,7 +895,7 @@ amiga_perform_reloc (
   /* For DWARF sections we always want fully linked, absolute-style
      addresses relative to the final layout, not runtime relocation
      tables. */
-  if (amiga_is_dwarf_section (sec))
+  if (amiga_is_dwarf_section_name (sec->name))
     hard_reloc = true;
 
   DPRINT(5,("Entering APR\nflavour is %d (amiga_flavour=%d, aout_flavour=%d)\n",
@@ -970,7 +955,7 @@ AbsReloc:
 	{
 	  if (0 == strcmp(sec->name, ".stab")
 	      || 0 == strcmp(sec->name, ".stabstr")
-	      || amiga_is_dwarf_section (sec))
+	      || amiga_is_dwarf_section_name (sec->name))
 	    {
 	      relocation=sym->value + target_section->output_offset;
 //		  printf("stab: %s %s %d+%d=%d\n", sym->section->name, sym->name, sym->value, target_section->output_offset, relocation);
