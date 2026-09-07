@@ -1391,15 +1391,19 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 		      - (S_GET_VALUE (fixp->fx_addsy)
 			 + S_GET_SEGMENT (fixp->fx_addsy)->vma);
     }
-  else if (OUTPUT_FLAVOR == bfd_target_amiga_flavour
-      && fixp->fx_addsy
-      && S_IS_WEAK (fixp->fx_addsy)
-      && ! bfd_is_und_section (S_GET_SEGMENT (fixp->fx_addsy)))
+  else if (OUTPUT_FLAVOR == bfd_target_amiga_flavour)
     {
-      // similar fix for amigavec
-      reloc->addend = fixp->fx_addnumber - S_GET_VALUE (fixp->fx_addsy);
-      if (fixp->fx_pcrel)
-	reloc->addend += reloc->address;
+      /* md_apply_fix already stored the offset in the field, and the
+	 hunk writer adds the symbol value when it folds the reloc into
+	 the symbol's section.  A weak symbol is kept in the fixup, and
+	 its value is already in the field, so cancel the writer's copy.
+	 The PC bias is left to the linker for every deferred reloc.  */
+      if (fixp->fx_addsy
+	  && S_IS_WEAK (fixp->fx_addsy)
+	  && ! bfd_is_und_section (S_GET_SEGMENT (fixp->fx_addsy)))
+	reloc->addend = - S_GET_VALUE (fixp->fx_addsy);
+      else
+	reloc->addend = 0;
     }
   else if (fixp->fx_pcrel)
     reloc->addend = fixp->fx_addnumber;
@@ -8119,19 +8123,14 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
   if (stdoutput->xvec == &amiga_vec)
     {
       /*
-       * RELRELOC32 is resolved by the Amiga linker.
-       *
-       * The generic GAS code starts with:
-       *
-       *     add_number = fixP->fx_offset;
-       *
-       * and subsequently does:
-       *
-       *     add_number -= MD_PCREL_FROM_SECTION(...);
-       *
-       * For a deferred Amiga PC-relative relocation, cancel the
-       * symbol/section offset in fx_offset so that the object file
-       * contains a zero relocation addend.
+       * A PC-relative relocation against another section or an
+       * undefined symbol is deferred to the Amiga linker, which
+       * subtracts the address of the relocated field itself.  The
+       * field must then hold the target offset within its hunk: the
+       * explicit addend plus, when GAS has already replaced the symbol
+       * by its section, the offset of the symbol in that section.
+       * Both are in fx_offset, which the generic code starts from
+       * before subtracting MD_PCREL_FROM_SECTION, so subtract nothing.
        */
       if (fixP->fx_addsy)
 	{
@@ -8143,7 +8142,7 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
 	     is applied by GAS itself and needs the normal PC base.  */
 	  if (sym->section != current_section
 	      && strcmp (sym->section->name, current_section->name))
-	    return fixP->fx_offset;
+	    return 0;
 
 	  return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
 	}
