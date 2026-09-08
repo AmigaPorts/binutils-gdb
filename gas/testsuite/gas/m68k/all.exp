@@ -40,6 +40,10 @@ if { [istarget m68*-*-*] || [istarget fido*-*-*] } then {
 
     run_dump_test pcrel
 
+    if [istarget m68k-*-amigaos*] then {
+	run_dump_test amiga-pcrel
+    }
+
     # Since fido is basically CPU32, it does not support those
     # instructions beyond CPU32.  Disable those tests that test them.
     if ![istarget fido-*-*] then {
