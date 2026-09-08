@@ -8136,12 +8136,14 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
 	{
 	  asymbol *sym = symbol_get_bfdsym (fixP->fx_addsy);
 
-	  /* Only relocations against other sections or undefined
-	     symbols are deferred.  A fixup against a symbol in the
-	     current section (e.g. a relaxed branch to a local label)
-	     is applied by GAS itself and needs the normal PC base.  */
-	  if (sym->section != current_section
-	      && strcmp (sym->section->name, current_section->name))
+	  /* Only relocations against other sections, undefined symbols
+	     and symbols GAS must keep in the reloc (weak ones) are
+	     deferred.  A fixup against an ordinary symbol in the current
+	     section (e.g. a relaxed branch to a local label) is applied by
+	     GAS itself and needs the normal PC base.  */
+	  if ((sym->section != current_section
+	       && strcmp (sym->section->name, current_section->name))
+	      || S_FORCE_RELOC (fixP->fx_addsy, 1))
 	    return 0;
 
 	  return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
