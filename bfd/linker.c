@@ -1092,8 +1092,16 @@ generic_link_check_archive_element (bfd *abfd,
   *pneeded = false;
 
 #if BFD_SUPPORTS_PLUGINS
+  /* Use the IR symbol table if the plugin has claimed the element,
+     also when an earlier pass over this archive probed it without
+     needing it (bfd_plugin_yes_unused): the element's own symbol
+     table of a slim LTO object only carries the marker and the
+     undefined references, so a later pass would never see the
+     definition it is now looking for.  Same selection as
+     elf_link_add_archive_symbols.  */
   if (info->lto_plugin_active
       && (abfd->plugin_format == bfd_plugin_yes
+	  || abfd->plugin_format == bfd_plugin_yes_unused
 	  || (abfd->plugin_format == bfd_plugin_unknown
 	      && bfd_link_plugin_object_p (abfd))))
     sym_bfd = abfd->plugin_dummy_bfd;
