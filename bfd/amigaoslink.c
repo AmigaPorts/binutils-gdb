@@ -889,7 +889,7 @@ amiga_perform_reloc (
      void * data,
      sec_ptr sec,
      bfd *obfd,
-     char **error_message ATTRIBUTE_UNUSED)
+     char **error_message)
 {
   asymbol *sym; /* Reloc is relative to sym */
   sec_ptr target_section; /* reloc is relative to this section */
@@ -933,6 +933,29 @@ amiga_perform_reloc (
     {
       DPRINT(10,("amiga_perf_reloc: target_sec==UND\n"));
       return bfd_reloc_undefined;
+    }
+
+  /* A symbol still defined in an LTO plugin placeholder after the
+     compiled objects were added: the plugin reported it as IR-only
+     (nothing outside the IR referenced it at that point) and gcc made it
+     local, but a non-LTO object pulled in later, typically a library
+     member satisfying a call the compiler synthesized, references it.
+     The placeholder section is empty and lands at offset 0 of the text
+     hunk, so emitting the reloc would silently point the reference at
+     the first instruction of the program.  */
+  if (target_section->owner != NULL
+      && (target_section->owner->flags & BFD_PLUGIN) != 0)
+    {
+      /* The caller prints the message right away, so one static buffer
+	 is enough; a very long symbol name just gets truncated.  */
+      static char msg[512];
+      const char *name = bfd_asymbol_name (sym);
+      snprintf (msg, sizeof (msg),
+		_("`%s' is defined in LTO IR but was made local by the "
+		  "compiler, and a non-LTO object references it "
+		  "(try -Wl,-u,%s)"), name, name);
+      *error_message = msg;
+      return bfd_reloc_dangerous;
     }
 
   relocation=0; flags=RELOC_SIGNED; copy=false; ret=bfd_reloc_ok;
