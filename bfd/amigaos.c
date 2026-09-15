@@ -4919,6 +4919,77 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 #define amiga_read_minisymbols		_bfd_generic_read_minisymbols
 #define amiga_minisymbol_to_symbol	_bfd_generic_minisymbol_to_symbol
 
+/* Mark the undefined symbols of an archive's non-LTO members as regular
+   references before the LTO plugin resolution.
+
+   ld reports a symbol defined in IR as IR-only when nothing outside the
+   IR references it yet, and gcc then makes it local.  But the compiled
+   LTO output adds calls that were not in the IR symbol table (memcpy for
+   a struct copy, snprintf from folding), and the libnix members those
+   pull in later reference user-defined variables such as _SysBase.
+
+   ELF never sees this because glibc references no user symbols; libnix
+   does, so the fix lives in this backend.
+
+   Slim LTO members are skipped, their references come from IR.  */
+
+static bool
+amiga_member_is_slim_lto (asymbol **syms, long count)
+{
+  long i;
+  for (i = 0; i < count; i++)
+    if (syms[i]->name != NULL
+	&& strcmp (syms[i]->name, "___gnu_lto_slim") == 0)
+      return true;
+  return false;
+}
+
+static void
+amiga_mark_archive_refs (bfd *archive, struct bfd_link_info *info)
+{
+  bfd *member = NULL;
+
+  while ((member = bfd_openr_next_archived_file (archive, member)) != NULL)
+    {
+      long storage, count, i;
+      asymbol **syms;
+
+      if (!bfd_check_format (member, bfd_object))
+	continue;
+      storage = bfd_get_symtab_upper_bound (member);
+      if (storage <= 0)
+	continue;
+      syms = (asymbol **) bfd_malloc (storage);
+      if (syms == NULL)
+	continue;
+      count = bfd_canonicalize_symtab (member, syms);
+      if (count > 0 && !amiga_member_is_slim_lto (syms, count))
+	for (i = 0; i < count; i++)
+	  if (bfd_is_und_section (syms[i]->section) && syms[i]->name != NULL)
+	    {
+	      /* Existing entries only: a fresh one would make the generic
+		 archive scan take its "already defined" shortcut and
+		 never load the defining member.  */
+	      struct bfd_link_hash_entry *h
+		= bfd_link_hash_lookup (info->hash, syms[i]->name,
+					false, false, true);
+	      if (h != NULL)
+		h->non_ir_ref_regular = true;
+	    }
+      free (syms);
+    }
+}
+
+static bool
+amiga_link_add_symbols (bfd *abfd, struct bfd_link_info *info)
+{
+  if (bfd_get_format (abfd) == bfd_archive
+      && info->lto_plugin_active
+      && !info->lto_all_symbols_read)
+    amiga_mark_archive_refs (abfd, info);
+  return _bfd_generic_link_add_symbols (abfd, info);
+}
+
 /* Entry points through BFD_JUMP_TABLE_LINK
    NOTE: We use a special get_relocated_section_contents both in amiga AND in a.out files.
    In addition, we use an own final_link routine, which is nearly identical to _bfd_generic_final_link */
@@ -4929,7 +5000,7 @@ get_relocated_section_contents PARAMS ((bfd *, struct bfd_link_info *,
 #define amiga_bfd_relax_section		bfd_generic_relax_section
 #define amiga_bfd_link_hash_table_create _bfd_generic_link_hash_table_create
 #define amiga_bfd_link_hash_table_free	_bfd_generic_link_hash_table_free
-#define amiga_bfd_link_add_symbols	_bfd_generic_link_add_symbols
+#define amiga_bfd_link_add_symbols	amiga_link_add_symbols
 #define amiga_bfd_link_just_syms	_bfd_generic_link_just_syms
 bool amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 #define amiga_bfd_final_link		amiga_final_link
