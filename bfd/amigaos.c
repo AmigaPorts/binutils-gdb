@@ -149,13 +149,6 @@ extern void * alloca PARAMS ((size_t));
 #define DEFAULT_BUFFERSIZE 8192
 
 
-extern void amiga_set_link_info(struct bfd_link_info * link_info);
-static struct bfd_link_info * plink_info;
-void amiga_set_link_info(struct bfd_link_info * link_info)
-{
-  plink_info = link_info;
-}
-
 #define bfd_is_special_section(sec) \
   (bfd_is_abs_section(sec)||bfd_is_com_section(sec)||bfd_is_und_section(sec)||bfd_is_ind_section(sec))
 
@@ -1543,6 +1536,15 @@ amiga_handle_rest (
 	case HUNK_EXT:
 	  /* We leave these alone, until they are requested by the user */
 	  asect->hunk_ext_pos = bfd_tell (abfd);
+	  /* A section whose symbols are all weak definitions is gcc's
+	     one-only (COMDAT) output.  Flag it now, at object read time:
+	     ld's section_already_linked pass runs when an input is added
+	     to the link, before its symbol table is read, and keeps the
+	     first copy it sees.  Early LTO debug sections carry a weak
+	     compilation-unit marker but distinct contents, so they are
+	     left alone.  */
+	  bool one_only = true;
+	  unsigned long nsyms = 0;
 	  for (;;)
 	    {
 	      aname_list_type * nlt;
@@ -1554,6 +1556,9 @@ amiga_handle_rest (
 	      /* symbol type and length */
 	      type = (no>>24) & 0xff;
 	      len = no & 0xffffff;
+	      nsyms++;
+	      if (type >= 200 || (type & 0x40) == 0)
+		one_only = false;	/* not weak */
 
 	      /* read symbol name */
 	      nlt = (aname_list_type *)bfd_zalloc(abfd, sizeof(aname_list_type) + (len << 2) + 1);
@@ -1600,6 +1605,10 @@ amiga_handle_rest (
 		case EXT_ABSREF16:
 		case EXT_ABSREF8:
 		case EXT_RELREF26:
+		  if (type != EXT_ABSCOMMON && type != EXT_RELCOMMON
+		      && type != EXT_DEXT32COMMON && type != EXT_DEXT16COMMON
+		      && type != EXT_DEXT8COMMON)
+		    one_only = false;	/* a reference, not a definition */
 		  if (!get_long (abfd, &no))
 		    return false;
 		  if (no)
@@ -1618,6 +1627,9 @@ amiga_handle_rest (
 		  break;
 		}/* of switch type */
 	    }
+	  if (nsyms && one_only
+	      && (current_section->flags & SEC_DEBUGGING) == 0)
+	    current_section->flags |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_SAME_CONTENTS;
 	  break;
 
 	case HUNK_DEBUG:
@@ -3611,7 +3623,6 @@ amiga_slurp_symbol_table (bfd *abfd)
 	}
       {
 	unsigned i = 0;
-	bool all_weak = true;
 	for (i = 0; i < asect->amiga_symbol_count; ++i)
 	  {
 	    if (asect->amiga_symbols[i].symbol.value == 0)
@@ -3619,21 +3630,9 @@ amiga_slurp_symbol_table (bfd *abfd)
 	      section->symbol->name = asect->amiga_symbols[i].symbol.name;
 	      section->symbol->flags |= BSF_GLOBAL;
 	    }
-	    if (0 == (asect->amiga_symbols[i].symbol.flags & BSF_WEAK))
-	      all_weak = false;
 	  }
 	if (i == asect->amiga_symbol_count)
 	  section->symbol->name = section->name;
-	/* Early LTO debug sections contain a weak compilation-unit marker,
-	   but each section still has distinct contents that must be kept.  */
-	if (plink_info && i && all_weak && (section->flags & SEC_DEBUGGING) == 0)
-	  {
-	    /* SBF: mark the section optional */
-	    section->flags |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD | SEC_LINK_DUPLICATES_SAME_CONTENTS;
-	    /* SBF: but clear the flags for the first found section .*/
-	    if (!bfd_section_already_linked (abfd, section, plink_info))
-	      section->flags &= ~(SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD | SEC_LINK_DUPLICATES_SAME_CONTENTS);
-	  }
       }
     }
 
