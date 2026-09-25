@@ -23,3 +23,4 @@ if { ![istarget m68k-*-amigaos*] } {
 }
 
 run_dump_test "pcrel"
+run_dump_test "debughunk"

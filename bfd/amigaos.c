@@ -591,6 +591,21 @@ amiga_skip_loadfile_section (const char *name)
 	      || amiga_is_lto_section_name (name)));
 }
 
+/* True for a section that write_section_contents emits as HUNK_DEBUG
+   rather than as a code, data or bss hunk.  LoadSeg skips such hunks, so
+   they must not be counted in the HUNK_HEADER table.  Besides the merged
+   .dwarf2 and stab sections this covers whatever a linker script routes
+   into an output section of its own without allocating it, such as a
+   ".dwarf" section collecting the .debug_* input sections.  */
+
+static bool
+amiga_is_loadfile_debug_section (const asection *p)
+{
+  return (amiga_skip_loadfile_section (p->name)
+	  || amiga_is_dwarf_section_name (p->name)
+	  || (p->flags & (SEC_CODE | SEC_DATA | SEC_LOAD | SEC_ALLOC)) == 0);
+}
+
 #if DEBUG_AMIGA
 #define DPRINTHUNK(x) fprintf(stderr,"Processing %s hunk (0x%x)...",\
 	(x) == HUNK_UNIT ? "HUNK_UNIT" :\
@@ -1790,6 +1805,19 @@ remove_section_index (
     (index_map[i++])--;
 }
 
+/* Adjust the indices map for a section written as HUNK_DEBUG: it stays in
+   the output, but LoadSeg does not number it, so every later hunk moves
+   up by one for relocations.  */
+static void
+skip_section_index (
+     sec_ptr sec,
+     int *index_map)
+{
+  int i=sec->index+1;
+  for (sec=sec->next; sec; sec=sec->next)
+    (index_map[i++])--;
+}
+
 static char const * debug_names[] =
 {
   ".debug_frame",
@@ -2115,8 +2143,11 @@ amiga_write_object_contents (
 		remove_section_index (p, index_map);
 	      /* Debug sections are written as HUNK_DEBUG, which LoadSeg
 		 skips: keep their index so they are still written, but
-		 do not count them in the header.  */
-	      else if (!amiga_skip_loadfile_section (p->name))
+		 do not count them in the header and renumber what
+		 follows.  */
+	      else if (amiga_is_loadfile_debug_section (p))
+		skip_section_index (p, index_map);
+	      else
 		n[2]++;
 	    }
 	else
@@ -2154,7 +2185,7 @@ amiga_write_object_contents (
 	  if (index_map[p->index] < 0)
 	    continue;
 
-	  if (amiga_skip_loadfile_section (p->name))
+	  if (amiga_is_loadfile_debug_section (p))
 	    continue;
 
 	  if (datadata_relocs && !strcmp(p->name,".text"))
