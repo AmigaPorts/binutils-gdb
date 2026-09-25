@@ -193,9 +193,6 @@ struct objdump_disasm_info
   disassembler_ftype disassemble_fn;
   arelent *reloc;
   struct symbol_entry *symbol_list;
-  unsigned char *    buffer; // vma + *pp - buffer determines relppp usage
-  unsigned char **   pp; // current position in buffer
-
 };
 
 /* Architecture to disassemble for, or default if NULL.  */
