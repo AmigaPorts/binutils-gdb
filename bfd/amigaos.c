@@ -1555,7 +1555,11 @@ amiga_handle_rest (
 	     one-only (COMDAT) output.  Flag it now, at object read time:
 	     ld's section_already_linked pass runs when an input is added
 	     to the link, before its symbol table is read, and keeps the
-	     first copy it sees.  Early LTO debug sections carry a weak
+	     first copy it sees.  Later copies are discarded without a size
+	     or contents check, as ELF does for COMDAT groups: the same
+	     inline function compiled at -O0 in the user's object and at
+	     -O2 in libstdc++ differs in size, and a warning about that on
+	     every link is noise.  Early LTO debug sections carry a weak
 	     compilation-unit marker but distinct contents, so they are
 	     left alone.  */
 	  bool one_only = true;
@@ -1644,7 +1648,7 @@ amiga_handle_rest (
 	    }
 	  if (nsyms && one_only
 	      && (current_section->flags & SEC_DEBUGGING) == 0)
-	    current_section->flags |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_SAME_CONTENTS;
+	    current_section->flags |= SEC_LINK_ONCE | SEC_LINK_DUPLICATES_DISCARD;
 	  break;
 
 	case HUNK_DEBUG:
