@@ -896,7 +896,18 @@ amiga_perform_reloc (
   bfd_reloc_status_type ret;
   bool copy;
   int flags;
-  bool hard_reloc = AMIGA_DATA(sec->output_section->owner)->vma_reloc;
+  bool hard_reloc;
+
+  /* Everything below reads amiga private data from the output bfd, so a
+     hunk object cannot go into an output of another format, as with
+     ld --oformat=elf32-m68k.  */
+  if (bfd_get_flavour (sec->output_section->owner) != bfd_target_amiga_flavour)
+    {
+      *error_message = (char *) _("amigaos object linked into an output "
+				  "of a different format");
+      return bfd_reloc_dangerous;
+    }
+  hard_reloc = AMIGA_DATA(sec->output_section->owner)->vma_reloc;
 
   /* For DWARF sections we always want fully linked, absolute-style
      addresses relative to the final layout, not runtime relocation
