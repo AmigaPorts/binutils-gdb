@@ -869,6 +869,40 @@ amiga_update_target_section (
     }
 }
 
+/* A base-relative reloc is resolved as an offset from the start of the
+   data hunk, so its target has to be in that hunk.  Call this after
+   amiga_update_target_section() has folded .bss into .data.  Anything
+   else, text or a read-only section the script placed in text, would get
+   a displacement that is wrong but small enough to fit, and the program
+   would read the wrong address with no diagnostic.  */
+static bool
+amiga_baserel_target_ok (sec_ptr target_section, asymbol *sym,
+			 char **error_message)
+{
+  asection *out = target_section->output_section;
+
+  if (out != NULL && strcmp (out->name, ".data") == 0)
+    return true;
+
+  /* The caller prints the message right away, so one static buffer
+     is enough; a very long symbol name just gets truncated.  */
+  static char msg[512];
+  const char *name = bfd_asymbol_name (sym);
+  if (strcmp (name, target_section->name) == 0)
+    /* gas reduced the reloc to the section symbol.  */
+    snprintf (msg, sizeof (msg),
+	      _("base-relative reference into section %s, which is not "
+		"in the data hunk (read-only object or custom section?)"),
+	      target_section->name);
+  else
+    snprintf (msg, sizeof (msg),
+	      _("base-relative reference to `%s' in section %s, which is "
+		"not in the data hunk (read-only object or custom section?)"),
+	      name, target_section->name);
+  *error_message = msg;
+  return false;
+}
+
 static bool
 is_dwarf_reloc (arelent *r, asection *sec)
 {
@@ -1069,15 +1103,11 @@ AbsReloc:
 		   "section %s, reloc to symbol %s",sec->name,sym->name);
 	  ret=bfd_reloc_notsupported;
 	}
-      else if ((target_section->flags&SEC_CODE)!=0)
-        {
-	  bfd_msg ("%s: baserelative text relocation to \"%s\"",
-		    abfd->filename, sym->name);
-	  ret=bfd_reloc_notsupported;
-        }
       else
 	{
 	  amiga_update_target_section (target_section);
+	  if (!amiga_baserel_target_ok (target_section, sym, error_message))
+	    return bfd_reloc_dangerous;
 	  relocation = sym->value + target_section->output_offset + r->addend;
 
 	  DPRINT(20,("symbol=%s (0x%lx)\nsection %s (0x%lx; %s; output=0x%lx)"
@@ -1258,15 +1288,11 @@ aout_perform_reloc (
 		   "section %s, reloc to symbol %s",sec->name,sym->name);
 	  ret=bfd_reloc_notsupported;
 	}
-      else if ((target_section->flags&SEC_CODE)!=0)
-        {
-	  bfd_msg ("%s: baserelative text relocation to \"%s\"",
-		    abfd->filename, sym->name);
-	  ret=bfd_reloc_notsupported;
-        }
       else /* Target section and sec need not be the same.. */
 	{
 	  amiga_update_target_section (target_section);
+	  if (!amiga_baserel_target_ok (target_section, sym, error_message))
+	    return bfd_reloc_dangerous;
 	  relocation = sym->value + target_section->output_offset;
 	  /* if the symbol is in .bss, subtract the offset that gas has put
 	     into the opcode */
