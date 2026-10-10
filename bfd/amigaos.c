@@ -152,6 +152,17 @@ extern void * alloca PARAMS ((size_t));
 #define bfd_is_special_section(sec) \
   (bfd_is_abs_section(sec)||bfd_is_com_section(sec)||bfd_is_und_section(sec)||bfd_is_ind_section(sec))
 
+/* A reloc the linker resolves by symbol name, through HUNK_EXT rather than
+   HUNK_RELOC: one against an undefined, common or absolute symbol, or, in a
+   unit, against a weak definition that a strong one in another unit may
+   override.  A section defining only weak symbols is a one-only copy (see
+   the HUNK_EXT reader) whose duplicates are all weak, so relocs against it
+   stay in HUNK_RELOC and do not cost the referencing section that status.  */
+#define amiga_reloc_is_ext(abfd, sym) \
+  (bfd_is_special_section ((sym)->section) \
+   || (!AMIGA_DATA (abfd)->IsLoadFile && ((sym)->flags & BSF_WEAK) != 0 \
+       && amiga_per_section ((sym)->section->output_section)->strong_def))
+
 typedef struct aout_symbol {
   asymbol symbol;
   short desc;
@@ -1773,7 +1784,7 @@ write_bfd_size_word (bfd_size_type in, bfd *abfd)
 
 static long
 determine_datadata_relocs (
-     bfd *abfd ATTRIBUTE_UNUSED,
+     bfd *abfd,
      sec_ptr section)
 {
   sec_ptr insection;
@@ -1790,7 +1801,7 @@ determine_datadata_relocs (
       insection=sym_p->section;
 
       /* Is reloc relative to a special section? */
-      if (bfd_is_special_section(insection))
+      if (amiga_reloc_is_ext (abfd, sym_p))
 	continue; /* Nothing to do, since this translates to HUNK_EXT */
       if (insection->output_section == section)
 	relocs++;
@@ -2254,6 +2265,17 @@ amiga_write_object_contents (
 	  break;
         }
 
+      /* Note the sections with a strong global definition, for
+	 amiga_reloc_is_ext.  */
+      for (i = 0; i < bfd_get_symcount(abfd); i++)
+	{
+	  asymbol *sym_p = abfd->outsymbols[i];
+	  if ((sym_p->flags & BSF_GLOBAL) != 0 && (sym_p->flags & BSF_WEAK) == 0
+	      && !bfd_is_special_section (sym_p->section)
+	      && sym_p->section->output_section)
+	    amiga_per_section (sym_p->section->output_section)->strong_def = true;
+	}
+
       for (p = abfd->sections; p != NULL; p = p->next)
 	{
 	  if (p->rawsize == 0 && p->size == 0 && strcmp (".text", p->name))
@@ -2694,7 +2716,7 @@ amiga_write_section_contents (
       DPRINT(5,("Sec for reloc is %lx(%s)\n",insection,insection->name));
       DPRINT(5,("Symbol for this reloc is %lx(%s)\n",sym_p,sym_p->name));
       /* Is reloc relative to a special section? */
-      if (bfd_is_special_section(insection))
+      if (amiga_reloc_is_ext (abfd, sym_p))
 	continue; /* Nothing to do, since this translates to HUNK_EXT */
 
       r->addend += sym_p->value; /* Add offset of symbol from section start */
@@ -2815,7 +2837,7 @@ amiga_write_section_contents (
 	  sym_p = *(r->sym_ptr_ptr); /* The symbol for this relocation */
 	  insection = sym_p->section;
 	  /* Is reloc relative to a special section? */
-	  if (bfd_is_special_section(insection))
+	  if (amiga_reloc_is_ext (abfd, sym_p))
 	    continue; /* Nothing to do, since this translates to HUNK_EXT */
 
 	  if (insection->output_section == data_sec)
@@ -2886,7 +2908,7 @@ amiga_write_section_contents (
 	    sym_p = *(r->sym_ptr_ptr); /* The symbol for this relocation */
 	    insection = sym_p->section;
 	    /* Is reloc relative to a special section? */
-	    if (bfd_is_special_section(insection))
+	    if (amiga_reloc_is_ext (abfd, sym_p))
 	      continue; /* Nothing to do, since this translates to HUNK_EXT */
 #if 0
 	    /* Determine which hunk to write, and index of target */

@@ -7,7 +7,7 @@
 #target: m68k-*-amigaos*
 
 # Two objects each define the one-only section .text.inl, with bodies of
-# different length.  The first copy is kept, the second is discarded, and
+# different length, each calling itself.  The first copy is kept, the second is discarded, and
 # ld says nothing about it: any output here fails the test.
 
 .*: +file format amiga
@@ -18,6 +18,5 @@
 [0-9a-f]+ <inl>:
  +[0-9a-f]+:	4e71           	nop
  +[0-9a-f]+:	4e71           	nop
- +[0-9a-f]+:	4e71           	nop
+ +[0-9a-f]+:	4eb9 [0-9a-f]{4} [0-9a-f]{4} 	jsr [0-9a-f]+ <inl>
  +[0-9a-f]+:	4e75           	rts
-#pass
