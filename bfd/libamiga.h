@@ -153,6 +153,7 @@ typedef struct amiga_per_section {
   raw_reloc_type *relocs;
   aname_list_type * sym_names;
   unsigned int gc_count;
+  bool strong_def; /* writer: a non-weak global symbol is defined here */
 } amiga_per_section_type;
 
 #define amiga_per_section(x) ((amiga_per_section_type *)((x)->used_by_bfd))
