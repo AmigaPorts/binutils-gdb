@@ -149,8 +149,12 @@ extern void * alloca PARAMS ((size_t));
 #define DEFAULT_BUFFERSIZE 8192
 
 
-#define bfd_is_special_section(sec) \
-  (bfd_is_abs_section(sec)||bfd_is_com_section(sec)||bfd_is_und_section(sec)||bfd_is_ind_section(sec))
+static inline bool
+bfd_is_special_section (const asection *sec)
+{
+  return (bfd_is_abs_section (sec) || bfd_is_com_section (sec)
+	  || bfd_is_und_section (sec) || bfd_is_ind_section (sec));
+}
 
 /* A reloc the linker resolves by symbol name, through HUNK_EXT rather than
    HUNK_RELOC: one against an undefined, common or absolute symbol, or, in a
@@ -158,10 +162,13 @@ extern void * alloca PARAMS ((size_t));
    override.  A section defining only weak symbols is a one-only copy (see
    the HUNK_EXT reader) whose duplicates are all weak, so relocs against it
    stay in HUNK_RELOC and do not cost the referencing section that status.  */
-#define amiga_reloc_is_ext(abfd, sym) \
-  (bfd_is_special_section ((sym)->section) \
-   || (!AMIGA_DATA (abfd)->IsLoadFile && ((sym)->flags & BSF_WEAK) != 0 \
-       && amiga_per_section ((sym)->section->output_section)->strong_def))
+static inline bool
+amiga_reloc_is_ext (bfd *abfd, const asymbol *sym)
+{
+  return (bfd_is_special_section (sym->section)
+	  || (!AMIGA_DATA (abfd)->IsLoadFile && (sym->flags & BSF_WEAK) != 0
+	      && amiga_per_section (sym->section->output_section)->strong_def));
+}
 
 typedef struct aout_symbol {
   asymbol symbol;
