@@ -9,6 +9,8 @@
 #...
 [0-9a-f]+ <entry>:
  +[0-9a-f]+:\t60ff 0000 [0-9a-f]+ \tbral [0-9a-f]+ <cold_alias>
+ +[0-9a-f]+:\t60ff 0000 [0-9a-f]+ \tbral [0-9a-f]+ <cold_alias>
+ +[0-9a-f]+:\t6100 [0-9a-f]+ +\tbsrw [0-9a-f]+ <cold_alias>
 #...
 [0-9a-f]+ <cold_alias>:
  +[0-9a-f]+:\t4e75           \trts
