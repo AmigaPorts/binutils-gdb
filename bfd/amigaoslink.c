@@ -915,6 +915,27 @@ is_dwarf_reloc (arelent *r, asection *sec)
             strcmp(n, ".debug_str")     == 0);
 }
 
+/* An 8-bit pc-relative field in the low byte of a Bcc/BRA/BSR opcode
+   word is a short branch displacement, and 0 and -1 there select the
+   16- and 32-bit forms.  The reloc type cannot tell a branch from a
+   d8(pc,Xn) extension word or data, so check the opcode byte.  */
+static bfd_reloc_status_type
+check_byte_branch (arelent *r, void *data, char **error_message)
+{
+  bfd_byte *p = (bfd_byte *) data + r->address;
+  static char msg[64];
+
+  if (r->address == 0 || (r->address & 1) == 0
+      || (p[-1] & 0xf0) != 0x60
+      || (p[0] != 0x00 && p[0] != 0xff))
+    return bfd_reloc_ok;
+  snprintf (msg, sizeof (msg),
+	    _("byte branch displacement %d cannot be encoded"),
+	    p[0] == 0x00 ? 0 : -1);
+  *error_message = msg;
+  return bfd_reloc_dangerous;
+}
+
 /* Perform an Amiga relocation */
 static bfd_reloc_status_type
 amiga_perform_reloc (
@@ -1129,6 +1150,8 @@ AbsReloc:
   /* Add in relocation */
   if (relocation!=0)
     ret = my_add_to (r, data, relocation, flags);
+  if (ret == bfd_reloc_ok && r->howto->type == H_PC8 && !copy)
+    ret = check_byte_branch (r, data, error_message);
 
   if (copy) /* Copy reloc to output section */
     {
@@ -1150,7 +1173,7 @@ aout_perform_reloc (
      void * data,
      sec_ptr sec,
      bfd *obfd,
-     char **error_message ATTRIBUTE_UNUSED)
+     char **error_message)
 {
   asymbol *sym; /* Reloc is relative to sym */
   sec_ptr target_section; /* reloc is relative to this section */
@@ -1323,6 +1346,8 @@ aout_perform_reloc (
   /* Add in relocation */
   if (relocation!=0)
     ret = my_add_to (r, data, relocation, flags);
+  if (ret == bfd_reloc_ok && r->howto->type == H_PC8 && !copy)
+    ret = check_byte_branch (r, data, error_message);
 
   if (copy) /* Copy reloc to output section */
     {
