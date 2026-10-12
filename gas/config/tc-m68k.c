@@ -8141,8 +8141,10 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
 	     deferred.  A fixup against an ordinary symbol in the current
 	     section (e.g. a relaxed branch to a local label) is applied by
 	     GAS itself and needs the normal PC base.  */
-	  if ((sym->section != current_section
-	       && strcmp (sym->section->name, current_section->name))
+	  /* Distinct hunk sections may have the same name: the backend maps
+	     .text.unlikely to .text, for example.  Their placement is still
+	     left to the linker, so compare section identity, not names.  */
+	  if (sym->section != current_section
 	      || S_FORCE_RELOC (fixP->fx_addsy, 1))
 	    return 0;
 
