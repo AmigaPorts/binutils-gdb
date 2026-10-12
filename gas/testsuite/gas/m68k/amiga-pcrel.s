@@ -1,6 +1,7 @@
 | PC-relative references deferred to the Amiga hunk linker must keep the
-| target's offset within its section in the reloc field, for strong and
-| weak targets, explicit addends and undefined symbols alike.
+| target's offset within its section plus any addend in the reloc field.
+| References to undefined symbols, and to weak symbols whose section also
+| has a strong definition, are resolved by name and keep only the addend.
 	.text
 	.space	0x100, 0x4e
 	.globl	far
