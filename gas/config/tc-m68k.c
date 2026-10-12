@@ -8130,7 +8130,9 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
        * explicit addend plus, when GAS has already replaced the symbol
        * by its section, the offset of the symbol in that section.
        * Both are in fx_offset, which the generic code starts from
-       * before subtracting MD_PCREL_FROM_SECTION, so subtract nothing.
+       * before subtracting MD_PCREL_FROM_SECTION, so subtract only the
+       * distance from the field to the PC: 1 for an 8-bit displacement
+       * in the opcode word, 0 for a 16- or 32-bit one.
        */
       if (fixP->fx_addsy)
 	{
@@ -8146,7 +8148,7 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
 	     left to the linker, so compare section identity, not names.  */
 	  if (sym->section != current_section
 	      || S_FORCE_RELOC (fixP->fx_addsy, 1))
-	    return 0;
+	    return -adjust;
 
 	  return fixP->fx_where + fixP->fx_frag->fr_address - adjust;
 	}
