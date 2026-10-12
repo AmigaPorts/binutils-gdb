@@ -5152,11 +5152,13 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg ATTRIBUTE_UNUSED)
      a short branch with a value of 0 or -1, because those indicate
      different opcodes (branches with longer offsets).  fixup_segment
      in write.c may have clobbered fx_pcrel, so we need to examine the
-     reloc type.  */
+     reloc type.  A fixup left for the linker holds only a partial
+     value here, so the final displacement is not known yet.  */
   if ((fixP->fx_pcrel
        || fixP->fx_r_type == BFD_RELOC_8_PCREL
        || fixP->fx_r_type == BFD_RELOC_NONE)
       && fixP->fx_size == 1
+      && fixP->fx_done
       && (fixP->fx_addsy == NULL
 	  || S_IS_DEFINED (fixP->fx_addsy))
       && (val == 0 || val == -1))
