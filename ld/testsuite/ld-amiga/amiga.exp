@@ -25,6 +25,7 @@ if { ![istarget m68k-*-amigaos*] } {
 run_dump_test "pcrel"
 run_dump_test "pcrel-local"
 run_dump_test "pcrel-same-name"
+run_dump_test "pcrel-local-branch"
 run_dump_test "debughunk"
 run_dump_test "elfout"
 run_dump_test "oneonly"
