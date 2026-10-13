@@ -8133,8 +8133,9 @@ md_pcrel_from_m68k (fixS *fixP, segT current_section)
        * before subtracting MD_PCREL_FROM_SECTION, so return only the
        * PC base relative to the field, -adjust: +1 for the 8-bit
        * displacement of a branch, -1 for the d8 of a brief extension
-       * word, -2 for the base displacement of a full extension word
-       * (bd(pc,Xn), (bd,pc)), 0 for a 16- or 32-bit branch or d16(pc).
+       * word (d8,pc,Xn), -2 for the base displacement of a full extension
+       * word ((bd.w,pc,Xn), (bd.l,pc,Xn), (bd.l,pc)), 0 for a 16- or 32-bit
+       * branch or (d16,pc).
        */
       if (fixP->fx_addsy)
 	{
