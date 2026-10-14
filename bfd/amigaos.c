@@ -459,7 +459,8 @@ amiga_object_p (bfd * abfd)
       return NULL;
     }
 
-  bfd_seek (abfd, 0, SEEK_SET);
+  if (bfd_seek (abfd, 0, SEEK_SET) != 0)
+    return NULL;
 
   /* Does it look like an Amiga object file?  */
   x = GL (&buf[0]);
@@ -687,7 +688,8 @@ parse_archive_units (
       (*n_units)++;
 	  if (one && *n_units > 1)
 	    {
-	bfd_seek (abfd, -4, SEEK_CUR);
+	if (bfd_seek (abfd, -4, SEEK_CUR) != 0)
+	  return false;
 	return true;
       }
 	  stab_pos = stabstr_pos = 0;
@@ -793,7 +795,8 @@ parse_archive_units (
 		      DPRINT(20,("sym: %s\n", nsyms->name));
 		      ++defsymcount;
 		    }}
-		  bfd_seek (abfd, last_pos, SEEK_SET);
+		  if (bfd_seek (abfd, last_pos, SEEK_SET) != 0)
+		    return false;
 		  stab_pos = stabstr_pos = 0;
 		}
 	    }
@@ -1678,7 +1681,8 @@ amiga_handle_rest (
 	  break;
 
 	default: /* error */
-	  bfd_seek (abfd, -4, SEEK_CUR);
+	  if (bfd_seek (abfd, -4, SEEK_CUR) != 0)
+	    return false;
 	  bfd_msg ("HUNK_END missing: unexpected hunktype %ld(0x%lx) at offset 0x%lx", hunk_type, hunk_type,
 		   (long unsigned int)bfd_tell (abfd));
 	  switch (hunk_value)
@@ -4259,13 +4263,13 @@ amiga_load_stab_symbols (bfd *abfd)
 
       // executable - load the data now.
       stab = (unsigned char *)bfd_alloc(abfd, amiga_data->symtab_size);
-      bfd_seek(abfd, adata(abfd).sym_filepos, SEEK_SET);
-      if (bfd_read (stab, amiga_data->symtab_size, abfd) != amiga_data->symtab_size)
+      if (bfd_seek (abfd, adata(abfd).sym_filepos, SEEK_SET) != 0
+	  || bfd_read (stab, amiga_data->symtab_size, abfd) != amiga_data->symtab_size)
 	return 0;
 
       stabstr = (unsigned char *)bfd_alloc(abfd, amiga_data->stringtab_size);
-      bfd_seek(abfd, adata(abfd).str_filepos, SEEK_SET);
-      if (bfd_read (stabstr, amiga_data->stringtab_size, abfd) != amiga_data->stringtab_size)
+      if (bfd_seek (abfd, adata(abfd).str_filepos, SEEK_SET) != 0
+	  || bfd_read (stabstr, amiga_data->stringtab_size, abfd) != amiga_data->stringtab_size)
 	return 0;
     }
 
@@ -4509,7 +4513,8 @@ amiga_archive_p (
   if (abfd->arelt_data)
     arelt_size (abfd) = bfd_tell (abfd);
 
-  bfd_seek (abfd, 0, SEEK_SET);
+  if (bfd_seek (abfd, 0, SEEK_SET) != 0)
+    return NULL;
   abfd->arch_info = bfd_scan_arch ("m68k:68000");
 
   if (amiga_mkarchive (abfd))
