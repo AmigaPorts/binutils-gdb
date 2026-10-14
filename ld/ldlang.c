@@ -7432,6 +7432,10 @@ lang_check (void)
 	  && (compatible == NULL
 	      || (bfd_get_flavour (input_bfd)
 		  != bfd_get_flavour (link_info.output_bfd)))
+	  /* The amiga backend translates m68k ELF relocs itself.  */
+	  && !(bfd_get_flavour (link_info.output_bfd) == bfd_target_amiga_flavour
+	       && bfd_get_flavour (input_bfd) == bfd_target_elf_flavour
+	       && bfd_get_arch (input_bfd) == bfd_arch_m68k)
 	  && (bfd_get_file_flags (input_bfd) & HAS_RELOC) != 0)
 	{
 	  fatal (_("%P: relocatable linking with relocations from"
