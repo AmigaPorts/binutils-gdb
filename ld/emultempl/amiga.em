@@ -86,13 +86,12 @@ enum {
 };
 
 void
-amiga_add_options (ns, shortopts, nl, longopts, nrl, really_longopts)
-     int ns ATTRIBUTE_UNUSED;
-     char **shortopts ATTRIBUTE_UNUSED;
-     int nl;
-     struct option **longopts;
-     int nrl ATTRIBUTE_UNUSED;
-     struct option **really_longopts ATTRIBUTE_UNUSED;
+amiga_add_options (int ns ATTRIBUTE_UNUSED,
+		   char **shortopts ATTRIBUTE_UNUSED,
+		   int nl,
+		   struct option **longopts,
+		   int nrl ATTRIBUTE_UNUSED,
+		   struct option **really_longopts ATTRIBUTE_UNUSED)
 {
   static const struct option xtra_long[] = {
     {"flavor", required_argument, NULL, OPTION_FLAVOR},
@@ -112,8 +111,7 @@ amiga_add_options (ns, shortopts, nl, longopts, nrl, really_longopts)
 }
 
 bool
-amiga_handle_option (optc)
-     int optc;
+amiga_handle_option (int optc)
 {
   switch (optc)
     {
@@ -210,8 +208,7 @@ gld${EMULATION_NAME}_before_parse ()
 }
 
 static char *
-gld${EMULATION_NAME}_get_script (isfile)
-     int *isfile;
+gld${EMULATION_NAME}_get_script (int *isfile)
 EOF
 
 if test -n "$COMPILE_IN"
@@ -311,7 +308,9 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   NULL,					/* new_vers_pattern */
   NULL,	/* extra_map_file_text */
   NULL, /* emit_ctf_early */
-  NULL, /* examine_strtab_for_ctf */
-  NULL  /* print_symbol */
+  NULL, /* acquire_strings_for_ctf */
+  NULL, /* new_dynsym_for_ctf */
+  NULL, /* print_symbol */
+  NULL  /* find_alt_start_symbol */
 };
 EOF

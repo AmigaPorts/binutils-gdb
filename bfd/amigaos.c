@@ -128,7 +128,9 @@ BFD:
 #if DBG_ENABLED
 #define DBG(fmt, ...) fprintf(stderr, "[bfd-amigaos] " fmt "\n", ##__VA_ARGS__)
 #else
-#define DBG(fmt, ...)
+/* Still compiled, so the arguments stay type-checked and in use.  */
+#define DBG(fmt, ...) \
+  do { if (0) fprintf(stderr, "[bfd-amigaos] " fmt "\n", ##__VA_ARGS__); } while (0)
 #endif
 
 #define BYTES_IN_WORD 4
@@ -4501,7 +4503,7 @@ amiga_archive_p (
 	 so we don't have much of a choice */
       if (units == 1)
 	{
-	  char *p = strrchr (abfd->filename, '.');
+	  const char *p = strrchr (abfd->filename, '.');
 	  if (p == NULL || (strcmp (p, ".a") && strcmp (p, ".lib")))
 	    {
 	      bfd_set_error (bfd_error_wrong_format);
@@ -4843,7 +4845,7 @@ amiga_collect (struct bfd_hash_table *ht, asection *sec)
  * Mark all not kept as SEC_EXCLUDE
  */
 static bool
-amiga_purge (struct bfd_hash_table *ht, asection *sec, bool print)
+amiga_purge (asection *sec, bool print)
 {
   if (!sec->owner)
     {
@@ -4934,7 +4936,7 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
   // discard all not visited stuff
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
     for (sec = ibfd->sections; sec != NULL; sec = sec->next)
-      amiga_purge(&referenced, sec, info->print_gc_sections);
+      amiga_purge(sec, info->print_gc_sections);
 
 //  amiga_dedup_sections(info);
 

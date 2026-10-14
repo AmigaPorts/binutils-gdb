@@ -3116,8 +3116,6 @@ _bfd_generic_section_already_linked (bfd *abfd ATTRIBUTE_UNUSED,
   struct bfd_section_already_linked *l;
   struct bfd_section_already_linked_hash_entry *already_linked_list;
 
-  static bfd * last_abfd;
-
   if ((sec->flags & SEC_LINK_ONCE) == 0)
     return false;
 
