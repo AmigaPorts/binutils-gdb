@@ -4896,6 +4896,18 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
   struct bfd_hash_table referenced;
   unsigned i;
 
+  /* The collector reads the amiga (or a.out) private data of every input
+     section, which ELF sections do not have.  Supporting ELF input would
+     mean finding its references with bfd_canonicalize_reloc instead; until
+     then keep everything.  */
+  for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
+    if (bfd_get_flavour (ibfd) == bfd_target_elf_flavour)
+      {
+	_bfd_error_handler (_("%pB: --gc-sections is not supported with ELF "
+			      "input, keeping all sections"), ibfd);
+	return true;
+      }
+
   bfd_hash_table_init(&referenced, ref_section_hash_newfunc, 101);
 
   // mark all provided symbols as wanted.
