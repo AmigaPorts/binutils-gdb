@@ -2728,6 +2728,12 @@ bfd_get_relocated_section_contents (bfd *abfd,
   else
     abfd2 = abfd;
 
+  /* A hunk output relocates the ELF objects it links itself, so that their
+     absolute relocs reach the loader instead of being resolved.  */
+  if (bfd_get_flavour (abfd) == bfd_target_amiga_flavour
+      && bfd_get_flavour (abfd2) == bfd_target_elf_flavour)
+    abfd2 = abfd;
+
   fn = abfd2->xvec->_bfd_get_relocated_section_contents;
 
   return (*fn) (abfd, link_info, link_order, data, relocatable, symbols);
