@@ -35,18 +35,8 @@
 #define sprintf_vma(b,n) sprintf(b,"%d",(int)n)
 #endif
 
-#ifdef TARGET_AMIGA
-/* Support display of symbols in baserel offsets. */
-void print_m68k_disassembler_options (FILE * stream);
-static void
-parse_disassembler_options (const char *);
-#endif
-
-
 /* Local function prototypes.  */
 #ifdef MOTOROLA
-static int dump_baserel;
-
 const char * const fpcr_names[] =
 {
   "", "fpiar", "fpsr", "fpiar/fpsr", "fpcr",

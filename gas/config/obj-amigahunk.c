@@ -72,35 +72,6 @@ const pseudo_typeS obj_pseudo_table[] =
 
 #if 1 // BFD_ASSEMBLER
 
-extern segT data_chip_section, data_fast_section, data_far_section, bss_chip_section, bss_fast_section, bss_far_section;
-
-void s_data_amiga (int which)
-{
-  int temp = get_absolute_expression ();
-  switch (which) {
-    case 0:
-      subseg_set (data_chip_section, (subsegT) temp);
-      break;
-    case 1:
-      subseg_set (data_fast_section, (subsegT) temp);
-      break;
-    case 2:
-      subseg_set (data_far_section, (subsegT) temp);
-      break;
-    case 8:
-      subseg_set (bss_chip_section, (subsegT) temp);
-      break;
-    case 9:
-      subseg_set (bss_fast_section, (subsegT) temp);
-      break;
-    case 10:
-      subseg_set (bss_far_section, (subsegT) temp);
-      break;
-  }
-  demand_empty_rest_of_line ();
-}
-
-
 static void s_custom_section(char const * secname)
 {
   segT seg = subseg_new(secname, 0);
