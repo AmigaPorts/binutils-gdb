@@ -71,7 +71,7 @@ the original routines from @file{linker.c} and @file{reloc.c}.
 #include <time.h>
 
 #ifndef alloca
-extern void * alloca PARAMS ((size_t));
+extern void * alloca (size_t);
 #endif
 
 #define bfd_msg (*_bfd_error_handler)
@@ -106,32 +106,32 @@ BFDDECL int amiga_base_relative = 0;
 BFDDECL int amiga_resident = 0;
 
 bool
-default_indirect_link_order PARAMS ((bfd *, struct bfd_link_info *,
-	 asection *, struct bfd_link_order *, bool));
+default_indirect_link_order (bfd *, struct bfd_link_info *,
+	 asection *, struct bfd_link_order *, bool);
 bfd_byte *
-get_relocated_section_contents PARAMS ((bfd *, struct bfd_link_info *,
-	struct bfd_link_order *, bfd_byte *, bool, asymbol **));
+get_relocated_section_contents (bfd *, struct bfd_link_info *,
+	struct bfd_link_order *, bfd_byte *, bool, asymbol **);
 bool
-amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
+amiga_final_link (bfd *, struct bfd_link_info *);
 bool
-aout_amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
+aout_amiga_final_link (bfd *, struct bfd_link_info *);
 
-bool amiga_slurp_relocs PARAMS ((bfd *, sec_ptr, asymbol **));
+bool amiga_slurp_relocs (bfd *, sec_ptr, asymbol **);
 
-sec_ptr amiga_make_unique_section PARAMS ((bfd *, const char *));
+sec_ptr amiga_make_unique_section (bfd *, const char *);
 
 static bfd_reloc_status_type
-my_add_to PARAMS ((arelent *, void *, int, int));
-static void amiga_update_target_section PARAMS ((sec_ptr));
+my_add_to (arelent *, void *, int, int);
+static void amiga_update_target_section (sec_ptr);
 static bfd_reloc_status_type
-amiga_perform_reloc PARAMS ((bfd *, arelent *, void *, sec_ptr, bfd *, char **));
+amiga_perform_reloc (bfd *, arelent *, void *, sec_ptr, bfd *, char **);
 static bfd_reloc_status_type
-aout_perform_reloc PARAMS ((bfd *, arelent *, void *, sec_ptr, bfd *, char **));
+aout_perform_reloc (bfd *, arelent *, void *, sec_ptr, bfd *, char **);
 static bfd_reloc_status_type
 elf_perform_reloc (bfd *, arelent *, void *, sec_ptr, bfd *, char **);
 static bool
-amiga_reloc_link_order PARAMS ((bfd *, struct bfd_link_info *, asection *,
-	struct bfd_link_order *));
+amiga_reloc_link_order (bfd *, struct bfd_link_info *, asection *,
+	struct bfd_link_order *);
 
 enum { ADDEND_UNSIGNED=0x01, RELOC_SIGNED=0x02 };
 
