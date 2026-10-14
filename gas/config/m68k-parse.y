@@ -984,19 +984,22 @@ yylex (void)
       switch (s[-1])
 	{
 	case 'B':
-          yylval.exp.baserel = 1;
+	  yylval.exp.baserel = 1;
+	  /* Fall through.  */
 	case 's':
 	case 'S':
 	case 'b':
 	  yylval.exp.size = SIZE_BYTE;
 	  break;
 	case 'W':
-          yylval.exp.baserel = 1;
+	  yylval.exp.baserel = 1;
+	  /* Fall through.  */
 	case 'w':
 	  yylval.exp.size = SIZE_WORD;
 	  break;
 	case 'L':
-          yylval.exp.baserel = 1;
+	  yylval.exp.baserel = 1;
+	  /* Fall through.  */
 	case 'l':
 	  yylval.exp.size = SIZE_LONG;
 	  break;

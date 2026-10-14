@@ -921,7 +921,7 @@ amiga_baserel_target_ok (sec_ptr target_section, asymbol *sym,
 }
 
 static bool
-is_dwarf_reloc (arelent *r, asection *sec)
+is_dwarf_reloc (asection *sec)
 {
     const char *n = sec->name;
     return (strcmp(n, ".debug_info")    == 0 ||
@@ -935,7 +935,7 @@ is_dwarf_reloc (arelent *r, asection *sec)
 /* Perform an Amiga relocation */
 static bfd_reloc_status_type
 amiga_perform_reloc (
-     bfd *abfd,
+     bfd *abfd ATTRIBUTE_UNUSED,
      arelent *r,
      void * data,
      sec_ptr sec,
@@ -1029,7 +1029,7 @@ amiga_perform_reloc (
     case H_ABS32:
 AbsReloc:
 	/* DWARF: section-relative relocations */
-	  if (is_dwarf_reloc(r, target_section))
+	  if (is_dwarf_reloc(target_section))
 		{
 			relocation = sym->value + r->addend + target_section->output_offset;
 		}
@@ -1440,8 +1440,6 @@ amiga_final_link (
   size_t outsymalloc;
   struct generic_write_global_symbol_info wginfo;
   
-  struct bfd_link_hash_entry *h =
-    bfd_link_hash_lookup (info->hash, "___a4_init", false, false, true);
   struct bfd_link_hash_entry *h2 =
     bfd_link_hash_lookup (info->hash, "___a4_init2", false, false, true);
 

@@ -1537,7 +1537,9 @@ translate_from_native_sym_flags (bfd *abfd, aout_symbol_type *cache_ptr)
 
 /* Set the fields of SYM_POINTER according to CACHE_PTR.  */
 
-//static
+/* Not static: amigaos.c uses it to write the stabs of a hunk file.  */
+bool translate_to_native_sym_flags (bfd *, asymbol *,
+				    struct external_nlist *);
 bool
 translate_to_native_sym_flags (bfd *abfd,
 			       asymbol *cache_ptr,
