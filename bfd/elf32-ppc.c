@@ -583,21 +583,21 @@ static reloc_howto_type ppc_elf_howto_raw[] = {
   /* Relocation not handled: R_PPC_EMB_BIT_FLD */
 
   /* A standard 32 bit base relative relocation.  */
-  HOW (R_PPC_AMIGAOS_BREL, 2, 32, 0xffffffff, 0, false, bitfield,
-  	   bfd_elf_generic_reloc),
+  HOW (R_PPC_AMIGAOS_BREL, 4, 32, 0xffffffff, 0, false, bitfield,
+       bfd_elf_generic_reloc),
 
   /* A 16 bit base relative relocation without overflow.  */
-  HOW (R_PPC_AMIGAOS_BREL_LO, 1, 16, 0xffff, 0, false, dont,
-  	   bfd_elf_generic_reloc),
+  HOW (R_PPC_AMIGAOS_BREL_LO, 2, 16, 0xffff, 0, false, dont,
+       bfd_elf_generic_reloc),
 
   /* The high order 16 bits of a base relative address.  */
-  HOW (R_PPC_AMIGAOS_BREL_HI, 1, 16, 0xffff, 0, false, dont,
-  	   bfd_elf_generic_reloc),
+  HOW (R_PPC_AMIGAOS_BREL_HI, 2, 16, 0xffff, 16, false, dont,
+       bfd_elf_generic_reloc),
 
   /* The high order 16 bits of a base relative address, plus 1 if the contents
      of the low 16 bits, treated as a signed number, is negative.  */
-  HOW (R_PPC_AMIGAOS_BREL_HA, 1, 16, 0xffff, 16, false, dont,
-  	   bfd_elf_generic_reloc),
+  HOW (R_PPC_AMIGAOS_BREL_HA, 2, 16, 0xffff, 16, false, dont,
+       ppc_elf_addr16_ha_reloc),
 
   /* PC relative relocation against either _SDA_BASE_ or _SDA2_BASE_, filling
      in the 16 bit signed offset from the appropriate base, and filling in the
