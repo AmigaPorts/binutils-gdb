@@ -617,7 +617,7 @@ ppc_amigaos_nat_target::fetch_registers (struct regcache *regcache, int regno)
 	ppc_gdbarch_tdep *tdep = gdbarch_tdep<ppc_gdbarch_tdep> (gdbarch);	
 	struct Task *task = (struct Task *)regcache->ptid().pid();
 
-	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d ( regcache: %p, regno: %d (%s), task: %p)\n"),__func__,__LINE__,regcache,regno,gdbarch_register_name( gdbarch,regno ),task ).c_str());
+	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d ( regcache: %p, regno: %d (%s), task: %p)\n"),__func__,__LINE__,regcache,regno,regno >= 0 ? gdbarch_register_name( gdbarch,regno ) : "all",task ).c_str());
 
 	struct ExceptionContext context;
 	IDebug->ReadTaskContext( task,&context,RTCF_INFO | RTCF_SPECIAL | RTCF_STATE | RTCF_GENERAL | RTCF_FPU | RTCF_VECTOR );
@@ -705,7 +705,7 @@ ppc_amigaos_nat_target::store_registers (struct regcache *regcache, int regno)
 	struct Task *task = (struct Task *)regcache->ptid().pid();
 
 	IExec->DebugPrintF(  string_printf (_("[GDB] %s ( regcache: %p, regno: %d (%s), task: %p)\n"),
-		__func__, regcache, regno, gdbarch_register_name (gdbarch, regno), task.c_str() ) );
+		__func__, regcache, regno, regno >= 0 ? gdbarch_register_name (gdbarch, regno) : "all", task ).c_str() );
 
 	/* Read current context so we only modify the requested register(s) */
 	struct ExceptionContext context;
@@ -944,7 +944,9 @@ ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist)
 			if( current_program_space->symfile_object_file ) 
 			{
 				struct objfile *symfile = current_program_space->symfile_object_file;
-				section_offsets offsets (symfile->section_offsets.size () );
+				/* Start from the current offsets, so that sections elf.library
+				   does not know keep where they are.  */
+				std::vector<CORE_ADDR> offsets (symfile->section_offsets);
 
 				for (obj_section &osect_ref : symfile->sections ())
 				{
@@ -959,9 +961,11 @@ ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist)
 						
 					if( address )
 					{
-						IExec->DebugPrintF ( string_printf (_("[GDB] On symfile_object relocated %d section '%s' from 0x%08lx to %p, size %ld, old offset: 0x%s\n"),section->index,section->name,section->vma,address,section->size,phex ( osect->addr(), sizeof (osect->addr()))).c_str());
+						IExec->DebugPrintF ( string_printf (_("[GDB] On symfile_object relocated %d section '%s' from 0x%08lx to %p, size %ld, old offset: 0x%s\n"),section->index,section->name,(unsigned long) section->vma,address,(long) section->size,phex ( osect->addr(), sizeof (osect->addr()))).c_str());
 						
-						offsets[ osect_idx ] = (CORE_ADDR)address - osect->addr();
+						/* objfile_relocate takes offsets from the unrelocated
+						   addresses, not deltas from the current ones.  */
+						offsets[ osect_idx ] = (CORE_ADDR)address - bfd_section_vma (section);
 					}
 				}
 
@@ -978,7 +982,7 @@ ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist)
 								
 					if( address )
 					{
-						IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d On exec_bfd relocated %d section '%s' from 0x%08lx to %p, size %ld\n"),__func__,__LINE__,section->index,section->name,section->vma,address,section->size).c_str());
+						IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d On exec_bfd relocated %d section '%s' from 0x%08lx to %p, size %ld\n"),__func__,__LINE__,section->index,section->name,(unsigned long) section->vma,address,(long) section->size).c_str());
 						
 						exec_set_section_address( exec_file,section->index,(CORE_ADDR)address );							
 					}
@@ -1003,12 +1007,10 @@ void ppc_amigaos_nat_target::create_inferior (const char *exec_file,const std::s
 		error ("No current inferior present" );
 	}
 
-	/* If no exec file handed to us, get it from the exec-file command -- with
-	 a good, common error message if none is specified.  */
-	if (exec_file == 0)
-	{
-	    exec_file = get_exec_file (1);
-	}
+	/* The run command passes the exec file; complain in the usual way
+	   if none is specified.  */
+	if (exec_file == nullptr)
+		no_executable_specified_error ();
 
 	struct debugger_message *dmsg = alloc_message( NULL );
 	if( dmsg == NULL )
@@ -1024,6 +1026,7 @@ void ppc_amigaos_nat_target::create_inferior (const char *exec_file,const std::s
 	dmsg->seglist = (void*)IDOS->LoadSeg( exec_file );
 	if( ! dmsg->seglist )
 	{
+		free_message (dmsg);
 		error ("'%s': not an executable file\n",exec_file );
 	}
 
