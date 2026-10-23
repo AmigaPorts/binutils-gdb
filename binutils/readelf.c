@@ -3029,7 +3029,6 @@ get_ppc_dynamic_type (unsigned long type)
     {
     case DT_PPC_GOT:    return "PPC_GOT";
     case DT_PPC_OPT:    return "PPC_OPT";
-	case DT_AMIGAOS_DYNVERSION: return "AMIGAOS_DYNVERSION";
     default:
       return NULL;
     }
@@ -3379,8 +3378,6 @@ get_dynamic_type (Filedata * filedata, unsigned long type)
     case DT_GNU_HASH:	return "GNU_HASH";
     case DT_GNU_FLAGS_1: return "GNU_FLAGS_1";
 
-	case DT_AMIGAOS_DYNVERSION: return get_ppc_dynamic_type (type);
-
     default:
       if ((type >= DT_LOPROC) && (type <= DT_HIPROC))
 	{
@@ -3452,6 +3449,16 @@ get_dynamic_type (Filedata * filedata, unsigned long type)
 	    case EM_IA_64:
 	      result = get_ia64_dynamic_type (type);
 	      break;
+	    case EM_PPC:
+	      /* AmigaOS 4 marks its dynamic objects with this tag.  */
+	      if (type == DT_AMIGAOS_DYNVERSION
+		  && (filedata->file_header.e_ident[EI_OSABI]
+		      != ELFOSABI_SOLARIS))
+		{
+		  result = "AMIGAOS_DYNVERSION";
+		  break;
+		}
+	      /* Fall through.  */
 	    default:
 	      if (filedata->file_header.e_ident[EI_OSABI] == ELFOSABI_SOLARIS)
 		result = get_solaris_dynamic_type (type);
