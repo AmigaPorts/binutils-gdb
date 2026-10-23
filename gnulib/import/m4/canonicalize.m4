@@ -31,8 +31,9 @@ AC_DEFUN([gl_CANONICALIZE_LGPL],
   AC_REQUIRE([gl_STDLIB_H_DEFAULTS])
   AC_REQUIRE([gl_CANONICALIZE_LGPL_SEPARATE])
   if test $ac_cv_func_canonicalize_file_name = no; then
-    case "$host_os" in
-      amigaos*)
+    case "$host" in
+      powerpc-*-amigaos*)
+        # clib4 on AmigaOS 4 provides canonicalize_file_name.
         HAVE_CANONICALIZE_FILE_NAME=1
         ;;
       *)
@@ -52,9 +53,9 @@ AC_DEFUN([gl_CANONICALIZE_LGPL],
       *yes)
         ;;
       *)
-        case "$host_os" in
-          amigaos*)
-           # Do not replace on AmigaOS
+        case "$host" in
+          powerpc-*-amigaos*)
+            # Do not replace on AmigaOS 4
             ;;
           *)
             REPLACE_CANONICALIZE_FILE_NAME=1
