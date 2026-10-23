@@ -46,7 +46,7 @@ static void
 pipe_open (struct serial *scb, const char *name)
 {
 #if !HAVE_SOCKETPAIR
-  return -1;
+  error (_("Pipe connections are not supported on this host."));
 #else
   struct pipe_state *state;
   /* This chunk: */
