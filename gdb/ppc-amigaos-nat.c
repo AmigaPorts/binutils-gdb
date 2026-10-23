@@ -946,11 +946,12 @@ ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist)
 				struct objfile *symfile = current_program_space->symfile_object_file;
 				section_offsets offsets (symfile->section_offsets.size () );
 
-				struct obj_section *osect;
-				ALL_OBJFILE_OSECTIONS(symfile, osect)
+				for (obj_section &osect_ref : symfile->sections ())
 				{
+					obj_section *osect = &osect_ref;
 					struct bfd_section *section = osect->the_bfd_section;
-					int osect_idx = osect - symfile->sections;
+					/* section_offsets is indexed by the BFD section index.  */
+					int osect_idx = section->index;
 					
 					void *address = IElf->GetSectionTags( exec_opendelf,
 						GST_SectionName, section->name,
@@ -1092,9 +1093,7 @@ void ppc_amigaos_nat_target::create_inferior (const char *exec_file,const std::s
 
 static ppc_amigaos_nat_target the_ppc_amigaos_nat_target;
 
-void _initialize_ppcamigaos_nat ();
-void
-_initialize_ppcamigaos_nat ()
+INIT_GDB_FILE (ppcamigaos_nat)
 {
 	add_inf_child_target (&the_ppc_amigaos_nat_target);
 }
