@@ -10514,7 +10514,7 @@ ppc_elf_finish_dynamic_sections (bfd *output_bfd,
 
 #include "elf32-target.h"
 
-/* ML: TODO: AmigaOS Target */
+/* AmigaOS 4 Target */
 
 #undef  TARGET_LITTLE_SYM
 #undef  TARGET_LITTLE_NAME
@@ -10663,6 +10663,17 @@ ppc_elf_amigaos_finish_dynamic_symbol(
 #define elf32_bed	elf32_powerpc_amigaos_bed
 
 #include "elf32-target.h"
+
+/* Restore the defaults changed for AmigaOS, so that the targets below
+   do not inherit them.  */
+
+#undef ELF_TARGET_OS
+#undef elf_backend_additional_program_headers
+#define elf_backend_additional_program_headers	ppc_elf_additional_program_headers
+#undef elf_backend_modify_segment_map
+#define elf_backend_modify_segment_map		ppc_elf_modify_segment_map
+#undef elf_backend_finish_dynamic_symbol
+#define elf_backend_finish_dynamic_symbol	ppc_elf_finish_dynamic_symbol
 
 /* FreeBSD Target */
 
