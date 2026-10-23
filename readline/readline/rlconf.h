@@ -39,11 +39,18 @@
 /* Ugly but working hack for binding prefix meta. */
 #define PREFIX_META_HACK
 
+#if defined (__amigaos4__)
+/* AmigaOS has no home directory or /etc; look next to the program and
+   in the persistent environment instead. */
+#define DEFAULT_INPUTRC "PROGDIR:inputrc"
+#define SYS_INPUTRC "ENVARC:inputrc"
+#else
 /* The next-to-last-ditch effort file name for a user-specific init file. */
 #define DEFAULT_INPUTRC "~/.inputrc"
 
 /* The ultimate last-ditch filename for an init file -- system-wide. */
 #define SYS_INPUTRC "/etc/inputrc"
+#endif
 
 /* If defined, expand tabs to spaces. */
 #define DISPLAY_TABS

@@ -48,13 +48,6 @@
 #  endif
 #endif
 
-#ifdef __amigaos4__
-#undef DEFAULT_INPUTRC
-#undef SYS_INPUTRC
-#define DEFAULT_INPUTRC "PROGDIR:inputrc"
-#define SYS_INPUTRC "ENVARC:inputrc"
-#endif
-
 /* Posix macro to check file in statbuf for directory-ness.
    This requires that <sys/stat.h> be included before this test. */
 #if defined (S_IFDIR) && !defined (S_ISDIR)
