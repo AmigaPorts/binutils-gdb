@@ -562,11 +562,11 @@ do
     pj_elf32_vec)		 tb="$tb elf32-pj.lo elf32.lo $elf" ;;
     pj_elf32_le_vec)		 tb="$tb elf32-pj.lo elf32.lo $elf" ;;
     powerpc_boot_vec)		 tb="$tb ppcboot.lo" ;;
-    powerpc_elf32_amigaos_vec)	tb="$tb elf32-ppc.lo elf-amigaos.lo elf32.lo $elf" ;;
-    powerpc_elf32_vec)		 tb="$tb elf32-ppc.lo elf-vxworks.lo elf32.lo $elf" ;;
-    powerpc_elf32_le_vec)	 tb="$tb elf32-ppc.lo elf-vxworks.lo elf32.lo $elf" ;;
-    powerpc_elf32_fbsd_vec)	 tb="$tb elf32-ppc.lo elf-vxworks.lo elf32.lo $elf" ;;
-    powerpc_elf32_vxworks_vec)	 tb="$tb elf32-ppc.lo elf-vxworks.lo elf32.lo $elf" ;;
+    powerpc_elf32_amigaos_vec)	 tb="$tb elf32-ppc.lo elf-amigaos.lo elf-vxworks.lo elf32.lo $elf" ;;
+    powerpc_elf32_vec)		 tb="$tb elf32-ppc.lo elf-amigaos.lo elf-vxworks.lo elf32.lo $elf" ;;
+    powerpc_elf32_le_vec)	 tb="$tb elf32-ppc.lo elf-amigaos.lo elf-vxworks.lo elf32.lo $elf" ;;
+    powerpc_elf32_fbsd_vec)	 tb="$tb elf32-ppc.lo elf-amigaos.lo elf-vxworks.lo elf32.lo $elf" ;;
+    powerpc_elf32_vxworks_vec)	 tb="$tb elf32-ppc.lo elf-amigaos.lo elf-vxworks.lo elf32.lo $elf" ;;
     powerpc_elf64_vec)		 tb="$tb elf64-ppc.lo elf64-gen.lo elf64.lo $elf"; target_size=64 ;;
     powerpc_elf64_le_vec)	 tb="$tb elf64-ppc.lo elf64-gen.lo elf64.lo $elf" target_size=64 ;;
     powerpc_elf64_fbsd_vec)	 tb="$tb elf64-ppc.lo elf64-gen.lo elf64.lo $elf" target_size=64 ;;
