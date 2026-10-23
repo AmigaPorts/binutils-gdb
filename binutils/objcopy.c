@@ -1554,6 +1554,30 @@ create_new_symbol (struct addsym_node *ptr, bfd *obfd)
   return sym;
 }
 
+/* Return true if ABFD is an AmigaOS 4 (ppc-amigaos) ELF file.  */
+
+static bool
+is_amigaos_elf (bfd *abfd)
+{
+  return (bfd_get_flavour (abfd) == bfd_target_elf_flavour
+	  && get_elf_backend_data (abfd)->target_os == is_amigaos);
+}
+
+/* Return true if NAME is one of the symbols that AmigaOS 4 needs in
+   an executable even after strip --strip-all: the entry point
+   _start, the __amigaos4__ and __amigappc__ markers that identify
+   the file (there is no official OS/ABI value for AmigaOS), and
+   _SDA_BASE_ for the small data model.  */
+
+static bool
+is_amigaos_keep_symbol (const char *name)
+{
+  return (strcmp (name, "_start") == 0
+	  || strcmp (name, "__amigaos4__") == 0
+	  || strcmp (name, "__amigappc__") == 0
+	  || strcmp (name, "_SDA_BASE_") == 0);
+}
+
 /* Choose which symbol entries to copy; put the result in OSYMS.
    We don't copy in place, because that confuses the relocs.
    Update the number of symbols to print.  */
@@ -1565,6 +1589,7 @@ filter_symbols (bfd *abfd, bfd *obfd, asymbol **osyms,
   asymbol **from = isyms, **to = osyms;
   long src_count = 0, dst_count = 0;
   int relocatable = (abfd->flags & (EXEC_P | DYNAMIC)) == 0;
+  bool aos4_elf = is_amigaos_elf (obfd);
 
   for (; src_count < *symcount; src_count++)
     {
@@ -1579,10 +1604,11 @@ filter_symbols (bfd *abfd, bfd *obfd, asymbol **osyms,
 
       undefined = bfd_is_und_section (bfd_asymbol_section (sym));
 
-	  if (strip_symbols == STRIP_ALL && undefined)
-        {
-          add_specific_symbol(name, keep_specific_htab);
-        }
+      /* AmigaOS 4 executables are relocated at load time, so with
+	 --strip-all keep the undefined symbols that relocations
+	 refer to.  */
+      if (aos4_elf && strip_symbols == STRIP_ALL && undefined)
+	add_specific_symbol (name, keep_specific_htab);
 
       if (add_sym_list)
 	{
@@ -1667,23 +1693,12 @@ filter_symbols (bfd *abfd, bfd *obfd, asymbol **osyms,
 	  bfd_set_asymbol_name (sym, n);
 	  name = n;
 	}
-      if(strip_symbols == STRIP_ALL) 
-	  { 		
-		  keep = false;
-		 /* Never, ever, strip everthing on the Amiga, keep global symbols, needed by OS 
-		 	_start: 		Entry point of executable, isn't fixed on ppc-amigaos, so OS needs to knwo where to enter
-			__amigaos4__: 	Maker symbol to identify that ELF file is for ppc-amigaos, because no offcial value has been assigned to ELF heder field OS/ABI for ppc-amigaos
-			_SDA_BASE_:		If small data model ist used, the symbol is needed ....?????
-		 */
-     	 if( (bfd_get_flavour(obfd) == bfd_target_elf_flavour && get_elf_backend_data(obfd)->target_os == is_amigaos))
-		 {
-			//  ML: TODO: _SDA_BASE_ onyl needs to be kept if small data section are present ????
-			if (strcmp(name, "_start") == 0 || strcmp(name, "__amigaos4__") == 0 || strcmp(name, "_SDA_BASE_") == 0) {
-			  keep = true;
-			}
-		 }
-	  }
-	  else if ((flags & BSF_KEEP) != 0		/* Used in relocation.  */
+
+      if (strip_symbols == STRIP_ALL)
+	/* Never strip everything on AmigaOS 4, the OS needs a few
+	   global symbols, see is_amigaos_keep_symbol.  */
+	keep = aos4_elf && is_amigaos_keep_symbol (name);
+      else if ((flags & BSF_KEEP) != 0		/* Used in relocation.  */
 	       || ((flags & BSF_SECTION_SYM) != 0
 		   && (bfd_asymbol_section (sym)->symbol->flags
 		       & BSF_KEEP) != 0))
@@ -1740,20 +1755,19 @@ filter_symbols (bfd *abfd, bfd *obfd, asymbol **osyms,
 
       if (!keep
 	  && ((keep_file_symbols && (flags & BSF_FILE))
-	      || is_specified_symbol (name, keep_specific_htab)))
+	      || is_specified_symbol (name, keep_specific_htab)
+	      || (aos4_elf && is_amigaos_keep_symbol (name))))
 	keep = true;
 
       if (keep && is_strip_section (abfd, bfd_asymbol_section (sym)))
 	{
-          /* If the symbol refers to a stripped section, we still want to
-           * keep it, e.g., _SDA_BASE_ TODO: We should perhaps output a
-           * warning or add another option to trigger this behaviour.
-           * FIXME: The section to which symbol refers must be adjusted
-           * as well */
-          if (!is_specified_symbol (name, keep_specific_htab))
-            {
-              keep = false;
-            }
+	  /* On AmigaOS 4, if the symbol refers to a stripped section, we
+	     still want to keep it, e.g., _SDA_BASE_.  FIXME: The section
+	     to which the symbol refers must be adjusted as well.  */
+	  if (!(aos4_elf
+		&& (is_specified_symbol (name, keep_specific_htab)
+		    || is_amigaos_keep_symbol (name))))
+	    keep = false;
 	}
 
       if (keep)
@@ -3410,7 +3424,6 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
 	 haven't been set yet.  mark_symbols_used_in_relocations will
 	 ignore input sections which have no corresponding output
 	 section.  */
-	 // ML: TODO: Really needef for maiga to remove the floowing  fi???
       if (strip_symbols != STRIP_ALL)
 	{
 	  bfd_set_error (bfd_error_no_error);
@@ -4567,7 +4580,10 @@ copy_relocations_in_section (bfd *ibfd, sec_ptr isection, bfd *obfd)
 	  && htab_elements (keep_specific_htab) == 0
 	  /* Amiga hunk relocations are applied by LoadSeg at run time,
 	     so stripping the symbols must not discard them.  */
-	  && bfd_get_flavour (obfd) != bfd_target_amiga_flavour)
+	  && bfd_get_flavour (obfd) != bfd_target_amiga_flavour
+	  /* Neither must it on AmigaOS 4, where elf.library relocates
+	     executables when loading them.  */
+	  && !is_amigaos_elf (obfd))
       || discard_relocations (ibfd, isection))
     relsize = 0;
   else
@@ -4622,28 +4638,35 @@ copy_relocations_in_section (bfd *ibfd, sec_ptr isection, bfd *obfd)
 	     keep_strip_specific_list.  */
 	  arelent **w_relpp;
 	  long i;
+	  bool aos4_elf = is_amigaos_elf (obfd);
 
 	  for (w_relpp = relpp, i = 0; i < relcount; i++)
 	    /* PR 17512: file: 9e907e0c.  */
 	    if (relpp[i]->sym_ptr_ptr
 		/* PR 20096 */
-		&& *relpp[i]->sym_ptr_ptr ) {
-		asection *sec = (*(relpp[i]->sym_ptr_ptr))->section;
+		&& *relpp[i]->sym_ptr_ptr)
+	      {
+		const char *name = bfd_asymbol_name (*relpp[i]->sym_ptr_ptr);
+		asection *sec = (*relpp[i]->sym_ptr_ptr)->section;
 
-		if( is_specified_symbol (bfd_asymbol_name (*relpp[i]->sym_ptr_ptr),
-					keep_specific_htab))
-	      *w_relpp++ = relpp[i];
-		/* Never, ever, strip all? reloc data on the Amiga! */
-		else if( bfd_get_flavour(obfd) == bfd_target_elf_flavour && get_elf_backend_data(obfd)->target_os == is_amigaos)
-		{
-			if (!strip_unneeded_rel_relocs || !relpp [i]->howto->pc_relative || sec->index != osection->index)
-			{
-				relpp[i]->addend = bfd_asymbol_value(*relpp [i]->sym_ptr_ptr) - sec->vma + relpp[i]->addend;
-				relpp[i]->sym_ptr_ptr = sec->symbol_ptr_ptr;
-				*w_relpp++ = relpp[i];
-			}
-		}  
-		}
+		if (is_specified_symbol (name, keep_specific_htab)
+		    || (aos4_elf && is_amigaos_keep_symbol (name)))
+		  *w_relpp++ = relpp[i];
+		/* Never strip the relocations of an AmigaOS 4 file, but
+		   make them refer to the section symbol instead of the
+		   symbol that goes away.  PC-relative relocations within
+		   the same section can be dropped on request.  */
+		else if (aos4_elf
+			 && (!strip_unneeded_rel_relocs
+			     || !relpp[i]->howto->pc_relative
+			     || sec->index != osection->index))
+		  {
+		    relpp[i]->addend = (bfd_asymbol_value (*relpp[i]->sym_ptr_ptr)
+					- sec->vma + relpp[i]->addend);
+		    relpp[i]->sym_ptr_ptr = &sec->symbol;
+		    *w_relpp++ = relpp[i];
+		  }
+	      }
 	  relcount = w_relpp - relpp;
 	  *w_relpp = 0;
 	}
@@ -5013,7 +5036,7 @@ strip_main (int argc, char *argv[])
 	  break;
 	case OPTION_STRIP_UNNEEED_REL_RELOCS:
 	  strip_unneeded_rel_relocs = 1;
-	  break;	  
+	  break;
 	case 'K':
 	  add_specific_symbol (optarg, keep_specific_htab);
 	  break;
@@ -5103,11 +5126,6 @@ strip_main (int argc, char *argv[])
     print_version ("strip");
 
   default_deterministic ();
-
-  // ML: TODO: For amiga
-  add_specific_symbol("__amigaos4__", keep_specific_htab);
-  add_specific_symbol("_start", keep_specific_htab);
-  add_specific_symbol("_SDA_BASE_", keep_specific_htab);
 
   /* Default is to strip all symbols.  */
   if (strip_symbols == STRIP_UNDEF
@@ -6209,12 +6227,6 @@ copy_main (int argc, char *argv[])
 
   if (interleave && copy_byte == -1)
     fatal (_("interleave start byte must be set with --byte"));
-
-  // ML: TOOD: For akigaSO
-  add_specific_symbol("__amigappc__", keep_specific_htab);
-  add_specific_symbol("__amigaos4__", keep_specific_htab);
-  add_specific_symbol("_start", keep_specific_htab);
-  add_specific_symbol("_SDA_BASE_", keep_specific_htab);
 
   if (copy_byte >= interleave)
     fatal (_("byte number must be less than interleave"));
