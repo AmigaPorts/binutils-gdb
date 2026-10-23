@@ -24,7 +24,9 @@
 extern const char file_system_kind_auto[];
 extern const char file_system_kind_unix[];
 extern const char file_system_kind_dos_based[];
+#ifdef ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM
 extern const char file_system_kind_amigaos_based[];
+#endif
 
 extern const char *target_file_system_kind;
 
@@ -53,7 +55,6 @@ extern const char *target_file_system_kind;
 #else
 #define IS_TARGET_ABSOLUTE_PATH(kind, p)				\
   (((kind) == file_system_kind_dos_based) ? IS_DOS_ABSOLUTE_PATH (p) \
-   : ((kind) == file_system_kind_amigaos_based) ? IS_AMIGOS_ABSOLUTE_PATH(p) \
    : IS_UNIX_ABSOLUTE_PATH (p))
 #endif
 
@@ -68,7 +69,6 @@ extern const char *target_file_system_kind;
 #else
 #define HAS_TARGET_DRIVE_SPEC(kind, p)					\
   (((kind) == file_system_kind_dos_based) ? HAS_DOS_DRIVE_SPEC (p) \
-   : ((kind) == file_system_kind_amigaos_based) ? HAS_AMIGOS_DRIVE_SPEC(p) \
    : 0)
 #endif
 
