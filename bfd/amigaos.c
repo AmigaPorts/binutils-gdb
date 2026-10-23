@@ -4430,7 +4430,7 @@ amiga_slurp_armap (
 
       if (syms->name)
 	{
-	  csym->file_offset = syms->unit_offset;
+	  csym->u.file_offset = syms->unit_offset;
 	  csym->name = syms->name;
 	  ++csym;
 	  continue;
@@ -4451,7 +4451,7 @@ amiga_slurp_armap (
       len <<= 2;
       csym->name = symblock;
       symblock[len] = '\0';
-      csym->file_offset = syms->unit_offset;
+      csym->u.file_offset = syms->unit_offset;
       ++csym;
     }
 
@@ -4521,7 +4521,7 @@ amiga_archive_p (
 
   if (amiga_mkarchive (abfd))
     {
-      bfd_ardata(abfd)->first_file_filepos = 0;
+      bfd_ardata(abfd)->first_file.file_offset = 0;
       amiga_ardata(abfd)->filesize = stat_buffer.st_size;
       amiga_ardata(abfd)->defsyms = symbols;
       amiga_ardata(abfd)->defsym_count = symcount;
@@ -4543,7 +4543,7 @@ amiga_openr_next_archived_file (
   file_ptr filestart;
 
   if (!last_file)
-    filestart = bfd_ardata (archive)->first_file_filepos;
+    filestart = bfd_ardata (archive)->first_file.file_offset;
   else
     {
       unsigned int size = arelt_size (last_file);

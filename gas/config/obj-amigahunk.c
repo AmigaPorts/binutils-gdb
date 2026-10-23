@@ -194,7 +194,7 @@ obj_amiga_frob_file_before_fix ()
      Since writing to a section will cause the BFD back end to compute the
      VMAs, fake it out here....  */
   bfd_byte b = 0;
-  bfd_boolean x = TRUE;
+  bool x = true;
   if (bfd_section_size (text_section) != 0)
     {
       x = bfd_set_section_contents (stdoutput, text_section, &b, (file_ptr) 0,
