@@ -90,10 +90,14 @@
 #define TC_FINALIZE_SYMS_BEFORE_SIZE_SEG 1
 #endif
 
+#ifndef	MD_PCREL_FROM_SECTION
+#ifdef TC_M68K
 extern long
 md_pcrel_from_m68k (fixS *fixP, segT current_section);
-#ifndef	MD_PCREL_FROM_SECTION
 #define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from_m68k (FIX, SEC)
+#else
+#define MD_PCREL_FROM_SECTION(FIX, SEC) md_pcrel_from (FIX)
+#endif
 #endif
 
 #ifndef TC_FAKE_LABEL
@@ -183,7 +187,10 @@ fix_new_internal (fragS *frag,		/* Which frag?  */
 #endif
 
 #ifdef TC_FIX_TYPE
+#ifdef TC_M68K
+  /* The m68k Amiga port keeps the base-relative flag in tc_fix_data.  */
   fixP->tc_fix_data = baserel;
+#endif
   TC_INIT_FIX_DATA (fixP);
 #endif
 
