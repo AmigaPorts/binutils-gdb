@@ -48,7 +48,7 @@ effective_target_file_system_kind (void)
       if (gdbarch_has_dos_based_file_system (current_inferior ()->arch ()))
 	return file_system_kind_dos_based;
 #ifdef ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM	
-	  else if (gdbarch_has_amiga_based_file_system (target_gdbarch ()))
+	  else if (gdbarch_has_amiga_based_file_system (current_inferior ()->arch ()))
 	return file_system_kind_amigaos_based;
 #endif	
       else
@@ -118,14 +118,7 @@ starting the forward slash (`/') character are considered absolute,\n\
 and the directory separator character is the forward slash (`/').  If\n\
 `dos-based', target file names starting with a drive letter followed\n\
 by a colon (e.g., `c:'), are also considered absolute, and the\n\
-backslash (`\\') is also considered a directory separator. If\n\
-`amiga-based', target file names starting with a drive name followed\n\
-by a colon (e.g., `sys:'), are also considered absolute, and the\n\
-directory separator character is the forward slash (`/'). Set to\n\
-backslash (`\\') is also considered a directory separator. If\n\
-`amiga-based', target file names starting with a drive name followed\n\
-by a colon (e.g., `sys:'), are also considered absolute, and the\n\
-directory separator character is the forward slash (`/'). Set to\n\
+backslash (`\\') is also considered a directory separator.  Set to\n\
 `auto' (which is the default), to let GDB decide, based on its\n\
 knowledge of the target operating system."),
 #endif

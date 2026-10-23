@@ -2495,6 +2495,18 @@ considered a directory separator.
     invalid=False,
 )
 
+Value(
+    comment="""
+If true, the target OS has AmigaOS file system semantics.  That is,
+absolute paths start with a volume or assign name followed by a
+colon, and the slash is the directory separator.
+""",
+    type="int",
+    name="has_amiga_based_file_system",
+    predefault="0",
+    invalid=False,
+)
+
 Method(
     comment="""
 Generate bytecodes to collect the return address in a frame.
