@@ -15850,7 +15850,7 @@ elf_csky="elf32-csky.lo elf32.lo elf-attrs.lo"
 elf32_mips="elf32-mips.lo elfxx-mips.lo elf32.lo elf-attrs.lo"
 elfn32_mips="elfn32-mips.lo elfxx-mips.lo elf32.lo elf-attrs.lo"
 elf64_mips="elf64-mips.lo elf64.lo elfxx-mips.lo elf32.lo elf-attrs.lo"
-elf32_powerpc="elf32-ppc.lo elf32.lo elf-attrs.lo"
+elf32_powerpc="elf32-ppc.lo elf32.lo elf-attrs.lo elf-amigaos.lo"
 elf64_powerpc="elf64-ppc.lo elf64-gen.lo elf64.lo elf-attrs.lo"
 elf32_riscv="elf32-riscv.lo elfxx-riscv.lo elf-ifunc.lo elf32.lo elf-attrs.lo"
 elf64_riscv="elf64-riscv.lo elf64.lo elfxx-riscv.lo elf-ifunc.lo elf32.lo elf-attrs.lo"
@@ -16035,7 +16035,7 @@ do
     pj_elf32_vec)		 tb="$tb elf32-pj.lo elf32.lo $elf" ;;
     pj_elf32_le_vec)		 tb="$tb elf32-pj.lo elf32.lo $elf" ;;
     powerpc_boot_vec)		 tb="$tb ppcboot.lo" ;;
-    powerpc_elf32_amigaos_vec)	tb="$tb $elf32_powerpc elf-amigaos.lo $elf" ;;
+    powerpc_elf32_amigaos_vec)	tb="$tb $elf32_powerpc $elf" ;;
     powerpc_elf32_vec)		 tb="$tb $elf32_powerpc $elf" ;;
     powerpc_elf32_le_vec)	 tb="$tb $elf32_powerpc $elf" ;;
     powerpc_elf32_fbsd_vec)	 tb="$tb $elf32_powerpc $elf" ;;
