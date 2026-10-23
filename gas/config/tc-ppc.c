@@ -4107,7 +4107,7 @@ md_assemble (char *str)
 			      size,
 			      &fixups[i].exp,
 			      pcrel,
-			      fixups[i].reloc);
+			      fixups[i].reloc, 0);
 	}
       else
 	{
@@ -4119,7 +4119,7 @@ md_assemble (char *str)
 			      insn_length,
 			      &fixups[i].exp,
 			      (operand->flags & PPC_OPERAND_RELATIVE) != 0,
-			      BFD_RELOC_NONE);
+			      BFD_RELOC_NONE, 0);
 	}
       fixP->fx_pcrel_adjust = fixups[i].opindex;
     }
