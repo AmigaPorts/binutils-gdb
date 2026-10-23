@@ -504,6 +504,7 @@ verify_gdbarch (struct gdbarch *gdbarch)
   /* Skip verify of auto_wide_charset, invalid_p == 0.  */
   /* Skip verify of solib_symbols_extension, invalid_p == 0.  */
   /* Skip verify of has_dos_based_file_system, invalid_p == 0.  */
+  /* Skip verify of has_amiga_based_file_system, invalid_p == 0.  */
   /* Skip verify of gen_return_address, invalid_p == 0.  */
   /* Skip verify of info_proc, has predicate.  */
   /* Skip verify of core_info_proc, has predicate.  */
@@ -5028,15 +5029,13 @@ set_gdbarch_has_dos_based_file_system (struct gdbarch *gdbarch,
 				       int has_dos_based_file_system)
 {
   gdbarch->has_dos_based_file_system = has_dos_based_file_system;
-
-  if( has_dos_based_file_system )
-	set_gdbarch_has_amiga_based_file_system( gdbarch,0 );
 }
 
-int gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch)
+int
+gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch)
 {
   gdb_assert (gdbarch != NULL);
-  /* Skip verify of has_amiga_based_file_system, invalid_p == 0 */
+  /* Skip verify of has_amiga_based_file_system, invalid_p == 0.  */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_has_amiga_based_file_system called\n");
   return gdbarch->has_amiga_based_file_system;
@@ -5044,12 +5043,9 @@ int gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch)
 
 void
 set_gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch,
-				       int has_amiga_based_file_system)
+					 int has_amiga_based_file_system)
 {
   gdbarch->has_amiga_based_file_system = has_amiga_based_file_system;
-
-  if( has_amiga_based_file_system )
-	set_gdbarch_has_dos_based_file_system( gdbarch,0 );
 }
 
 void
