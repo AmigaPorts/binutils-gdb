@@ -4072,13 +4072,13 @@ typedef struct bfd_sym_chain ldlang_undef_chain_list_type;
 void
 ldlang_add_undef (const char *const name, bool cmdline ATTRIBUTE_UNUSED)
 {
-#if 1
-  /* This is a quick ugly hak of getting around the problem
-   * with -use-dynld being passed to the linker
-   */
-  if (strcmp(name, "se-dynld") == 0)
+  /* The AmigaOS 4 compiler driver passes its -use-dynld option on to
+     the linker, which reads it as "-u se-dynld".  Ignore that symbol
+     when linking for ppc-amigaos.  */
+  if (strcmp (name, "se-dynld") == 0
+      && default_target != NULL
+      && strcmp (default_target, "elf32-powerpc-amigaos") == 0)
     return;
-#endif	
   ldlang_undef_chain_list_type *new_undef;
 
   new_undef = stat_alloc (sizeof (*new_undef));
