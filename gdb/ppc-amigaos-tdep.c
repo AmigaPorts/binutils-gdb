@@ -131,7 +131,7 @@ ppc_amigaos_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 	set_gdbarch_has_shared_address_space (gdbarch, ppc_amigaos_has_shared_address_space);
 
 	/* PT_STEP not supported, need to simulate it like rs6000-aix */
-	set_gdbarch_software_single_step (gdbarch, ppc_amigaos_software_single_step);
+	set_gdbarch_get_next_pcs (gdbarch, ppc_amigaos_software_single_step);
 	/* Displaced stepping is currently not supported in combination with
 	   software single-stepping.  These override the values set by
 	   rs6000_gdbarch_init.  */
@@ -144,9 +144,7 @@ ppc_amigaos_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 	set_gdbarch_gcore_bfd_target (gdbarch, "elf32-powerpc-amigaos");
 }
 
-void _initialize_ppc_amigaos_tdep ();
-void
-_initialize_ppc_amigaos_tdep ()
+INIT_GDB_FILE (ppc_amigaos_tdep)
 {
 	gdbarch_register_osabi (bfd_arch_rs6000, 0, GDB_OSABI_AMIGAOS, ppc_amigaos_init_abi);
 	gdbarch_register_osabi (bfd_arch_powerpc, 0, GDB_OSABI_AMIGAOS, ppc_amigaos_init_abi);
