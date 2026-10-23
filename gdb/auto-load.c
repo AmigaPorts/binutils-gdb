@@ -41,11 +41,6 @@
 #include "cli/cli-style.h"
 #include "gdbsupport/selftest.h"
 
-#ifdef __amigaos4__
-#define AUTO_LOAD_DIR "$debugdir;$datadir/auto-load"
-#define AUTO_LOAD_SAFE_PATH AUTO_LOAD_DIR
-#endif
-
 /* The section to look in for auto-loaded scripts (in file formats that
    support sections).
    Each entry in this section is a record that begins with a leading byte
