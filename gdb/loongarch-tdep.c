@@ -734,7 +734,7 @@ loongarch_frame_prev_register (const frame_info_ptr &this_frame,
 
   /* If we are asked to unwind the PC, then we need to return the RA
      instead.  The prologue may save PC, but it will point into this
-     frame's prologue, not the previou frame's resume location.  */
+     frame's prologue, not the previous frame's resume location.  */
   if (regnum == LOONGARCH_PC_REGNUM)
     {
       CORE_ADDR ra;
@@ -1905,7 +1905,7 @@ loongarch_dwarf2_reg_to_regnum (struct gdbarch *gdbarch, int regnum)
 }
 
 static constexpr gdb_byte loongarch_default_breakpoint[] = {0x05, 0x00, 0x2a, 0x00};
-typedef BP_MANIPULATION (loongarch_default_breakpoint) loongarch_breakpoint;
+using loongarch_breakpoint = BP_MANIPULATION (loongarch_default_breakpoint);
 
 /* Extract a set of required target features out of ABFD.  If ABFD is nullptr
    then a LOONGARCH_GDBARCH_FEATURES is returned in its default state.  */
@@ -1970,35 +1970,35 @@ loongarch_find_default_target_description (const struct gdbarch_info info)
   return loongarch_lookup_target_description (features);
 }
 
-static int
+static bool
 loongarch_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 			       const struct reggroup *group)
 {
   if (gdbarch_register_name (gdbarch, regnum) == NULL
       || *gdbarch_register_name (gdbarch, regnum) == '\0')
-    return 0;
+    return false;
 
-  int raw_p = regnum < gdbarch_num_regs (gdbarch);
+  bool raw_p = regnum < gdbarch_num_regs (gdbarch);
 
   if (group == save_reggroup || group == restore_reggroup)
     return raw_p;
 
   if (group == all_reggroup)
-    return 1;
+    return true;
 
   if (0 <= regnum && regnum <= LOONGARCH_BADV_REGNUM)
     return group == general_reggroup;
 
   /* Only ORIG_A0, PC, BADV in general_reggroup */
   if (group == general_reggroup)
-    return 0;
+    return false;
 
   if (LOONGARCH_FIRST_FP_REGNUM <= regnum && regnum <= LOONGARCH_FCSR_REGNUM)
     return group == float_reggroup;
 
   /* Only $fx / $fccx / $fcsr in float_reggroup */
   if (group == float_reggroup)
-    return 0;
+    return false;
 
   if (LOONGARCH_FIRST_LSX_REGNUM <= regnum
      && regnum < LOONGARCH_FIRST_LASX_REGNUM + LOONGARCH_LINUX_NUM_LASXREGSET)
@@ -2006,7 +2006,7 @@ loongarch_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 
   /* Only $vrx / $xrx in vector_reggroup */
   if (group == vector_reggroup)
-    return 0;
+    return false;
 
   int ret = tdesc_register_in_reggroup_p (gdbarch, regnum, group);
   if (ret != -1)
@@ -2174,7 +2174,6 @@ loongarch_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_long_double_bit (gdbarch, 128);
   set_gdbarch_long_double_format (gdbarch, floatformats_ieee_quad);
   set_gdbarch_ptr_bit (gdbarch, info.bfd_arch_info->bits_per_address);
-  set_gdbarch_char_signed (gdbarch, 1);
 
   info.target_desc = tdesc;
   info.tdesc_data = tdesc_data.get ();
@@ -2219,7 +2218,7 @@ loongarch_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_get_next_pcs (gdbarch, loongarch_software_single_step);
   set_gdbarch_breakpoint_kind_from_pc (gdbarch, loongarch_breakpoint::kind_from_pc);
   set_gdbarch_sw_breakpoint_from_kind (gdbarch, loongarch_breakpoint::bp_from_kind);
-  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
+  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, true);
 
   /* Frame unwinders. Use DWARF debug info if available, otherwise use our own unwinder.  */
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, loongarch_dwarf2_reg_to_regnum);
@@ -2237,12 +2236,64 @@ loongarch_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
 /* LoongArch record/replay enumerations and structures.  */
 
+/* The record infrastructure supports the following result values:
+   1. res  < 0: Process record: failed to record execution log.
+   2. res == 0: No failure.
+   3. res  > 0: Process record: inferior program stopped.
+
+   For loongarch we distinguish one additional value, so we use an enum with 4
+   values.  */
+
 enum loongarch_record_result
 {
-  LOONGARCH_RECORD_SUCCESS,
-  LOONGARCH_RECORD_UNSUPPORTED,
-  LOONGARCH_RECORD_UNKNOWN
+  /* Process record: failed to record execution log.  */
+  LOONGARCH_RECORD_FAILURE = -1,
+  /* No failure.  */
+  LOONGARCH_RECORD_SUCCESS = 0,
+  /* Process record does not support instruction $hex at address $hex.
+     Process record: failed to record execution log.  */
+  LOONGARCH_RECORD_UNSUPPORTED = 1,
+  /* Process record: inferior program stopped.  */
+  LOONGARCH_RECORD_UNKNOWN = 2
 };
+
+/* Convert from loongarch_record_result.  */
+
+static inline int
+from_loongarch_record_result (int val)
+{
+  if (val == LOONGARCH_RECORD_FAILURE)
+    return -1;
+
+  if (val == LOONGARCH_RECORD_SUCCESS)
+    return 0;
+
+  if (val == LOONGARCH_RECORD_UNSUPPORTED)
+    {
+      /* After printing the "does not support" message, this is handled the
+	 same as the LOONGARCH_RECORD_FAILURE case.  */
+      return -1;
+    }
+
+  if (val == LOONGARCH_RECORD_UNKNOWN)
+    return 1;
+
+  gdb_assert_not_reached ();
+}
+
+/* Convert to loongarch_record_result.  */
+
+static inline int
+to_loongarch_record_result (int val)
+{
+  if (val > 0)
+    return LOONGARCH_RECORD_UNKNOWN;
+
+  if (val < 0)
+    return LOONGARCH_RECORD_FAILURE;
+
+  return LOONGARCH_RECORD_SUCCESS;
+}
 
 struct loongarch_record_s
 {
@@ -2666,8 +2717,10 @@ loongarch_record_syscall_insn (loongarch_record_s *loongarch_record)
   regcache_raw_read_unsigned (loongarch_record->regcache, LOONGARCH_A7_REGNUM,
 			      &syscall_number);
 
-  return tdep->loongarch_syscall_record (loongarch_record->regcache,
-					 syscall_number);
+  int res = tdep->loongarch_syscall_record (loongarch_record->regcache,
+					    syscall_number);
+
+  return to_loongarch_record_result (res);
 }
 
 /* Decode insns type and invoke its record handler.  */
@@ -2722,23 +2775,20 @@ loongarch_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
   loongarch_record.insn = (uint32_t) loongarch_fetch_instruction (insn_addr);
   ret = loongarch_record_decode_insn_handler (&loongarch_record);
   if (ret == LOONGARCH_RECORD_UNSUPPORTED)
-    {
-      gdb_printf (gdb_stderr,
-		  _("Process record does not support instruction "
-		    "0x%0x at address %s.\n"),
-		  loongarch_record.insn,
-		  paddress (gdbarch, insn_addr));
-      return -1;
-    }
-  if (ret == LOONGARCH_RECORD_SUCCESS)
+    gdb_printf (gdb_stderr,
+		_("Process record does not support instruction "
+		  "0x%0x at address %s.\n"),
+		loongarch_record.insn,
+		paddress (gdbarch, insn_addr));
+  ret = from_loongarch_record_result (ret);
+
+  if (ret == 0)
     {
       /* Record PC registers.  */
       if (record_full_arch_list_add_reg (loongarch_record.regcache,
 					 LOONGARCH_PC_REGNUM))
 	return -1;
 
-      if (record_full_arch_list_add_end ())
-	return -1;
     }
 
   return ret;

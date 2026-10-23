@@ -89,13 +89,13 @@ terminal_supports_styling ()
   /* Windows doesn't by default define $TERM, but can support styles
      regardless.  */
 #ifndef _WIN32
-  if (term == nullptr || strcmp (term, "dumb") == 0)
+  if (term == nullptr || streq (term, "dumb"))
     return false;
 #else
   /* But if they do define $TERM, let us behave the same as on Posix
      platforms, for the benefit of programs which invoke GDB as their
      back-end.  */
-  if (term != nullptr && strcmp (term, "dumb") == 0)
+  if (term != nullptr && streq (term, "dumb"))
     return false;
 #endif
 
@@ -262,9 +262,8 @@ do_show (const char *what, struct ui_file *file,
 	 const char *value)
 {
   cli_style_option *cso = (cli_style_option *) cmd->context ();
-  gdb_puts (_("The "), file);
-  fprintf_styled (file, cso->style (), _("\"%s\" style"), cso->name ());
-  gdb_printf (file, _(" %s is: %s\n"), what, value);
+  gdb_printf (file, _("The %p[\"%s\" style%p] %s is: %s\n"),
+	      cso->style ().ptr (), cso->name (), nullptr, what, value);
 }
 
 /* See cli-style.h.  */
@@ -374,8 +373,8 @@ set_style_enabled  (const char *args, int from_tty, struct cmd_list_element *c)
      appear to support styling, then warn the user.  */
   if (c == set_style_enabled_cmd && cli_styling
       && !terminal_supports_styling ())
-    warning ("The current terminal doesn't support styling.  Styled output "
-	     "might not appear as expected.");
+    warning (_("The current terminal doesn't support styling.  Styled output "
+	       "might not appear as expected."));
 
   /* It is not necessary to flush the source cache here.  The source cache
      tracks whether entries are styled or not.  */
@@ -439,7 +438,7 @@ emojis_ok ()
     return false;
   if (emoji_styling == AUTO_BOOLEAN_TRUE)
     return true;
-  return strcmp (host_charset (), "UTF-8") == 0;
+  return streq (host_charset (), "UTF-8");
 }
 
 /* See cli-style.h.  */

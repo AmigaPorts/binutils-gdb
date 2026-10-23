@@ -23,7 +23,7 @@ standard_testfile
 
 # Compile the test executable.
 if {[build_executable "failed to build" $testfile $srcfile {debug macros}]} {
-    return -1
+    return
 }
 
 # The tests in this file are run multiple times with GDB's styles
@@ -213,7 +213,7 @@ proc run_style_tests { } {
 	set sfield [limited_style string_field variable]
 	set efield [limited_style e_field variable]
 	set evalue [limited_style VALUE_TWO variable]
-	set lhs [limited_style "\\\$$decimal" variable]
+	set lhs [limited_style "${::valnum_re}" variable]
 	gdb_test "print struct_value" \
 	    "$lhs = \{$ifield = 23,.*$sfield = .*,.*$efield = $evalue.*"
 
@@ -343,6 +343,22 @@ proc run_style_tests { } {
 	gdb_test "maint translate-address" \
 	    "abcd:requires argument.*" \
 	    "error prefix"
+
+	# Check styling in the 'skip' related commands.
+	gdb_test "skip -file xxxx.c" \
+	    "File [limited_style xxxx\\.c file] will be skipped when stepping\\."
+	gdb_test "skip -gfile zz*.c" \
+	    "File\\(s\\) [limited_style zz\\*\\.c file] will be skipped when stepping\\."
+	gdb_test "skip -function xxxx" \
+	    "Function [limited_style xxxx function] will be skipped when stepping\\."
+	gdb_test "skip -rfunction zzz.*" \
+	    "Function\\(s\\) [limited_style zzz\\.\\* function] will be skipped when stepping\\."
+	gdb_test "skip function qqq" \
+	    "Function [limited_style qqq function] will be skipped when stepping\\."
+	gdb_test "skip file blah.c" \
+	    "File [limited_style blah\\.c file] will be skipped when stepping\\."
+	gdb_test "skip ttt" \
+	    "Function [limited_style ttt function] will be skipped when stepping\\."
     }
 }
 
@@ -845,7 +861,7 @@ proc previous_line_is_ok { str } {
 
     # Create a copy of STR with all the '\033' characters removed.
     # Then compare string lengths to get a count of the '\033'
-    # charactes present in STR.
+    # characters present in STR.
     regsub -all "\033" $str {} stripped
     set count [expr {[string length $str] - [string length $stripped]}]
 
@@ -1044,7 +1060,30 @@ proc test_finish_styling {} {
 	return
     }
 
-    gdb_test "finish" "Value returned is [style \\\$$::decimal variable] = 0"
+    gdb_test "finish" "Value returned is [style ${::valnum_re} variable] = 0"
+}
+
+# Test some logging styling.
+proc test_logging_styling {} {
+    with_ansi_styling_terminal {
+	clean_restart
+    }
+
+    set filename [standard_output_file logging.txt]
+    gdb_test_no_output "set logging file $filename" \
+	"set logging file"
+    gdb_test "set logging enabled on" \
+	[multi_line \
+	     "Copying output to [style $filename file]\\." \
+	     "Copying debug output to [style $filename file]\\."] \
+	"logging filenames are styled"
+    gdb_test "set logging enabled off" \
+	"Done logging to [style $filename file]\\." \
+	"filename styled when logging disabled"
+
+    # Test that error messages are styled.
+    gdb_test "list" \
+	"No symbol table is loaded\\.  Use the \"[style file command]\" command\\."
 }
 
 # Check to see if the Python styling of disassembler output is
@@ -1093,3 +1132,4 @@ test_pagination_cmd_after_quit_styling
 test_pagination_prompt_styling
 test_pagination_continue_styling
 test_finish_styling
+test_logging_styling

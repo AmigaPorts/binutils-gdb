@@ -50,6 +50,7 @@
 #include "x86-tdep.h"
 #include "dwarf2/frame.h"
 #include "frame-unwind.h"
+#include "cli/cli-style.h"
 
 /* The syscall's XML filename for i386.  */
 #define XML_SYSCALL_FILENAME_AMD64 "syscalls/amd64-linux.xml"
@@ -206,7 +207,7 @@ amd64_linux_sigtramp_p (const frame_info_ptr &this_frame)
   if (name == NULL || strstr (name, "sigaction") != NULL)
     return (amd64_linux_sigtramp_start (this_frame) != 0);
 
-  return (strcmp ("__restore_rt", name) == 0);
+  return (streq ("__restore_rt", name));
 }
 
 /* Offset to struct sigcontext in ucontext, from <asm/ucontext.h>.  */
@@ -292,7 +293,7 @@ static int amd64_linux_sc_reg_offset[] =
   -1				/* %gs */
 };
 
-static int
+static bool
 amd64_linux_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 				 const struct reggroup *group)
 {
@@ -1590,9 +1591,6 @@ amd64_linux_record_signal (struct gdbarch *gdbarch,
 				     + AMD64_LINUX_frame_size))
     return -1;
 
-  if (record_full_arch_list_add_end ())
-    return -1;
-
   return 0;
 }
 
@@ -1741,7 +1739,7 @@ const gdb_byte amd64_dtrace_disable_probe_sequence[] = {
 /* Implementation of `gdbarch_dtrace_probe_is_enabled', as defined in
    gdbarch.h.  */
 
-static int
+static bool
 amd64_dtrace_probe_is_enabled (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
   gdb_byte buf[5];
@@ -1868,8 +1866,8 @@ amd64_linux_lam_untag_mask ()
       errno = 0;
       unsigned long long result = std::strtoul (start, &endptr, 0);
       if (errno != 0 || endptr == start)
-	error (_("Failed to parse untag_mask from file %s."),
-	       std::string (filename).c_str ());
+	error (_("Failed to parse untag_mask from file %ps."),
+	       styled_string (file_name_style.style (), filename.c_str ()));
 
       return result;
     }

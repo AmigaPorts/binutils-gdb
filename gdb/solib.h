@@ -62,12 +62,7 @@ struct solib : intrusive_list_node<solib>
 
      OPS is the solib_ops implementation providing this solib.  */
   explicit solib (lm_info_up lm_info, std::string original_name,
-		  std::string name, const solib_ops &ops)
-    : lm_info (std::move (lm_info)),
-      original_name (std::move (original_name)),
-      name (std::move (name)),
-      m_ops (&ops)
-  {}
+		  std::string name, const solib_ops &ops);
 
   /* Return the solib_ops implementation providing this solib.  */
   const solib_ops &ops () const
@@ -297,8 +292,7 @@ protected:
 using solib_ops_up = std::unique_ptr<solib_ops>;
 
 /* Find main executable binary file.  */
-extern gdb::unique_xmalloc_ptr<char> exec_file_find (const char *in_pathname,
-						     int *fd);
+extern gdb::unique_xmalloc_ptr<char> exec_file_find (const char *in_pathname);
 
 /* Find shared library binary file.  */
 extern gdb::unique_xmalloc_ptr<char> solib_find (const char *in_pathname,
@@ -318,7 +312,11 @@ extern void clear_solib (program_space *pspace);
 /* Called to add symbols from a shared library to gdb's symbol table.  */
 
 extern void solib_add (const char *, int, int);
-extern bool solib_read_symbols (solib &, symfile_add_flags);
+
+/* Read in symbols for shared object SO.  If SYMFILE_VERBOSE is set in FLAGS,
+   be chatty about it.  Return true if any symbols were actually loaded.  */
+
+extern bool solib_read_symbols (solib &so, symfile_add_flags flags);
 
 /* Function to be called when the inferior starts up, to discover the
    names of shared libraries that are dynamically linked, the base

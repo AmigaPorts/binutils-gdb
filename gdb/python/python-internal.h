@@ -57,8 +57,12 @@
    double quotes.  On case-insensitive filesystems, this prevents us
    from including our python/python.h header file.  */
 #include <Python.h>
+#ifdef Py_LIMITED_API
+#include "python-limited-api-missing.h"
+#endif
 #include <frameobject.h>
 #include "py-ref.h"
+#include "py-obj-type.h"
 
 static_assert (PY_VERSION_HEX >= 0x03040000);
 
@@ -87,11 +91,11 @@ static_assert (PY_VERSION_HEX >= 0x03040000);
 #define GDB_PY_LL_ARG "L"
 #define GDB_PY_LLU_ARG "K"
 #if PY_VERSION_HEX >= 0x03060000
-typedef long long gdb_py_longest;
-typedef unsigned long long gdb_py_ulongest;
+using gdb_py_longest = long long;
+using gdb_py_ulongest = unsigned long long;
 #else
-typedef PY_LONG_LONG gdb_py_longest;
-typedef unsigned PY_LONG_LONG gdb_py_ulongest;
+using gdb_py_longest = PY_LONG_LONG;
+using gdb_py_ulongest = unsigned PY_LONG_LONG;
 #endif
 #define gdb_py_long_as_ulongest PyLong_AsUnsignedLongLong
 #define gdb_py_long_as_long_and_overflow PyLong_AsLongLongAndOverflow
@@ -100,12 +104,21 @@ typedef unsigned PY_LONG_LONG gdb_py_ulongest;
 
 #define GDB_PY_LL_ARG "l"
 #define GDB_PY_LLU_ARG "k"
-typedef long gdb_py_longest;
-typedef unsigned long gdb_py_ulongest;
+using gdb_py_longest = long;
+using gdb_py_ulongest = unsigned long;
 #define gdb_py_long_as_ulongest PyLong_AsUnsignedLong
 #define gdb_py_long_as_long_and_overflow PyLong_AsLongAndOverflow
 
 #endif /* HAVE_LONG_LONG */
+
+#if PY_VERSION_HEX < 0x030a0000
+static inline PyObject *
+Py_NewRef (PyObject *obj)
+{
+  Py_INCREF (obj);
+  return obj;
+}
+#endif
 
 /* A template variable holding the format character (as for
    Py_BuildValue) for a given type.  */
@@ -317,7 +330,7 @@ struct program_space;
 struct bpstat;
 struct inferior;
 
-extern int gdb_python_initialized;
+extern bool gdb_python_initialized;
 
 extern PyObject *gdb_module;
 extern PyObject *gdb_python_module;
@@ -341,10 +354,8 @@ extern PyTypeObject thread_object_type;
 
 extern bool gdbpy_breakpoint_init_breakpoint_type ();
 
-struct gdbpy_breakpoint_object
+struct gdbpy_breakpoint_object : public PyObject
 {
-  PyObject_HEAD
-
   /* The breakpoint number according to gdb.  */
   int number;
 
@@ -355,6 +366,8 @@ struct gdbpy_breakpoint_object
   /* 1 is this is a FinishBreakpoint object, 0 otherwise.  */
   int is_finish_bp;
 };
+
+static_assert (gdb::is_python_allocatable_v<gdbpy_breakpoint_object>);
 
 /* Require that BREAKPOINT be a valid breakpoint ID; throw a Python
    exception if it is invalid.  */
@@ -384,22 +397,27 @@ struct gdbpy_breakpoint_object
 extern gdbpy_breakpoint_object *bppy_pending_object;
 
 
-struct thread_object
+struct thread_object : public gdbpy_dict_wrapper
 {
-  PyObject_HEAD
-
   /* The thread we represent.  */
   struct thread_info *thread;
 
   /* The Inferior object to which this thread belongs.  */
   PyObject *inf_obj;
-
-  /* Dictionary holding user-added attributes.  This is the __dict__
-     attribute of the object.  */
-  PyObject *dict;
 };
 
-struct inferior_object;
+using thread_map_t
+  = gdb::unordered_map<thread_info *, gdbpy_ref<thread_object>>;
+
+struct inferior_object : public gdbpy_dict_wrapper
+{
+  /* The inferior we represent.  */
+  struct inferior *inferior;
+
+  /* thread_object instances under this inferior.  This owns a
+     reference to each object it contains.  */
+  thread_map_t *threads;
+};
 
 extern struct cmd_list_element *set_python_list;
 extern struct cmd_list_element *show_python_list;
@@ -483,15 +501,15 @@ gdb::unique_xmalloc_ptr<char> gdbpy_parse_command_name
 PyObject *gdbpy_register_tui_window (PyObject *self, PyObject *args,
 				     PyObject *kw);
 
-PyObject *symtab_and_line_to_sal_object (struct symtab_and_line sal);
-PyObject *symtab_to_symtab_object (struct symtab *symtab);
-PyObject *symbol_to_symbol_object (struct symbol *sym);
-PyObject *block_to_block_object (const struct block *block,
-				 struct objfile *objfile);
-PyObject *value_to_value_object (struct value *v);
-PyObject *type_to_type_object (struct type *);
-PyObject *frame_info_to_frame_object (const frame_info_ptr &frame);
-PyObject *symtab_to_linetable_object (PyObject *symtab);
+gdbpy_ref<> symtab_and_line_to_sal_object (struct symtab_and_line sal);
+gdbpy_ref<> symtab_to_symtab_object (struct symtab *symtab);
+gdbpy_ref<> symbol_to_symbol_object (struct symbol *sym);
+gdbpy_ref<> block_to_block_object (const struct block *block,
+				   struct objfile *objfile);
+gdbpy_ref<> value_to_value_object (struct value *v);
+gdbpy_ref<> type_to_type_object (struct type *);
+gdbpy_ref<> frame_info_to_frame_object (const frame_info_ptr &frame);
+gdbpy_ref<> symtab_to_linetable_object (PyObject *symtab);
 gdbpy_ref<> pspace_to_pspace_object (struct program_space *);
 PyObject *pspy_get_printers (PyObject *, void *);
 PyObject *pspy_get_frame_filters (PyObject *, void *);
@@ -505,7 +523,7 @@ PyObject *objfpy_get_frame_unwinders (PyObject *, void *);
 PyObject *objfpy_get_xmethods (PyObject *, void *);
 PyObject *gdbpy_lookup_objfile (PyObject *self, PyObject *args, PyObject *kw);
 
-PyObject *gdbarch_to_arch_object (struct gdbarch *gdbarch);
+gdbpy_ref<> gdbarch_to_arch_object (struct gdbarch *gdbarch);
 PyObject *gdbpy_all_architecture_names (PyObject *self, PyObject *args);
 
 PyObject *gdbpy_new_register_descriptor_iterator (struct gdbarch *gdbarch,
@@ -604,7 +622,9 @@ class gdbpy_initialize_file
 
      There is no error return in this case.  This function is only called
      when GDB is already shutting down.  The function should make a best
-     effort to clean up, and then return.  */
+     effort to clean up, and then return.
+
+     The GIL will be held while calling the finalizers.  */
 
   using gdbpy_finalize_file_ftype = void (*) (void);
 
@@ -927,7 +947,11 @@ gdb::unique_xmalloc_ptr<char> unicode_to_target_string (PyObject *unicode_str);
 gdb::unique_xmalloc_ptr<char> python_string_to_target_string (PyObject *obj);
 gdbpy_ref<> python_string_to_target_python_string (PyObject *obj);
 gdb::unique_xmalloc_ptr<char> python_string_to_host_string (PyObject *obj);
-gdbpy_ref<> host_string_to_python_string (const char *str);
+
+/* Convert a host string STR to a python string.  */
+
+extern gdbpy_ref<> host_string_to_python_string (std::string_view str);
+
 int gdbpy_is_string (PyObject *obj);
 gdb::unique_xmalloc_ptr<char> gdbpy_obj_to_string (PyObject *obj);
 
@@ -989,7 +1013,9 @@ gdbpy_ref<> gdb_py_object_from_longest (LONGEST l);
 gdbpy_ref<> gdb_py_object_from_ulongest (ULONGEST l);
 int gdb_py_int_as_long (PyObject *, long *);
 
-PyObject *gdb_py_generic_dict (PyObject *self, void *closure);
+PyObject *gdb_py_generic_dict_getter (PyObject *self, void *closure);
+PyObject *gdb_py_generic_getattro (PyObject *self, PyObject *attr);
+int gdb_py_generic_setattro (PyObject *self, PyObject *attr, PyObject *value);
 
 int gdb_pymodule_addobject (PyObject *mod, const char *name,
 			    PyObject *object);
@@ -1021,7 +1047,7 @@ struct Py_buffer_deleter
 };
 
 /* A unique_ptr specialization for Py_buffer.  */
-typedef std::unique_ptr<Py_buffer, Py_buffer_deleter> Py_buffer_up;
+using Py_buffer_up = std::unique_ptr<Py_buffer, Py_buffer_deleter>;
 
 /* Parse a register number from PYO_REG_ID and place the register number
    into *REG_NUM.  The register is a register for GDBARCH.
@@ -1106,14 +1132,18 @@ gdbpy_type_ready (PyTypeObject *type, PyObject *mod = nullptr)
 {
   if (PyType_Ready (type) < 0)
     return -1;
+  const auto &tp_name = gdb_py_tp_name (type);
+  std::string_view tp_name_s = tp_name;
   if (mod == nullptr)
     {
-      gdb_assert (startswith (type->tp_name, "gdb."));
+      gdb_assert (startswith (tp_name_s, "gdb."));
       mod = gdb_module;
     }
-  const char *dot = strrchr (type->tp_name, '.');
-  gdb_assert (dot != nullptr);
-  return gdb_pymodule_addobject (mod, dot + 1, (PyObject *) type);
+  const auto pos_dot = tp_name_s.find_last_of ('.');
+  gdb_assert (pos_dot != tp_name_s.npos);
+  return gdb_pymodule_addobject (mod,
+				 tp_name_s.substr (pos_dot + 1).data (),
+				 (PyObject *) type);
 }
 
 /* Poison PyType_Ready.  Only gdbpy_type_ready should be used, to
@@ -1157,6 +1187,9 @@ public:
   using obj_type = typename Storage::obj_type;
   using val_type = typename Storage::val_type;
 
+  static_assert(std::is_base_of<PyObject, obj_type>::value,
+		"obj_type must be a subclass of PyObject");
+
   /* Register Python object OBJ as being "owned" by OWNER.  When OWNER is
      about to be freed, OBJ will be invalidated.  */
   template <typename O>
@@ -1174,14 +1207,13 @@ public:
   }
 
   /* Lookup pre-existing Python object for given VAL.  Return such object
-     if found, otherwise return NULL.  This method always returns new
-     reference.  */
+     if found, otherwise return NULL.  */
   template <typename O>
-  obj_type *lookup (O *owner, val_type *val) const
+  gdbpy_ref<> lookup (O *owner, val_type *val) const
   {
     obj_type *obj = get_storage (owner)->lookup (val);
-    Py_XINCREF (obj);
-    return obj;
+    Py_XINCREF (static_cast<PyObject *> (obj));
+    return gdbpy_ref<> (obj);
   }
 
 private:
@@ -1192,13 +1224,7 @@ private:
   template<typename O>
   Storage *get_storage (O *owner, const StorageKey<O> &key) const
   {
-    Storage *r = key.get (owner);
-    if (r == nullptr)
-      {
-	r = new Storage();
-	key.set (owner, r);
-      }
-    return r;
+    return &key.try_emplace (owner);
   }
 
   Storage *get_storage (struct objfile* objf) const
@@ -1318,5 +1344,47 @@ public:
 protected:
   gdb::unordered_map<val_type *, obj_type *> m_objects;
 };
+
+extern int eval_python_command (const char *command, int start_symbol,
+				const char *filename = nullptr);
+
+/* The following four functions are refcount-safe wrappers around
+   Py_RETURN_{NONE,TRUE,FALSE,NOTIMPLEMENTED}.  */
+
+static inline gdbpy_ref<>
+py_none ()
+{
+  auto f = [] { Py_RETURN_NONE; };
+  return gdbpy_ref<> (f ());
+}
+
+static inline gdbpy_ref<>
+py_true ()
+{
+  auto f = [] { Py_RETURN_TRUE; };
+  return gdbpy_ref<> (f ());
+}
+
+static inline gdbpy_ref<>
+py_false ()
+{
+  auto f = [] { Py_RETURN_FALSE; };
+  return gdbpy_ref<> (f ());
+}
+
+static inline gdbpy_ref<>
+py_notimplemented ()
+{
+  auto f = [] { Py_RETURN_NOTIMPLEMENTED; };
+  return gdbpy_ref<> (f ());
+}
+
+/* Undefine these to enforce using the refcount-safe wrappers py_none, py_true,
+   py_false and py_notimplemented.  */
+
+#undef Py_RETURN_NONE
+#undef Py_RETURN_TRUE
+#undef Py_RETURN_FALSE
+#undef Py_RETURN_NOTIMPLEMENTED
 
 #endif /* GDB_PYTHON_PYTHON_INTERNAL_H */

@@ -23,6 +23,8 @@
 #include "gdbsupport/filestuff.h"
 #include <vector>
 #include <string>
+#include "cli/cli-style.h"
+#include "ui-out.h"
 
 /* Debugging flag.  */
 static bool debug_xml;
@@ -229,7 +231,7 @@ xml_find_attribute (std::vector<gdb_xml_value> &attributes,
 		    const char *name)
 {
   for (gdb_xml_value &value : attributes)
-    if (strcmp (value.name, name) == 0)
+    if (streq (value.name, name))
       return &value;
 
   return NULL;
@@ -270,7 +272,7 @@ gdb_xml_parser::start_element (const XML_Char *name,
   seen = 1;
   for (element = scope.elements; element && element->name;
        element++, seen <<= 1)
-    if (strcmp (element->name, name) == 0)
+    if (streq (element->name, name))
       break;
 
   if (element == NULL || element->name == NULL)
@@ -307,7 +309,7 @@ gdb_xml_parser::start_element (const XML_Char *name,
       void *parsed_value;
 
       for (p = attrs; *p != NULL; p += 2)
-	if (!strcmp (attribute->name, p[0]))
+	if (streq (attribute->name, p[0]))
 	  {
 	    val = p[1];
 	    break;
@@ -352,7 +354,7 @@ gdb_xml_parser::start_element (const XML_Char *name,
 	  for (attribute = element->attributes;
 	       attribute != NULL && attribute->name != NULL;
 	       attribute++)
-	    if (strcmp (attribute->name, *p) == 0)
+	    if (streq (attribute->name, *p))
 	      break;
 
 	  if (attribute == NULL || attribute->name == NULL)
@@ -914,7 +916,7 @@ fetch_xml_builtin (const char *filename)
   const char *const (*p)[2];
 
   for (p = xml_builtin; (*p)[0]; p++)
-    if (strcmp ((*p)[0], filename) == 0)
+    if (streq ((*p)[0], filename))
       return (*p)[1];
 
   return NULL;
@@ -990,7 +992,8 @@ xml_fetch_content_from_file (const char *filename, const char *dirname)
   if (fread (text.data (), 1, len, file.get ()) != len
       || ferror (file.get ()))
     {
-      warning (_("Read error from \"%s\""), filename);
+      warning (_("Read error from \"%ps\""),
+	       styled_string (file_name_style.style (), filename));
       return {};
     }
 

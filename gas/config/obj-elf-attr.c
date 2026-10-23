@@ -129,7 +129,8 @@ oav1_attr_info_init (void)
 void
 oav1_attr_info_exit (void)
 {
-  oav1_attr_info_free (recorded_attributes);
+  if (ENABLE_LEAK_CHECK)
+    oav1_attr_info_free (recorded_attributes);
 }
 
 /* Record that we have seen an explicit specification of attribute TAG
@@ -1062,8 +1063,7 @@ obj_attr_v2_record (obj_attr_tag_t key, arg_t *arg_val)
 
   /* Go over the list of already recorded attributes and check for
      redefinitions (which are forbidden).  */
-  bool skip_recording = false;
-  obj_attr_v2_t *recorded_attr = bfd_obj_attr_v2_find_by_tag
+  const obj_attr_v2_t *recorded_attr = bfd_obj_attr_v2_find_by_tag
     (elf_obj_attr_subsections (stdoutput).last, obj_attr->tag, false);
   if (recorded_attr != NULL)
     {
@@ -1073,11 +1073,7 @@ obj_attr_v2_record (obj_attr_tag_t key, arg_t *arg_val)
 	      && strcmp (recorded_attr->val.string, obj_attr->val.string) != 0))
 	as_bad (_("attribute '%" PRIu64 "' cannot be redefined"),
 		recorded_attr->tag);
-      skip_recording = true;
-    }
 
-  if (skip_recording)
-    {
       if (arg_val->vtype == VALUE_STRING)
 	free ((void *) obj_attr->val.string);
       free (obj_attr);

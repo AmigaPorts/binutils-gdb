@@ -45,7 +45,7 @@ if { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable \
 clean_restart ${::testfile}
 
 if {![runto_main]} {
-    return 0
+    return
 }
 
 gdb_test "break [gdb_get_line_number "first breakpoint here"]" \
@@ -64,7 +64,7 @@ for { set r 0 } { $r < $nr_regs } { incr r } {
 	".. = \\{$r, $r.125, $r.25, $r.375, $r.5, $r.625, $r.75, $r.875\\}.*" \
 	"check float contents of %ymm$r"
     gdb_test "print \$ymm$r.v32_int8" \
-	".. = \\{(-?\[0-9\]+, ){31}-?\[0-9\]+\\}.*" \
+	".. = \\{(-?${::decimal}, ){31}-?${::decimal}\\}.*" \
 	"check int8 contents of %ymm$r"
 }
 

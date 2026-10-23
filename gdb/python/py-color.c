@@ -37,13 +37,13 @@ static struct {
 };
 
 /* A color.  */
-struct colorpy_object
+struct colorpy_object : public PyObject
 {
-  PyObject_HEAD
-
   /* Underlying value.  */
   ui_file_style::color color;
 };
+
+static_assert (gdb::is_python_allocatable_v<colorpy_object>);
 
 extern PyTypeObject colorpy_object_type;
 
@@ -58,7 +58,7 @@ create_color_object (const ui_file_style::color &color)
     return nullptr;
 
   color_obj->color = color;
-  return gdbpy_ref<> ((PyObject *) color_obj.release ());
+  return color_obj;
 }
 
 /* See py-color.h.  */
@@ -110,25 +110,24 @@ get_attr (PyObject *obj, PyObject *attr_name)
   if (color.is_direct ()
       && !PyUnicode_CompareWithASCIIString (attr_name, "components"))
     {
-      uint8_t rgb[3];
-      color.get_rgb (rgb);
-
-      gdbpy_ref<> rgb_objects[3];
-      for (int i = 0; i < 3; ++i)
+      rgb_color rgb = color.get_rgb ();
+      std::array<gdbpy_ref<>, rgb.size ()> rgb_objects;
+      for (auto i = 0u; i < rgb_objects.size (); ++i)
 	{
 	  rgb_objects[i] = gdb_py_object_from_ulongest (rgb[i]);
 	  if (rgb_objects[i] == nullptr)
 	    return nullptr;
 	}
 
-      PyObject *comp = PyTuple_New (3);
+      gdbpy_ref<> comp (PyTuple_New (3));
       if (comp == nullptr)
 	return nullptr;
 
-      for (int i = 0; i < 3; ++i)
-	PyTuple_SET_ITEM (comp, i, rgb_objects[i].release ());
+      for (auto i = 0u; i < rgb_objects.size (); ++i)
+	if (PyTuple_SetItem (comp.get (), i, rgb_objects[i].release ()) < 0)
+	  return nullptr;
 
-      return comp;
+      return comp.release ();
     }
 
   return PyObject_GenericGetAttr (obj, attr_name);

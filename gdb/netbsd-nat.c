@@ -155,7 +155,7 @@ nbsd_nat_target::post_attach (int pid)
 void
 nbsd_nat_target::update_thread_list ()
 {
-  delete_exited_threads ();
+  delete_exited_threads (this);
 }
 
 /* Convert PTID to a string.  */
@@ -209,12 +209,10 @@ nbsd_kinfo_get_vmmap (pid_t pid, size_t *size)
 }
 
 /* Iterate over all the memory regions in the current inferior,
-   calling FUNC for each memory region.  OBFD is passed as the last
-   argument to FUNC.  */
+   calling FUNC for each memory region.  */
 
-int
-nbsd_nat_target::find_memory_regions (find_memory_region_ftype func,
-				      void *data)
+bool
+nbsd_nat_target::find_memory_regions (find_memory_region_ftype func)
 {
   pid_t pid = inferior_ptid.pid ();
 
@@ -260,9 +258,9 @@ nbsd_nat_target::find_memory_regions (find_memory_region_ftype func,
 	 Pass MODIFIED as true, we do not know the real modification state.  */
       func (kve->kve_start, size, kve->kve_protection & KVME_PROT_READ,
 	    kve->kve_protection & KVME_PROT_WRITE,
-	    kve->kve_protection & KVME_PROT_EXEC, true, false, data);
+	    kve->kve_protection & KVME_PROT_EXEC, true, false, false);
     }
-  return 0;
+  return true;
 }
 
 /* Implement the "info_proc" target_ops method.  */

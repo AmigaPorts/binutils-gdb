@@ -20,7 +20,10 @@
 
 proc run_elf_list_test { name suffix opts readelf_opts readelf_pipe } {
     global READELF
-    global srcdir subdir
+    global srcdir subdir runtests
+    if ![runtest_file_p $runtests $name] then {
+	return
+    }
     set testname "elf $name list"
     set file $srcdir/$subdir/$name
     gas_run ${name}.s "$opts -o dump.o" ">&dump.out"
@@ -185,15 +188,18 @@ if { [is_elf_format] } then {
 	rx-*-* { }
 	loongarch*-*-* { }
 	default {
-	    # The next test can fail if the target does not convert fixups
+	    # The following tests can fail if the target does not convert fixups
 	    # against ordinary symbols into relocations against section symbols.
-	    # This is usually revealed by the error message:
-	    #  symbol `sym' required but not present
 	    setup_xfail "m681*-*-*" "m68hc*-*-*" "xgate-*-*" "vax-*-*" "avr-*-*"
 	    run_dump_test redef
 	    run_dump_test equ-reloc
+	    setup_xfail "m681*-*-*" "m68hc*-*-*" "xgate-*-*" "vax-*-*" "avr-*-*"
+	    run_dump_test "reloc-section-sym-all"
+	    setup_xfail "m681*-*-*" "m68hc*-*-*" "xgate-*-*" "avr-*-*"
+	    run_dump_test "reloc-section-sym-internal"
 	}
     }
+    run_dump_test "reloc-section-sym-none"
     run_dump_test "pseudo"
     run_dump_test "text-prev" $dump_opts
     run_dump_test "text-subsect" $dump_opts
@@ -234,6 +240,7 @@ if { [is_elf_format] } then {
 	# The alpha port uses .set for state, e.g. nomacro.
 	run_dump_test "symtab"
     }
+    run_dump_test "visibility"
     run_dump_test "symver"
     run_dump_test "pr21661"
     run_dump_test "pr14891"
@@ -361,6 +368,8 @@ if { [is_elf_format] } then {
 
     run_list_test "line2" -I${srcdir}/$subdir
 
+    run_list_test "equ-rept"
+
     run_dump_test "pr25917"
     run_dump_test "bss"
     # Some targets treat .bss similar to .lcomm.
@@ -408,5 +417,6 @@ if { [is_elf_format] } then {
 
     run_dump_test "bignums" $dump_opts
     run_dump_test "section-symbol-redef"
+    run_dump_test "section-symbol-redef-2"
     run_dump_test "pr27228"
 }

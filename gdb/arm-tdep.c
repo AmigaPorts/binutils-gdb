@@ -51,7 +51,6 @@
 #include "arch/arm.h"
 #include "arch/arm-get-next-pcs.h"
 #include "arm-tdep.h"
-#include "sim/sim-arm.h"
 
 #include "elf-bfd.h"
 #include "coff/internal.h"
@@ -96,7 +95,7 @@ struct arm_mapping_symbol
   { return this->value < other.value; }
 };
 
-typedef std::vector<arm_mapping_symbol> arm_mapping_symbol_vec;
+using arm_mapping_symbol_vec = std::vector<arm_mapping_symbol>;
 
 struct arm_per_bfd
 {
@@ -735,9 +734,9 @@ arm_pc_is_thumb (struct gdbarch *gdbarch, CORE_ADDR memaddr)
     return 1;
 
   /* If the user wants to override the symbol table, let him.  */
-  if (strcmp (arm_force_mode_string, "arm") == 0)
+  if (streq (arm_force_mode_string, "arm"))
     return 0;
-  if (strcmp (arm_force_mode_string, "thumb") == 0)
+  if (streq (arm_force_mode_string, "thumb"))
     return 1;
 
   /* ARM v6-M and v7-M are always in Thumb mode.  */
@@ -755,9 +754,9 @@ arm_pc_is_thumb (struct gdbarch *gdbarch, CORE_ADDR memaddr)
     return (MSYMBOL_IS_SPECIAL (sym.minsym));
 
   /* If the user wants to override the fallback mode, let them.  */
-  if (strcmp (arm_fallback_mode_string, "arm") == 0)
+  if (streq (arm_fallback_mode_string, "arm"))
     return 0;
-  if (strcmp (arm_fallback_mode_string, "thumb") == 0)
+  if (streq (arm_fallback_mode_string, "thumb"))
     return 1;
 
   /* If we couldn't find any symbol, but we're talking to a running
@@ -2531,7 +2530,7 @@ arm_obj_section_from_vma (struct objfile *objfile, bfd_vma vma)
    retrieval by the arm_find_exidx_entry routine.  */
 
 static void
-arm_exidx_new_objfile (struct objfile *objfile)
+arm_exidx_new_objfile (struct objfile &objfile)
 {
   struct arm_exidx_data *data;
   asection *exidx, *extab;
@@ -2539,11 +2538,11 @@ arm_exidx_new_objfile (struct objfile *objfile)
   LONGEST i;
 
   /* If we've already touched this file, do nothing.  */
-  if (arm_exidx_data_key.get (objfile->obfd.get ()) != nullptr)
+  if (arm_exidx_data_key.get (objfile.obfd.get ()) != nullptr)
     return;
 
   /* Read contents of exception table and index.  */
-  exidx = bfd_get_section_by_name (objfile->obfd.get (),
+  exidx = bfd_get_section_by_name (objfile.obfd.get (),
 				   ELF_STRING_ARM_unwind);
   gdb::byte_vector exidx_data;
   if (exidx)
@@ -2551,35 +2550,35 @@ arm_exidx_new_objfile (struct objfile *objfile)
       exidx_vma = bfd_section_vma (exidx);
       exidx_data.resize (bfd_section_size (exidx));
 
-      if (!bfd_get_section_contents (objfile->obfd.get (), exidx,
+      if (!bfd_get_section_contents (objfile.obfd.get (), exidx,
 				     exidx_data.data (), 0,
 				     exidx_data.size ()))
 	return;
     }
 
-  extab = bfd_get_section_by_name (objfile->obfd.get (), ".ARM.extab");
+  extab = bfd_get_section_by_name (objfile.obfd.get (), ".ARM.extab");
   gdb::byte_vector extab_data;
   if (extab)
     {
       extab_vma = bfd_section_vma (extab);
       extab_data.resize (bfd_section_size (extab));
 
-      if (!bfd_get_section_contents (objfile->obfd.get (), extab,
+      if (!bfd_get_section_contents (objfile.obfd.get (), extab,
 				     extab_data.data (), 0,
 				     extab_data.size ()))
 	return;
     }
 
   /* Allocate exception table data structure.  */
-  data = arm_exidx_data_key.emplace (objfile->obfd.get ());
-  data->section_maps.resize (objfile->obfd->section_count);
+  data = &arm_exidx_data_key.emplace (objfile.obfd.get ());
+  data->section_maps.resize (objfile.obfd->section_count);
 
   /* Fill in exception table.  */
   for (i = 0; i < exidx_data.size () / 8; i++)
     {
       struct arm_exidx_entry new_exidx_entry;
-      bfd_vma idx = bfd_h_get_32 (objfile->obfd, exidx_data.data () + i * 8);
-      bfd_vma val = bfd_h_get_32 (objfile->obfd,
+      bfd_vma idx = bfd_h_get_32 (objfile.obfd, exidx_data.data () + i * 8);
+      bfd_vma val = bfd_h_get_32 (objfile.obfd,
 				  exidx_data.data () + i * 8 + 4);
       bfd_vma addr = 0, word = 0;
       int n_bytes = 0, n_words = 0;
@@ -2591,7 +2590,7 @@ arm_exidx_new_objfile (struct objfile *objfile)
       idx += exidx_vma + i * 8;
 
       /* Find section containing function and compute section offset.  */
-      sec = arm_obj_section_from_vma (objfile, idx);
+      sec = arm_obj_section_from_vma (&objfile, idx);
       if (sec == NULL)
 	continue;
       idx -= bfd_section_vma (sec->the_bfd_section);
@@ -2616,7 +2615,7 @@ arm_exidx_new_objfile (struct objfile *objfile)
 
 	  if (addr >= extab_vma && addr + 4 <= extab_vma + extab_data.size ())
 	    {
-	      word = bfd_h_get_32 (objfile->obfd,
+	      word = bfd_h_get_32 (objfile.obfd,
 				   extab_data.data () + addr - extab_vma);
 	      addr += 4;
 
@@ -2644,7 +2643,7 @@ arm_exidx_new_objfile (struct objfile *objfile)
 
 		  /* Check whether we've got one of the variants of the
 		     GNU personality routines.  */
-		  pers_sec = arm_obj_section_from_vma (objfile, pers);
+		  pers_sec = arm_obj_section_from_vma (&objfile, pers);
 		  if (pers_sec)
 		    {
 		      static const char *personality[] =
@@ -2661,7 +2660,7 @@ arm_exidx_new_objfile (struct objfile *objfile)
 
 		      for (k = 0; personality[k]; k++)
 			if (lookup_minimal_symbol_by_pc_name
-			      (pc, personality[k], objfile))
+			      (pc, personality[k], &objfile))
 			  {
 			    gnu_personality = 1;
 			    break;
@@ -2674,7 +2673,7 @@ arm_exidx_new_objfile (struct objfile *objfile)
 		  if (gnu_personality
 		      && addr + 4 <= extab_vma + extab_data.size ())
 		    {
-		      word = bfd_h_get_32 (objfile->obfd,
+		      word = bfd_h_get_32 (objfile.obfd,
 					   (extab_data.data ()
 					    + addr - extab_vma));
 		      addr += 4;
@@ -2697,7 +2696,7 @@ arm_exidx_new_objfile (struct objfile *objfile)
       if (n_bytes || n_words)
 	{
 	  gdb_byte *p = entry
-	    = (gdb_byte *) obstack_alloc (&objfile->per_bfd->storage_obstack,
+	    = (gdb_byte *) obstack_alloc (&objfile.per_bfd->storage_obstack,
 					  n_bytes + n_words * 4 + 1);
 
 	  while (n_bytes--)
@@ -2705,7 +2704,7 @@ arm_exidx_new_objfile (struct objfile *objfile)
 
 	  while (n_words--)
 	    {
-	      word = bfd_h_get_32 (objfile->obfd,
+	      word = bfd_h_get_32 (objfile.obfd,
 				   extab_data.data () + addr - extab_vma);
 	      addr += 4;
 
@@ -3263,10 +3262,10 @@ arm_epilogue_frame_prev_register (const frame_info_ptr &this_frame,
   return arm_prologue_prev_register (this_frame, this_cache, regnum);
 }
 
-static int arm_stack_frame_destroyed_p_1 (struct gdbarch *gdbarch,
-					  CORE_ADDR pc);
-static int thumb_stack_frame_destroyed_p (struct gdbarch *gdbarch,
-					  CORE_ADDR pc);
+static bool arm_stack_frame_destroyed_p_1 (struct gdbarch *gdbarch,
+					   CORE_ADDR pc);
+static bool thumb_stack_frame_destroyed_p (struct gdbarch *gdbarch,
+					   CORE_ADDR pc);
 
 /* Implementation of function hook 'sniffer' in
    'struct frame_uwnind' for epilogue unwinder.  */
@@ -4127,18 +4126,19 @@ arm_dwarf2_prev_register (const frame_info_ptr &this_frame, void **this_cache,
 
 /* Implement the stack_frame_destroyed_p gdbarch method.  */
 
-static int
+static bool
 thumb_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   enum bfd_endian byte_order_for_code = gdbarch_byte_order_for_code (gdbarch);
   unsigned int insn, insn2;
-  int found_return = 0, found_stack_adjust = 0;
+  int found_return = 0;
+  bool found_stack_adjust = false;
   CORE_ADDR func_start, func_end;
   CORE_ADDR scan_pc;
   gdb_byte buf[4];
 
   if (!find_pc_partial_function (pc, NULL, &func_start, &func_end))
-    return 0;
+    return false;
 
   /* The epilogue is a sequence of instructions along the following lines:
 
@@ -4205,7 +4205,7 @@ thumb_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
     }
 
   if (!found_return)
-    return 0;
+    return false;
 
   /* Since any instruction in the epilogue sequence, with the possible
      exception of return itself, updates the stack pointer, we need to
@@ -4214,28 +4214,28 @@ thumb_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
      too much about false positives.  */
 
   if (pc - 4 < func_start)
-    return 0;
+    return false;
   if (target_read_memory (pc - 4, buf, 4))
-    return 0;
+    return false;
 
   insn = extract_unsigned_integer (buf, 2, byte_order_for_code);
   insn2 = extract_unsigned_integer (buf + 2, 2, byte_order_for_code);
 
   if (thumb_instruction_restores_sp (insn2))
-    found_stack_adjust = 1;
+    found_stack_adjust = true;
   else if (insn == 0xe8bd)  /* ldm.w sp!, <registers> */
-    found_stack_adjust = 1;
+    found_stack_adjust = true;
   else if (insn == 0xf85d  /* ldr.w <Rt>, [sp], #4 */
 	   && (insn2 & 0x0fff) == 0x0b04)
-    found_stack_adjust = 1;
+    found_stack_adjust = true;
   else if ((insn & 0xffbf) == 0xecbd  /* vldm sp!, <list> */
 	   && (insn2 & 0x0e00) == 0x0a00)
-    found_stack_adjust = 1;
+    found_stack_adjust = true;
 
   return found_stack_adjust;
 }
 
-static int
+static bool
 arm_stack_frame_destroyed_p_1 (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   enum bfd_endian byte_order_for_code = gdbarch_byte_order_for_code (gdbarch);
@@ -4286,7 +4286,7 @@ arm_stack_frame_destroyed_p_1 (struct gdbarch *gdbarch, CORE_ADDR pc)
 
 /* Implement the stack_frame_destroyed_p gdbarch method.  */
 
-static int
+static bool
 arm_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   if (arm_pc_is_thumb (gdbarch, pc))
@@ -4450,7 +4450,7 @@ arm_vfp_cprc_sub_candidate (struct type *t,
       /* Arguments of complex T where T is one of the types float or
 	 double get treated as if they are implemented as:
 
-	 struct complexT
+	 struct complex_T
 	 {
 	   T real;
 	   T imag;
@@ -5196,37 +5196,6 @@ arm_dwarf_reg_to_regnum (struct gdbarch *gdbarch, int reg)
     }
 
   return -1;
-}
-
-/* Map GDB internal REGNUM onto the Arm simulator register numbers.  */
-static int
-arm_register_sim_regno (struct gdbarch *gdbarch, int regnum)
-{
-  int reg = regnum;
-  gdb_assert (reg >= 0 && reg < gdbarch_num_regs (gdbarch));
-
-  if (regnum >= ARM_WR0_REGNUM && regnum <= ARM_WR15_REGNUM)
-    return regnum - ARM_WR0_REGNUM + SIM_ARM_IWMMXT_COP0R0_REGNUM;
-
-  if (regnum >= ARM_WC0_REGNUM && regnum <= ARM_WC7_REGNUM)
-    return regnum - ARM_WC0_REGNUM + SIM_ARM_IWMMXT_COP1R0_REGNUM;
-
-  if (regnum >= ARM_WCGR0_REGNUM && regnum <= ARM_WCGR7_REGNUM)
-    return regnum - ARM_WCGR0_REGNUM + SIM_ARM_IWMMXT_COP1R8_REGNUM;
-
-  if (reg < NUM_GREGS)
-    return SIM_ARM_R0_REGNUM + reg;
-  reg -= NUM_GREGS;
-
-  if (reg < NUM_FREGS)
-    return SIM_ARM_FP0_REGNUM + reg;
-  reg -= NUM_FREGS;
-
-  if (reg < NUM_SREGS)
-    return SIM_ARM_FPS_REGNUM + reg;
-  reg -= NUM_SREGS;
-
-  internal_error (_("Bad REGNUM %d"), regnum);
 }
 
 static const unsigned char op_lit0 = DW_OP_lit0;
@@ -9331,7 +9300,7 @@ arm_return_value (struct gdbarch *gdbarch, struct value *function,
 }
 
 
-static int
+static bool
 arm_get_longjmp_target (const frame_info_ptr &frame, CORE_ADDR *pc)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
@@ -9344,10 +9313,10 @@ arm_get_longjmp_target (const frame_info_ptr &frame, CORE_ADDR *pc)
 
   if (target_read_memory (jb_addr + tdep->jb_pc * tdep->jb_elt_size, buf,
 			  ARM_INT_REGISTER_SIZE))
-    return 0;
+    return false;
 
   *pc = extract_unsigned_integer (buf, ARM_INT_REGISTER_SIZE, byte_order);
-  return 1;
+  return true;
 }
 /* A call to cmse secure entry function "foo" at "a" is modified by
      GNU ld as "b".
@@ -9439,7 +9408,7 @@ arm_skip_stub (const frame_info_ptr &frame, CORE_ADDR pc)
       int offset = strlen (name) - 2;
 
       for (regno = 0; regno <= 14; regno++)
-	if (strcmp (&name[offset], table[regno]) == 0)
+	if (streq (&name[offset], table[regno]))
 	  return get_frame_register_unsigned (frame, regno);
     }
 
@@ -9507,7 +9476,7 @@ set_fp_model_sfunc (const char *args, int from_tty,
   int fp_model;
 
   for (fp_model = ARM_FLOAT_AUTO; fp_model != ARM_FLOAT_LAST; fp_model++)
-    if (strcmp (current_fp_model, fp_model_strings[fp_model]) == 0)
+    if (streq (current_fp_model, fp_model_strings[fp_model]))
       {
 	arm_fp_model = (enum arm_float_model) fp_model;
 	break;
@@ -9547,7 +9516,7 @@ arm_set_abi (const char *args, int from_tty,
   int arm_abi;
 
   for (arm_abi = ARM_ABI_AUTO; arm_abi != ARM_ABI_LAST; arm_abi++)
-    if (strcmp (arm_abi_string, arm_abi_strings[arm_abi]) == 0)
+    if (streq (arm_abi_string, arm_abi_strings[arm_abi]))
       {
 	arm_abi_global = (enum arm_abi_kind) arm_abi;
 	break;
@@ -9743,10 +9712,8 @@ arm_record_special_symbol (struct gdbarch *gdbarch, struct objfile *objfile,
   if (name[1] != 'a' && name[1] != 't' && name[1] != 'd')
     return;
 
-  data = arm_bfd_data_key.get (objfile->obfd.get ());
-  if (data == NULL)
-    data = arm_bfd_data_key.emplace (objfile->obfd.get (),
-				     objfile->obfd->section_count);
+  data = &arm_bfd_data_key.try_emplace (objfile->obfd.get (),
+					objfile->obfd->section_count);
   arm_mapping_symbol_vec &map
     = data->section_maps[bfd_asymbol_section (sym)->index];
 
@@ -9988,7 +9955,7 @@ arm_elf_osabi_sniffer (bfd *abfd)
   return osabi;
 }
 
-static int
+static bool
 arm_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 			 const struct reggroup *group)
 {
@@ -10055,7 +10022,7 @@ arm_register_g_packet_guesses (struct gdbarch *gdbarch)
 
 /* Implement the code_of_frame_writable gdbarch method.  */
 
-static int
+static bool
 arm_code_of_frame_writable (struct gdbarch *gdbarch, const frame_info_ptr &frame)
 {
   arm_gdbarch_tdep *tdep = gdbarch_tdep<arm_gdbarch_tdep> (gdbarch);
@@ -10064,10 +10031,10 @@ arm_code_of_frame_writable (struct gdbarch *gdbarch, const frame_info_ptr &frame
     {
       /* M-profile exception frames return to some magic PCs, where
 	 isn't writable at all.  */
-      return 0;
+      return false;
     }
   else
-    return 1;
+    return true;
 }
 
 /* Implement gdbarch_gnu_triplet_regexp.  If the arch name is arm then allow it
@@ -10076,7 +10043,7 @@ arm_code_of_frame_writable (struct gdbarch *gdbarch, const frame_info_ptr &frame
 static const char *
 arm_gnu_triplet_regexp (struct gdbarch *gdbarch)
 {
-  if (strcmp (gdbarch_bfd_arch_info (gdbarch)->arch_name, "arm") == 0)
+  if (streq (gdbarch_bfd_arch_info (gdbarch)->arch_name, "arm"))
     return "arm(v[^- ]*)?";
   return gdbarch_bfd_arch_info (gdbarch)->arch_name;
 }
@@ -10717,9 +10684,7 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* wchar_t is unsigned under the AAPCS.  */
   if (tdep->arm_abi == ARM_ABI_AAPCS)
-    set_gdbarch_wchar_signed (gdbarch, 0);
-  else
-    set_gdbarch_wchar_signed (gdbarch, 1);
+    set_gdbarch_wchar_signed (gdbarch, false);
 
   /* Compute type alignment.  */
   set_gdbarch_type_align (gdbarch, arm_type_align);
@@ -10784,7 +10749,6 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   /* Internal <-> external register number maps.  */
   set_gdbarch_dwarf2_reg_to_regnum (gdbarch, arm_dwarf_reg_to_regnum);
-  set_gdbarch_register_sim_regno (gdbarch, arm_register_sim_regno);
 
   set_gdbarch_register_name (gdbarch, arm_register_name);
 
@@ -10805,7 +10769,7 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 					 arm_adjust_breakpoint_address);
 
   /* Virtual tables.  */
-  set_gdbarch_vbit_in_delta (gdbarch, 1);
+  set_gdbarch_vbit_in_delta (gdbarch, true);
 
   /* Hook in the ABI-specific overrides, if they have been registered.  */
   gdbarch_init_osabi (info, gdbarch);
@@ -10830,7 +10794,7 @@ arm_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
     tdep->arm_abi = ARM_ABI_APCS;
 
   /* Watchpoints are not steppable.  */
-  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
+  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, true);
 
   /* We used to default to FPA for generic ARM, but almost nobody
      uses that now, and we now provide a way for the user to force
@@ -11046,7 +11010,7 @@ INIT_GDB_FILE (arm_tdep)
 	size_t offset = strlen ("reg-names-");
 	const char *style = disasm_options->name[i];
 	valid_disassembly_styles[j++] = &style[offset];
-	if (strcmp (&style[offset], "std") == 0)
+	if (streq (&style[offset], "std"))
 	  disassembly_style = &style[offset];
 	length = snprintf (rdptr, rest, "%s - %s\n", &style[offset],
 			   disasm_options->description[i]);
@@ -11231,10 +11195,30 @@ sbo_sbz (uint32_t insn, uint32_t bit_num, uint32_t len, uint32_t sbo)
   return 1;
 }
 
+/* The record infrastructure supports the following result values:
+   1. res  < 0: Process record: failed to record execution log.
+   2. res == 0: No failure.
+   3. res  > 0: Process record: inferior program stopped.
+
+   For aarch64, we have two distinct failure values:
+   - AARCH64_RECORD_FAILURE:
+     Process record: failed to record execution log.
+   - AARCH64_RECORD_UNSUPPORTED:
+     Process record does not support instruction $hex at address $hex.
+     Process record: failed to record execution log.
+
+   For some reason for arm we don't have an UNSUPPORTED enum value, and
+   instead treat ARM_RECORD_FAILURE like an UNSUPPORTED enum value.  */
+
 enum arm_record_result
 {
+  /* Process record does not support instruction $hex at address $hex.
+     Process record: failed to record execution log.  */
+  ARM_RECORD_FAILURE = -1,
+  /* No failure.  */
   ARM_RECORD_SUCCESS = 0,
-  ARM_RECORD_FAILURE = 1
+  /* Process record: inferior program stopped.  */
+  ARM_RECORD_UNKNOWN = 1,
 };
 
 enum arm_record_strx_t
@@ -14612,11 +14596,8 @@ decode_insn (abstract_instruction_reader &reader,
 	     then we need not decode it anymore.  */
 	  ret = arm_handle_insn[insn_id] (arm_record);
 	}
-      if (ret != ARM_RECORD_SUCCESS)
-	{
-	  arm_record_unsupported_insn (arm_record);
-	  ret = -1;
-	}
+      if (ret == ARM_RECORD_FAILURE)
+	arm_record_unsupported_insn (arm_record);
     }
   else if (THUMB_RECORD == record_type)
     {
@@ -14624,11 +14605,8 @@ decode_insn (abstract_instruction_reader &reader,
       arm_record->cond = -1;
       insn_id = bits (arm_record->arm_insn, 13, 15);
       ret = thumb_handle_insn[insn_id] (arm_record);
-      if (ret != ARM_RECORD_SUCCESS)
-	{
-	  arm_record_unsupported_insn (arm_record);
-	  ret = -1;
-	}
+      if (ret == ARM_RECORD_FAILURE)
+	arm_record_unsupported_insn (arm_record);
     }
   else if (THUMB2_RECORD == record_type)
     {
@@ -14641,11 +14619,8 @@ decode_insn (abstract_instruction_reader &reader,
 
       ret = thumb2_record_decode_insn_handler (arm_record);
 
-      if (ret != ARM_RECORD_SUCCESS)
-	{
-	  arm_record_unsupported_insn (arm_record);
-	  ret = -1;
-	}
+      if (ret == ARM_RECORD_FAILURE)
+	arm_record_unsupported_insn (arm_record);
     }
   else
     {
@@ -14936,8 +14911,6 @@ arm_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 	    }
 	}
 
-      if (record_full_arch_list_add_end ())
-	ret = -1;
     }
 
 

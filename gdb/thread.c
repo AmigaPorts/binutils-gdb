@@ -50,6 +50,7 @@
 #include "stack.h"
 #include "interps.h"
 #include "record-full.h"
+#include "buffered-streams.h"
 
 /* Print notices when new threads are attached and detached.  */
 static bool print_thread_events = true;
@@ -202,6 +203,9 @@ notify_thread_exited (thread_info *t, std::optional<ULONGEST> exit_code,
 {
   if (!silent && print_thread_events)
     {
+      /* Switch inferior before the target calls below.  */
+      auto restore_inf = maybe_switch_inferior (t->inf);
+
       if (exit_code.has_value ())
 	gdb_printf (_("[%s (id %s) exited with code %s]\n"),
 		    target_pid_to_str (t->ptid).c_str (),
@@ -227,23 +231,13 @@ set_thread_exited (thread_info *tp, std::optional<ULONGEST> exit_code,
   if (thread_is_in_step_over_chain (tp))
     global_thread_step_over_chain_remove (tp);
 
-  if (tp->state != THREAD_EXITED)
+  if (tp->state () != THREAD_EXITED)
     {
-      process_stratum_target *proc_target = tp->inf->process_target ();
-
-      /* Some targets unpush themselves from the inferior's target stack before
-	 clearing the inferior's thread list (which marks all threads as exited,
-	 and therefore leads to this function).  In this case, the inferior's
-	 process target will be nullptr when we arrive here.
-
-	 See also the comment in inferior::unpush_target.  */
-      if (proc_target != nullptr)
-	proc_target->maybe_remove_resumed_with_pending_wait_status (tp);
-
       notify_thread_exited (tp, exit_code, silent);
 
       /* Tag it as exited.  */
-      tp->state = THREAD_EXITED;
+      tp->set_state (THREAD_EXITED);
+      tp->set_internal_state (THREAD_INT_EXITED);
 
       /* Clear breakpoints, etc. associated with this thread.  */
       clear_thread_inferior_resources (tp);
@@ -378,34 +372,50 @@ thread_info::deletable () const
 /* See gdbthread.h.  */
 
 void
-thread_info::set_executing (bool executing)
+thread_info::set_internal_state (thread_int_state state)
 {
-  m_executing = executing;
-  if (executing)
-    this->clear_stop_pc ();
-}
-
-/* See gdbthread.h.  */
-
-void
-thread_info::set_resumed (bool resumed)
-{
-  if (resumed == m_resumed)
+  if (m_internal_state == state)
     return;
 
-  process_stratum_target *proc_target = this->inf->process_target ();
+  if (state == THREAD_INT_RUNNING)
+    this->clear_stop_pc ();
 
-  /* If we transition from resumed to not resumed, we might need to remove
-     the thread from the resumed threads with pending statuses list.  */
-  if (!resumed)
-    proc_target->maybe_remove_resumed_with_pending_wait_status (this);
+  if (state == THREAD_INT_RESUMED_PENDING_STATUS)
+    gdb_assert (this->has_pending_waitstatus ());
+  else if (state == THREAD_INT_RUNNING)
+    gdb_assert (!this->has_pending_waitstatus ());
 
-  m_resumed = resumed;
-
-  /* If we transition from not resumed to resumed, we might need to add
+  /* If we transition from resumed-pending-status to another state, we
+     might need to remove the thread from the resumed threads with
+     pending statuses list.  Conversely, if we transition to
+     resumed-pending-status from another state, we might need to add
      the thread to the resumed threads with pending statuses list.  */
-  if (resumed)
-    proc_target->maybe_add_resumed_with_pending_wait_status (this);
+  if (state == THREAD_INT_RESUMED_PENDING_STATUS
+      || m_internal_state == THREAD_INT_RESUMED_PENDING_STATUS)
+    {
+      process_stratum_target *proc_target = this->inf->process_target ();
+
+      /* We need the proc_target NULL checks below, because some
+	 targets unpush themselves from the inferior's target stack
+	 before clearing the inferior's thread list (which marks all
+	 threads as exited, and therefore leads to this function).  In
+	 this case, the inferior's process target will be nullptr when
+	 we arrive here.  See also the comment in
+	 inferior::unpush_target.  */
+
+      if (state != THREAD_INT_RESUMED_PENDING_STATUS && proc_target != nullptr)
+	proc_target->maybe_remove_resumed_with_pending_wait_status (this);
+
+      /* Note maybe_remove_resumed_with_pending_wait_status internally
+	 reads this state.  Thus it must be updated after the call
+	 above, and before the call below.  */
+      m_internal_state = state;
+
+      if (state == THREAD_INT_RESUMED_PENDING_STATUS && proc_target != nullptr)
+	proc_target->maybe_add_resumed_with_pending_wait_status (this);
+    }
+  else
+    m_internal_state = state;
 }
 
 /* See gdbthread.h.  */
@@ -414,12 +424,13 @@ void
 thread_info::set_pending_waitstatus (const target_waitstatus &ws)
 {
   gdb_assert (!this->has_pending_waitstatus ());
+  /* Doesn't make sense to set a pending status on an exited or
+     running thread.  */
+  gdb_assert (this->internal_state () == THREAD_INT_STOPPED
+	      || this->internal_state () == THREAD_INT_RESUMED_PENDING_STATUS);
 
   m_suspend.waitstatus = ws;
   m_suspend.waitstatus_pending_p = 1;
-
-  process_stratum_target *proc_target = this->inf->process_target ();
-  proc_target->maybe_add_resumed_with_pending_wait_status (this);
 }
 
 /* See gdbthread.h.  */
@@ -429,9 +440,6 @@ thread_info::clear_pending_waitstatus ()
 {
   gdb_assert (this->has_pending_waitstatus ());
 
-  process_stratum_target *proc_target = this->inf->process_target ();
-  proc_target->maybe_remove_resumed_with_pending_wait_status (this);
-
   m_suspend.waitstatus_pending_p = 0;
 }
 
@@ -440,8 +448,8 @@ thread_info::clear_pending_waitstatus ()
 void
 thread_info::set_thread_options (gdb_thread_options thread_options)
 {
-  gdb_assert (this->state != THREAD_EXITED);
-  gdb_assert (!this->executing ());
+  gdb_assert (this->state () != THREAD_EXITED);
+  gdb_assert (this->internal_state () == THREAD_INT_STOPPED);
 
   if (m_thread_options == thread_options)
     return;
@@ -592,28 +600,25 @@ find_thread_by_handle (gdb::array_view<const gdb_byte> handle,
 					      inf);
 }
 
-/*
- * Thread iterator function.
- *
- * Calls a callback function once for each thread, so long as
- * the callback function returns false.  If the callback function
- * returns true, the iteration will end and the current thread
- * will be returned.  This can be useful for implementing a
- * search for a thread with arbitrary attributes, or for applying
- * some operation to every thread.
- *
- * FIXME: some of the existing functionality, such as
- * "Thread apply all", might be rewritten using this functionality.
- */
+/* See gdbthread.h.  */
+
+void
+for_each_thread (for_each_thread_callback_ftype callback)
+{
+  for (thread_info &tp : all_threads ())
+    callback (&tp);
+}
+
+/* See gdbthread.h.  */
 
 struct thread_info *
-iterate_over_threads (gdb::function_view<bool (struct thread_info *)> callback)
+find_thread (find_thread_callback_ftype callback)
 {
   for (thread_info &tp : all_threads_safe ())
     if (callback (&tp))
       return &tp;
 
-  return NULL;
+  return nullptr;
 }
 
 /* See gdbthread.h.  */
@@ -687,30 +692,30 @@ any_thread_of_inferior (inferior *inf)
 thread_info *
 any_live_thread_of_inferior (inferior *inf)
 {
-  struct thread_info *curr_tp = NULL;
-  struct thread_info *tp_executing = NULL;
+  thread_info *curr_tp = NULL;
+  thread_info *tp_running = NULL;
 
   gdb_assert (inf != NULL && inf->pid != 0);
 
-  /* Prefer the current thread if it's not executing.  */
+  /* Prefer the current thread if it's stopped.  */
   if (inferior_ptid != null_ptid && current_inferior () == inf)
     {
-      /* If the current thread is dead, forget it.  If it's not
-	 executing, use it.  Otherwise, still choose it (below), but
-	 only if no other non-executing thread is found.  */
+      /* If the current thread is dead, forget it.  If it's stopped,
+	 use it.  Otherwise, still choose it (below), but only if no
+	 other running thread is found.  */
       curr_tp = inferior_thread ();
-      if (curr_tp->state == THREAD_EXITED)
+      if (curr_tp->internal_state () == THREAD_INT_EXITED)
 	curr_tp = NULL;
-      else if (!curr_tp->executing ())
+      else if (curr_tp->internal_state () != THREAD_INT_RUNNING)
 	return curr_tp;
     }
 
   for (thread_info &tp : inf->non_exited_threads ())
     {
-      if (!tp.executing ())
+      if (tp.internal_state () != THREAD_INT_RUNNING)
 	return &tp;
 
-      tp_executing = &tp;
+      tp_running = &tp;
     }
 
   /* If both the current thread and all live threads are executing,
@@ -718,15 +723,15 @@ any_live_thread_of_inferior (inferior *inf)
   if (curr_tp != NULL)
     return curr_tp;
 
-  /* Otherwise, just return an executing thread, if any.  */
-  return tp_executing;
+  /* Otherwise, just return a running thread, if any.  */
+  return tp_running;
 }
 
 /* Return true if TP is an active thread.  */
 static bool
 thread_alive (thread_info *tp)
 {
-  if (tp->state == THREAD_EXITED)
+  if (tp->state () == THREAD_EXITED)
     return false;
 
   /* Ensure we're looking at the right target stack.  */
@@ -759,11 +764,13 @@ switch_to_thread_if_alive (thread_info *thr)
 /* See gdbthreads.h.  */
 
 void
-prune_threads (void)
+prune_threads (process_stratum_target *target)
 {
+  gdb_assert (target != nullptr);
+
   scoped_restore_current_thread restore_thread;
 
-  for (thread_info &tp : all_threads_safe ())
+  for (thread_info &tp : all_threads_safe (target))
     {
       switch_to_inferior_no_thread (tp.inf);
 
@@ -775,10 +782,10 @@ prune_threads (void)
 /* See gdbthreads.h.  */
 
 void
-delete_exited_threads (void)
+delete_exited_threads (process_stratum_target *target)
 {
-  for (thread_info &tp : all_threads_safe ())
-    if (tp.state == THREAD_EXITED)
+  for (thread_info &tp : all_threads_safe (target))
+    if (tp.state () == THREAD_EXITED)
       delete_thread (&tp);
 }
 
@@ -857,43 +864,6 @@ thread_change_ptid (process_stratum_target *targ,
   gdb::observers::thread_ptid_changed.notify (targ, old_ptid, new_ptid);
 }
 
-/* See gdbthread.h.  */
-
-void
-set_resumed (process_stratum_target *targ, ptid_t ptid, bool resumed)
-{
-  for (thread_info &tp : all_non_exited_threads (targ, ptid))
-    tp.set_resumed (resumed);
-}
-
-/* Helper for set_running, that marks one thread either running or
-   stopped.  */
-
-static bool
-set_running_thread (struct thread_info *tp, bool running)
-{
-  bool started = false;
-
-  if (running && tp->state == THREAD_STOPPED)
-    started = true;
-  tp->state = running ? THREAD_RUNNING : THREAD_STOPPED;
-
-  threads_debug_printf ("thread: %s, running? %d%s",
-			tp->ptid.to_string ().c_str (), running,
-			(started ? " (started)" : ""));
-
-  if (!running)
-    {
-      /* If the thread is now marked stopped, remove it from
-	 the step-over queue, so that we don't try to resume
-	 it until the user wants it to.  */
-      if (thread_is_in_step_over_chain (tp))
-	global_thread_step_over_chain_remove (tp);
-    }
-
-  return started;
-}
-
 /* Notify interpreters and observers that the target was resumed.  */
 
 static void
@@ -910,41 +880,73 @@ notify_target_resumed (ptid_t ptid)
 
 /* See gdbthread.h.  */
 
-void
-thread_info::set_running (bool running)
+thread_state
+thread_info::set_state (thread_state state,
+			bool suppress_notification)
 {
-  if (set_running_thread (this, running))
-    notify_target_resumed (this->ptid);
+  thread_state prev_state = m_state;
+
+  if (prev_state == state)
+    return prev_state;
+
+  threads_debug_printf ("thread: %s, %s -> %s",
+			this->ptid.to_string ().c_str (),
+			thread_state_string (m_state),
+			thread_state_string (state));
+
+  m_state = state;
+
+  switch (m_state)
+    {
+    case THREAD_EXITED:
+      break;
+
+    case THREAD_STOPPED:
+      /* If the thread is now marked stopped, remove it from
+	 the step-over queue, so that we don't try to resume
+	 it until the user wants it to.  */
+      if (thread_is_in_step_over_chain (this))
+	global_thread_step_over_chain_remove (this);
+      break;
+
+    case THREAD_RUNNING:
+      if (!suppress_notification)
+	notify_target_resumed (this->ptid);
+      break;
+    }
+
+  return prev_state;
 }
 
 void
-set_running (process_stratum_target *targ, ptid_t ptid, bool running)
+set_state (process_stratum_target *targ, ptid_t ptid, thread_state state)
 {
   /* We try not to notify the observer if no thread has actually
-     changed the running state -- merely to reduce the number of
+     changed its public state -- merely to reduce the number of
      messages to the MI frontend.  A frontend is supposed to handle
      multiple *running notifications just fine.  */
-  bool any_started = false;
+  bool any_changed = false;
 
   for (thread_info &tp : all_non_exited_threads (targ, ptid))
-    if (set_running_thread (&tp, running))
-      any_started = true;
+    if (tp.set_state (state, true) != state)
+      any_changed = true;
 
-  if (any_started)
+  if (any_changed && state == THREAD_RUNNING)
     notify_target_resumed (ptid);
 }
 
 void
-set_executing (process_stratum_target *targ, ptid_t ptid, bool executing)
+set_internal_state (process_stratum_target *targ, ptid_t ptid,
+		    thread_int_state state)
 {
   for (thread_info &tp : all_non_exited_threads (targ, ptid))
-    tp.set_executing (executing);
+    tp.set_internal_state (state);
 
   /* It only takes one running thread to spawn more threads.  */
-  if (executing)
+  if (state == THREAD_INT_RUNNING)
     targ->threads_executing = true;
   /* Only clear the flag if the caller is telling us everything is
-     stopped.  */
+     stopped or dead.  */
   else if (minus_one_ptid == ptid)
     targ->threads_executing = false;
 }
@@ -969,14 +971,41 @@ set_stop_requested (process_stratum_target *targ, ptid_t ptid, bool stop)
     gdb::observers::thread_stop_requested.notify (ptid);
 }
 
+/* Map INT_STATE to a user state.  */
+
+static thread_state
+state_from_int_state (thread_int_state int_state)
+{
+  switch (int_state)
+    {
+    case THREAD_INT_RUNNING:
+    case THREAD_INT_RESUMED_PENDING_STATUS:
+      return THREAD_RUNNING;
+    case THREAD_INT_STOPPED:
+      return THREAD_STOPPED;
+    case THREAD_INT_EXITED:
+      return THREAD_EXITED;
+    }
+
+  gdb_assert_not_reached ("unknown thread_int_state: %d", int_state);
+}
+
+/* See gdbthread.h.  Note this is a friend of thread_info so that it
+   can access the thread_info::set_state overload that lets us
+   suppress the target_resumed notification.  */
+
 void
 finish_thread_state (process_stratum_target *targ, ptid_t ptid)
 {
   bool any_started = false;
 
   for (thread_info &tp : all_non_exited_threads (targ, ptid))
-    if (set_running_thread (&tp, tp.executing ()))
-      any_started = true;
+    {
+      thread_state new_state = state_from_int_state (tp.internal_state ());
+      thread_state prev_state = tp.set_state (new_state, true);
+      if (prev_state != new_state && new_state == THREAD_RUNNING)
+	any_started = true;
+    }
 
   if (any_started)
     notify_target_resumed (ptid);
@@ -994,7 +1023,7 @@ validate_registers_access (void)
   thread_info *tp = inferior_thread ();
 
   /* Don't try to read from a dead thread.  */
-  if (tp->state == THREAD_EXITED)
+  if (tp->state () == THREAD_EXITED)
     error (_("The current thread has terminated"));
 
   /* ... or from a spinning thread.  FIXME: This isn't actually fully
@@ -1002,7 +1031,7 @@ validate_registers_access (void)
      at the prompt) when a thread is not executing for some internal
      reason, but is marked running from the user's perspective.  E.g.,
      the thread is waiting for its turn in the step-over queue.  */
-  if (tp->executing ())
+  if (tp->internal_state () == THREAD_INT_RUNNING)
     {
       /* If we are replaying with the record-full subsystem, even though
 	 the thread is executing, it is always safe to read from it since
@@ -1022,11 +1051,11 @@ can_access_registers_thread (thread_info *thread)
     return false;
 
   /* Don't try to read from a dead thread.  */
-  if (thread->state == THREAD_EXITED)
+  if (thread->state () == THREAD_EXITED)
     return false;
 
   /* ... or from a spinning thread.  FIXME: see validate_registers_access.  */
-  if (thread->executing ())
+  if (thread->internal_state () == THREAD_INT_RUNNING)
     {
       /* See validate_registers_access.  */
       if (!record_full_is_replaying ())
@@ -1110,14 +1139,14 @@ should_print_thread (const char *requested_threads,
       return false;
     }
 
-  if (thr->state == THREAD_EXITED)
+  if (thr->state () == THREAD_EXITED)
     return false;
 
-  bool is_stopped = (thr->state == THREAD_STOPPED);
+  bool is_stopped = (thr->state () == THREAD_STOPPED);
   if (opts.show_stopped_threads && is_stopped)
     return true;
 
-  bool is_running = (thr->state == THREAD_RUNNING);
+  bool is_running = (thr->state () == THREAD_RUNNING);
   if (opts.show_running_threads && is_running)
     return true;
 
@@ -1208,13 +1237,13 @@ do_print_thread (ui_out *uiout, const char *requested_threads,
       uiout->field_string ("target-id", thread_target_id_str (tp));
     }
 
-  if (tp->state == THREAD_RUNNING)
+  if (tp->state () == THREAD_RUNNING)
     uiout->text ("(running)\n");
   else
     {
       /* The switch above put us at the top of the stack (leaf
 	 frame).  */
-      print_stack_frame (get_selected_frame (NULL),
+      print_stack_frame (get_selected_frame (),
 			 /* For MI output, print frame level.  */
 			 uiout->is_mi_like_p (),
 			 LOCATION, 0);
@@ -1224,7 +1253,7 @@ do_print_thread (ui_out *uiout, const char *requested_threads,
     {
       const char *state = "stopped";
 
-      if (tp->state == THREAD_RUNNING)
+      if (tp->state () == THREAD_RUNNING)
 	state = "running";
       uiout->field_string ("state", state);
     }
@@ -1335,7 +1364,7 @@ print_thread_info_1 (struct ui_out *uiout, const char *requested_threads,
     for (inferior *inf : all_inferiors ())
       for (thread_info &tp : inf->threads ())
 	{
-	  if (&tp == current_thread && tp.state == THREAD_EXITED)
+	  if (&tp == current_thread && tp.state () == THREAD_EXITED)
 	    current_exited = true;
 
 	  print_thread (uiout, requested_threads, opts, global_ids, pid,
@@ -1500,7 +1529,7 @@ scoped_restore_current_thread::restore ()
      changed, so we have to recheck it here.  */
   if (inferior_ptid != null_ptid
       && m_was_stopped
-      && m_thread->state == THREAD_STOPPED
+      && m_thread->state () == THREAD_STOPPED
       && target_has_registers ()
       && target_has_stack ()
       && target_has_memory ())
@@ -1523,7 +1552,7 @@ scoped_restore_current_thread::scoped_restore_current_thread ()
     {
       m_thread = thread_info_ref::new_reference (inferior_thread ());
 
-      m_was_stopped = m_thread->state == THREAD_STOPPED;
+      m_was_stopped = m_thread->state () == THREAD_STOPPED;
       save_selected_frame (&m_selected_frame_id, &m_selected_frame_level);
     }
 }
@@ -1969,7 +1998,7 @@ thread_command (const char *tidstr, int from_tty)
 	{
 	  struct thread_info *tp = inferior_thread ();
 
-	  if (tp->state == THREAD_EXITED)
+	  if (tp->state () == THREAD_EXITED)
 	    gdb_printf (_("[Current thread is %s (%s) (exited)]\n"),
 			print_thread_id (tp),
 			target_pid_to_str (inferior_ptid).c_str ());
@@ -1983,10 +2012,19 @@ thread_command (const char *tidstr, int from_tty)
     }
   else
     {
+      inferior *previous_inferior = current_inferior ();
+
       thread_select (tidstr, parse_thread_id (tidstr, NULL));
 
-      notify_user_selected_context_changed
-	(USER_SELECTED_THREAD | USER_SELECTED_FRAME);
+      user_selected_what selection = (USER_SELECTED_THREAD
+				      | USER_SELECTED_FRAME);
+
+      /* If the inferior changed as a consequence of the thread change,
+	 then let the user know.  */
+      if (previous_inferior != current_inferior ())
+	selection |= USER_SELECTED_INFERIOR;
+
+      notify_user_selected_context_changed (selection);
     }
 }
 
@@ -2086,7 +2124,7 @@ thread_select (const char *tidstr, thread_info *tp)
 
   /* Since the current thread may have changed, see if there is any
      exited thread we can now delete.  */
-  delete_exited_threads ();
+  delete_exited_threads (nullptr);
 }
 
 /* Print thread and frame switch command response.  */
@@ -2114,7 +2152,7 @@ print_selected_thread_frame (struct ui_out *uiout,
 	}
     }
 
-  if (tp->state == THREAD_RUNNING)
+  if (tp->state () == THREAD_RUNNING)
     {
       if (selection & USER_SELECTED_THREAD)
 	uiout->text ("(running)\n");
@@ -2125,7 +2163,7 @@ print_selected_thread_frame (struct ui_out *uiout,
 	uiout->text ("\n");
 
       if (has_stack_frames ())
-	print_stack_frame_to_uiout (uiout, get_selected_frame (NULL),
+	print_stack_frame_to_uiout (uiout, get_selected_frame (),
 				    1, SRC_AND_LOC, 1);
     }
 }
@@ -2159,7 +2197,7 @@ update_threads_executing (void)
 
       for (thread_info &tp : inf->non_exited_threads ())
 	{
-	  if (tp.executing ())
+	  if (tp.internal_state () == THREAD_INT_RUNNING)
 	    {
 	      targ->threads_executing = true;
 	      return;
@@ -2211,6 +2249,29 @@ thread_state_string (enum thread_state state)
     }
 
   gdb_assert_not_reached ("unknown thread state");
+}
+
+/* See gdbthread.h.  */
+
+const char *
+thread_int_state_string (thread_int_state state)
+{
+  switch (state)
+    {
+    case THREAD_INT_STOPPED:
+      return "INT_STOPPED";
+
+    case THREAD_INT_RUNNING:
+      return "INT_RUNNING";
+
+    case THREAD_INT_RESUMED_PENDING_STATUS:
+      return "INT_RESUMED_PENDING_STATUS";
+
+    case THREAD_INT_EXITED:
+      return "INT_EXITED";
+    }
+
+  gdb_assert_not_reached ("unknown thread internal state");
 }
 
 /* Return a new value for the selected thread's id.  Return a value of

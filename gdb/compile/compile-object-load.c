@@ -31,6 +31,7 @@
 #include "block.h"
 #include "arch-utils.h"
 #include <algorithm>
+#include "cli/cli-style.h"
 
 /* Add inferior mmap memory range ADDR..ADDR+SIZE (exclusive) to the
    list.  */
@@ -220,7 +221,7 @@ link_callbacks_warning (struct bfd_link_info *link_info, const char *xwarning,
 static void
 link_callbacks_undefined_symbol (struct bfd_link_info *link_info,
 				 const char *name, bfd *abfd, asection *section,
-				 bfd_vma address, bfd_boolean is_fatal)
+				 bfd_vma address, bool is_fatal)
 {
   warning (_("Cannot resolve relocation to \"%s\" "
 	     "from compiled module \"%s\" section \"%s\"."),
@@ -372,7 +373,7 @@ copy_section (bfd *abfd, asection *sect,
 
   sect_data_got = bfd_get_relocated_section_contents (abfd, &link_info,
 						      &link_order,
-						      sect_data.get (), FALSE,
+						      sect_data.get (), false,
 						      symbol_table.data ());
 
   if (sect_data_got == NULL)
@@ -425,7 +426,7 @@ get_out_value_type (struct symbol *func_sym, struct objfile *objfile,
   lookup_name_info i_ptr_matcher (COMPILE_I_EXPR_PTR_TYPE,
 				  symbol_name_match_type::SEARCH_NAME);
 
-  bv = func_sym->symtab ()->compunit ()->blockvector ();
+  bv = func_sym->symtab ()->compunit ().blockvector ();
   nblocks = bv->num_blocks ();
 
   gdb_ptr_type_sym = NULL;
@@ -561,7 +562,7 @@ store_regs (struct type *regs_type, CORE_ADDR regs_base)
       struct value *regval;
       CORE_ADDR inferior_addr;
 
-      if (strcmp (reg_name, COMPILE_I_SIMPLE_REGISTER_DUMMY) == 0)
+      if (streq (reg_name, COMPILE_I_SIMPLE_REGISTER_DUMMY))
 	continue;
 
       if ((reg_bitpos % 8) != 0 || reg_bitsize != 0)
@@ -616,16 +617,18 @@ compile_object_load (const compile_file_names &file_names,
 
   gdb_bfd_ref_ptr abfd (gdb_bfd_open (filename.get (), gnutarget));
   if (abfd == NULL)
-    error (_("\"%s\": could not open as compiled module: %s"),
-	  filename.get (), bfd_errmsg (bfd_get_error ()));
+    error (_("\"%ps\": could not open as compiled module: %s"),
+	   styled_string (file_name_style.style (), filename.get ()),
+	   bfd_errmsg (bfd_get_error ()));
 
-  if (!bfd_check_format_matches (abfd.get (), bfd_object, &matching))
-    error (_("\"%s\": not in loadable format: %s"),
-	   filename.get (),
+  if (!gdb_bfd_check_format_matches (abfd.get (), bfd_object, &matching))
+    error (_("\"%ps\": not in loadable format: %s"),
+	   styled_string (file_name_style.style (), filename.get ()),
 	   gdb_bfd_errmsg (bfd_get_error (), matching).c_str ());
 
   if ((bfd_get_file_flags (abfd.get ()) & (EXEC_P | DYNAMIC)) != 0)
-    error (_("\"%s\": not in object format."), filename.get ());
+    error (_("\"%ps\": not in object format."),
+	   styled_string (file_name_style.style (), filename.get ()));
 
   struct setup_sections_data setup_sections_data (abfd.get ());
   for (asection *sect : gdb_bfd_sections (abfd))
@@ -644,14 +647,15 @@ compile_object_load (const compile_file_names &file_names,
 						GCC_FE_WRAPPER_FUNCTION,
 						SEARCH_VFT).symbol;
   if (func_sym == NULL)
-    error (_("Cannot find function \"%s\" in compiled module \"%s\"."),
-	   GCC_FE_WRAPPER_FUNCTION, objfile_name (objfile));
+    error (_("Cannot find function \"%s\" in compiled module \"%ps\"."),
+	   GCC_FE_WRAPPER_FUNCTION,
+	   styled_string (file_name_style.style (), objfile_name (objfile)));
   func_type = func_sym->type ();
   if (func_type->code () != TYPE_CODE_FUNC)
     error (_("Invalid type code %d of function \"%s\" in compiled "
-	     "module \"%s\"."),
+	     "module \"%ps\"."),
 	   func_type->code (), GCC_FE_WRAPPER_FUNCTION,
-	   objfile_name (objfile));
+	   styled_string (file_name_style.style (), objfile_name (objfile)));
 
   switch (scope)
     {
@@ -676,13 +680,14 @@ compile_object_load (const compile_file_names &file_names,
     }
   if (func_type->num_fields () != expect_parameters)
     error (_("Invalid %d parameters of function \"%s\" in compiled "
-	     "module \"%s\"."),
+	     "module \"%ps\"."),
 	   func_type->num_fields (), GCC_FE_WRAPPER_FUNCTION,
-	   objfile_name (objfile));
+	   styled_string (file_name_style.style (), objfile_name (objfile)));
   if (!types_deeply_equal (expect_return_type, func_type->target_type ()))
     error (_("Invalid return type of function \"%s\" in compiled "
-	     "module \"%s\"."),
-	   GCC_FE_WRAPPER_FUNCTION, objfile_name (objfile));
+	     "module \"%ps\"."),
+	   GCC_FE_WRAPPER_FUNCTION,
+	   styled_string (file_name_style.style (), objfile_name (objfile)));
 
   gdb::array_view<asymbol *> symbol_table
     = gdb_bfd_canonicalize_symtab (abfd.get ());
@@ -694,7 +699,7 @@ compile_object_load (const compile_file_names &file_names,
 	continue;
       sym->flags = BSF_GLOBAL;
       sym->section = bfd_abs_section_ptr;
-      if (strcmp (sym->name, "_GLOBAL_OFFSET_TABLE_") == 0)
+      if (streq (sym->name, "_GLOBAL_OFFSET_TABLE_"))
 	{
 	  if (compile_debug)
 	    gdb_printf (gdb_stdlog,
@@ -707,7 +712,7 @@ compile_object_load (const compile_file_names &file_names,
 	  sym->value = 0;
 	  continue;
 	}
-      if (strcmp (sym->name, ".TOC.") == 0)
+      if (streq (sym->name, ".TOC."))
 	{
 	  /* Handle the .TOC. symbol as the linker would do.  Set the .TOC.
 	     sections value to 0x8000 (see bfd/elf64-ppc.c TOC_BASE_OFF);
@@ -774,8 +779,9 @@ compile_object_load (const compile_file_names &file_names,
 	  break;
 	default:
 	  warning (_("Could not find symbol \"%s\" "
-		     "for compiled module \"%s\"."),
-		   sym->name, filename.get ());
+		     "for compiled module \"%ps\"."),
+		   sym->name,
+		   styled_string (file_name_style.style (), filename.get ()));
 	  missing_symbols++;
 	}
     }

@@ -66,7 +66,7 @@ struct match_list_displayer
 /* A list of completion candidates.  Each element is a malloc string,
    because ownership of the strings is transferred to readline, which
    calls free on each element.  */
-typedef std::vector<gdb::unique_xmalloc_ptr<char>> completion_list;
+using completion_list = std::vector<gdb::unique_xmalloc_ptr<char>>;
 
 /* The result of a successful completion match.  When doing symbol
    comparison, we use the symbol search name for the symbol name match
@@ -203,7 +203,7 @@ private:
 
   /* The ignored substring ranges within M_MATCH.  E.g., if we were
      looking for completion matches for C++ functions starting with
-       "functio"
+       "functio"	codespell:ignore functio
      and successfully match:
        "function[abi:cxx11](int)"
      the ignored ranges vector will contain an entry that delimits the

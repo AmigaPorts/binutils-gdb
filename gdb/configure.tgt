@@ -366,8 +366,8 @@ iq2000-*-*)
 	gdb_target_obs="iq2000-tdep.o"
 	;;
 
-lm32-*-*)		
-	gdb_target_obs="lm32-tdep.o" 
+lm32-*-*)
+	gdb_target_obs="lm32-tdep.o"
 	;;
 
 loongarch*-*-linux*)
@@ -432,7 +432,8 @@ mep-*-*)
 microblaze*-linux-*|microblaze*-*-linux*)
 	# Target: Xilinx MicroBlaze running Linux
 	gdb_target_obs="microblaze-tdep.o microblaze-linux-tdep.o solib-svr4.o \
-			solib-svr4-linux.o symfile-mem.o linux-tdep.o"
+			glibc-tdep.o solib-svr4-linux.o symfile-mem.o \
+			linux-tdep.o"
 	;;
 microblaze*-*-*)
 	# Target: Xilinx MicroBlaze running standalone
@@ -675,7 +676,7 @@ tic6x-*-*linux)
 	;;
 
 tic6x-*-*)
-	# Target: TI C6X 
+	# Target: TI C6X
 	gdb_target_obs="tic6x-tdep.o"
 	;;
 

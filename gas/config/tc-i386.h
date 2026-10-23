@@ -141,7 +141,6 @@ int i386_validate_fix (struct fix *);
 #define tc_fix_adjustable(X)  tc_i386_fix_adjustable(X)
 extern int tc_i386_fix_adjustable (struct fix *);
 #else
-#define tc_fix_adjustable(X)  ((void)(X), 1)
 #define md_undefined_symbol(N) ((void)(N), NULL)
 #endif
 
@@ -165,7 +164,7 @@ extern int tc_i386_fix_adjustable (struct fix *);
 #define TC_FORCE_RELOCATION_LOCAL(FIX)				\
   (GENERIC_FORCE_RELOCATION_LOCAL (FIX)				\
    || (FIX)->fx_r_type == BFD_RELOC_386_PLT32			\
-   || (FIX)->fx_r_type == BFD_RELOC_386_GOTPC			\
+   || (FIX)->fx_r_type == BFD_RELOC_32_GOT_PCREL		\
    || (FIX)->fx_r_type == BFD_RELOC_X86_64_GOTPCREL		\
    || (FIX)->fx_r_type == BFD_RELOC_X86_64_GOTPCRELX		\
    || (FIX)->fx_r_type == BFD_RELOC_X86_64_REX_GOTPCRELX	\
@@ -499,15 +498,13 @@ void tc_pe_dwarf2_emit_offset (symbolS *, unsigned int);
 
 #ifdef OBJ_MACH_O
 
-#define TC_FORCE_RELOCATION(FIX) (obj_mach_o_force_reloc (FIX))
+#define TC_FORCE_RELOCATION(FIX) (obj_mach_o_force_reloc (this_segment, FIX))
 
 #define TC_FORCE_RELOCATION_SUB_SAME(FIX,SEG) \
-	  (obj_mach_o_force_reloc_sub_same (FIX, SEG))
+	  (obj_mach_o_force_reloc_sub_same (this_segment, FIX, SEG))
 
 #define TC_FORCE_RELOCATION_SUB_LOCAL(FIX,SEG) \
-	(obj_mach_o_force_reloc_sub_local (FIX, SEG))
-
-#define TC_VALIDATE_FIX_SUB(FIX, SEG) 1
+	(obj_mach_o_force_reloc_sub_local (this_segment, FIX, SEG))
 
 #endif /* OBJ_MACH_O */
 

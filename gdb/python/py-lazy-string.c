@@ -23,9 +23,8 @@
 #include "valprint.h"
 #include "language.h"
 
-struct lazy_string_object {
-  PyObject_HEAD
-
+struct lazy_string_object : public PyObject
+{
   /*  Holds the address of the lazy string.  */
   CORE_ADDR address;
 
@@ -52,6 +51,8 @@ struct lazy_string_object {
   PyObject *type;
 };
 
+static_assert (gdb::is_python_allocatable_v<lazy_string_object>);
+
 extern PyTypeObject lazy_string_object_type;
 
 static PyObject *
@@ -73,10 +74,7 @@ stpy_get_encoding (PyObject *self, void *closure)
   if (self_string->encoding)
     result = PyUnicode_FromString (self_string->encoding);
   else
-    {
-      result = Py_None;
-      Py_INCREF (result);
-    }
+    result = py_none ().release ();
 
   return result;
 }
@@ -110,7 +108,7 @@ stpy_convert_to_value (PyObject *self, PyObject *args)
       return NULL;
     }
 
-  PyObject *result = nullptr;
+  gdbpy_ref<> result;
   try
     {
       scoped_value_mark free_values;
@@ -150,7 +148,7 @@ stpy_convert_to_value (PyObject *self, PyObject *args)
       return gdbpy_handle_gdb_exception (nullptr, except);
     }
 
-  return result;
+  return result.release ();
 }
 
 static void
@@ -232,11 +230,11 @@ gdbpy_create_lazy_string_object (CORE_ADDR address, long length,
 
   str_obj->address = address;
   str_obj->length = length;
-  if (encoding == NULL || !strcmp (encoding, ""))
+  if (encoding == NULL || streq (encoding, ""))
     str_obj->encoding = NULL;
   else
     str_obj->encoding = xstrdup (encoding);
-  str_obj->type = type_to_type_object (type);
+  str_obj->type = type_to_type_object (type).release ();
 
   return (PyObject *) str_obj;
 }

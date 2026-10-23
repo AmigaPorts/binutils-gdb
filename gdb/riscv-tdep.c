@@ -1049,7 +1049,7 @@ riscv_pseudo_register_write (struct gdbarch *gdbarch,
 /* Implement the cannot_store_register gdbarch method.  The zero register
    (x0) is read-only on RISC-V.  */
 
-static int
+static bool
 riscv_cannot_store_register (struct gdbarch *gdbarch, int regnum)
 {
   return regnum == RISCV_ZERO_REGNUM;
@@ -1114,8 +1114,8 @@ riscv_register_type (struct gdbarch *gdbarch, int regnum)
       if (flen == 8
 	  && type->code () == TYPE_CODE_FLT
 	  && type->length () == flen
-	  && (strcmp (type->name (), "builtin_type_ieee_double") == 0
-	      || strcmp (type->name (), "double") == 0))
+	  && (streq (type->name (), "builtin_type_ieee_double")
+	      || streq (type->name (), "double")))
 	type = riscv_fpreg_d_type (gdbarch);
     }
 
@@ -1178,16 +1178,7 @@ riscv_print_one_register_info (struct gdbarch *gdbarch,
   print_raw_format = (val->entirely_available ()
 		      && !val->optimized_out ());
 
-  if (regtype->code () == TYPE_CODE_FLT
-      || (regtype->code () == TYPE_CODE_UNION
-	  && regtype->num_fields () == 2
-	  && regtype->field (0).type ()->code () == TYPE_CODE_FLT
-	  && regtype->field (1).type ()->code () == TYPE_CODE_FLT)
-      || (regtype->code () == TYPE_CODE_UNION
-	  && regtype->num_fields () == 3
-	  && regtype->field (0).type ()->code () == TYPE_CODE_FLT
-	  && regtype->field (1).type ()->code () == TYPE_CODE_FLT
-	  && regtype->field (2).type ()->code () == TYPE_CODE_FLT))
+  if (riscv_is_fp_regno_p (regnum))
     {
       struct value_print_options opts;
       const gdb_byte *valaddr = val->contents_for_printing ().data ();
@@ -1229,9 +1220,11 @@ riscv_print_one_register_info (struct gdbarch *gdbarch,
 	      d = value_as_long (val);
 	      xlen = size * 8;
 	      gdb_printf (file,
+			  /* codespell:ignore-begin.  */
 			  "\tSD:%X VM:%02X MXR:%X PUM:%X MPRV:%X XS:%X "
 			  "FS:%X MPP:%x HPP:%X SPP:%X MPIE:%X HPIE:%X "
 			  "SPIE:%X UPIE:%X MIE:%X HIE:%X SIE:%X UIE:%X",
+			  /* codespell:ignore-end.  */
 			  (int) ((d >> (xlen - 1)) & 0x1),
 			  (int) ((d >> 24) & 0x1f),
 			  (int) ((d >> 19) & 0x1),
@@ -1392,7 +1385,7 @@ riscv_is_unknown_csr (struct gdbarch *gdbarch, int regnum)
 /* Implement the register_reggroup_p gdbarch method.  Is REGNUM a member
    of REGGROUP?  */
 
-static int
+static bool
 riscv_register_reggroup_p (struct gdbarch  *gdbarch, int regnum,
 			   const struct reggroup *reggroup)
 {
@@ -1401,7 +1394,7 @@ riscv_register_reggroup_p (struct gdbarch  *gdbarch, int regnum,
   /* Used by 'info registers' and 'info registers <groupname>'.  */
 
   if (gdbarch_register_name (gdbarch, regnum)[0] == '\0')
-    return 0;
+    return false;
 
   if (regnum > RISCV_LAST_REGNUM && regnum < gdbarch_num_regs (gdbarch))
     {
@@ -1418,9 +1411,9 @@ riscv_register_reggroup_p (struct gdbarch  *gdbarch, int regnum,
 	{
 	  if (reggroup == restore_reggroup || reggroup == save_reggroup
 	       || reggroup == general_reggroup)
-	    return 0;
+	    return false;
 	  else if (reggroup == system_reggroup || reggroup == csr_reggroup)
-	    return 1;
+	    return true;
 	}
 
       /* This is some other unknown register from the target description.
@@ -1436,10 +1429,10 @@ riscv_register_reggroup_p (struct gdbarch  *gdbarch, int regnum,
   if (reggroup == all_reggroup)
     {
       if (regnum < RISCV_FIRST_CSR_REGNUM || regnum >= RISCV_PRIV_REGNUM)
-	return 1;
+	return true;
       if (riscv_is_regnum_a_named_csr (regnum))
-	return 1;
-      return 0;
+	return true;
+      return false;
     }
   else if (reggroup == float_reggroup)
     return (riscv_is_fp_regno_p (regnum)
@@ -1461,17 +1454,17 @@ riscv_register_reggroup_p (struct gdbarch  *gdbarch, int regnum,
   else if (reggroup == system_reggroup || reggroup == csr_reggroup)
     {
       if (regnum == RISCV_PRIV_REGNUM)
-	return 1;
+	return true;
       if (regnum < RISCV_FIRST_CSR_REGNUM || regnum > RISCV_LAST_CSR_REGNUM)
-	return 0;
+	return false;
       if (riscv_is_regnum_a_named_csr (regnum))
-	return 1;
-      return 0;
+	return true;
+      return false;
     }
   else if (reggroup == vector_reggroup)
     return (regnum >= RISCV_V0_REGNUM && regnum <= RISCV_V31_REGNUM);
   else
-    return 0;
+    return false;
 }
 
 /* Return the name for pseudo-register REGNUM for GDBARCH.  */
@@ -1502,10 +1495,10 @@ riscv_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
     gdb_assert_not_reached ("unknown pseudo register number %d", regnum);
 }
 
-/* Return true (non-zero) if pseudo-register REGNUM from GDBARCH is a
-   member of REGGROUP, otherwise return false (zero).  */
+/* Return true if pseudo-register REGNUM from GDBARCH is a
+   member of REGGROUP, otherwise return false.  */
 
-static int
+static bool
 riscv_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 				  const struct reggroup *reggroup)
 {
@@ -1520,7 +1513,7 @@ static void
 riscv_print_registers_info (struct gdbarch *gdbarch,
 			    struct ui_file *file,
 			    const frame_info_ptr &frame,
-			    int regnum, int print_all)
+			    int regnum, bool print_all)
 {
   if (regnum != -1)
     {
@@ -3320,7 +3313,7 @@ riscv_print_arg_location (ui_file *stream, struct gdbarch *gdbarch,
 			  CORE_ADDR sp_refs, CORE_ADDR sp_args)
 {
   gdb_printf (stream, "type: '%s', length: 0x%x, alignment: 0x%x",
-	      TYPE_SAFE_NAME (info->type), info->length, info->align);
+	      info->type->safe_name (), info->length, info->align);
   switch (info->argloc[0].loc_type)
     {
     case riscv_arg_info::location::in_reg:
@@ -4103,16 +4096,16 @@ riscv_tdesc_unknown_reg (struct gdbarch *gdbarch, tdesc_feature *feature,
      number that GDB has assigned them.  Then in riscv_register_name we will
      return no name for the three duplicates, this hides the duplicates from
      the user.  */
-  if (strcmp (tdesc_feature_name (feature), riscv_freg_feature.name ()) == 0)
+  if (streq (tdesc_feature_name (feature), riscv_freg_feature.name ()))
     {
       riscv_gdbarch_tdep *tdep = gdbarch_tdep<riscv_gdbarch_tdep> (gdbarch);
       int *regnum_ptr = nullptr;
 
-      if (strcmp (reg_name, "fflags") == 0)
+      if (streq (reg_name, "fflags"))
 	regnum_ptr = &tdep->duplicate_fflags_regnum;
-      else if (strcmp (reg_name, "frm") == 0)
+      else if (streq (reg_name, "frm"))
 	regnum_ptr = &tdep->duplicate_frm_regnum;
-      else if (strcmp (reg_name, "fcsr") == 0)
+      else if (streq (reg_name, "fcsr"))
 	regnum_ptr = &tdep->duplicate_fcsr_regnum;
 
       if (regnum_ptr != nullptr)
@@ -4134,7 +4127,7 @@ riscv_tdesc_unknown_reg (struct gdbarch *gdbarch, tdesc_feature *feature,
   /* Any unknown registers in the CSR feature are recorded within a single
      block so we can easily identify these registers when making choices
      about register groups in riscv_register_reggroup_p.  */
-  if (strcmp (tdesc_feature_name (feature), riscv_csr_feature.name ()) == 0)
+  if (streq (tdesc_feature_name (feature), riscv_csr_feature.name ()))
     {
       riscv_gdbarch_tdep *tdep = gdbarch_tdep<riscv_gdbarch_tdep> (gdbarch);
       if (tdep->unknown_csrs_first_regnum == -1)
@@ -4178,7 +4171,7 @@ riscv_print_insn (bfd_vma addr, struct disassemble_info *info)
 /* Implementation of `gdbarch_stap_is_single_operand', as defined in
    gdbarch.h.  */
 
-static int
+static bool
 riscv_stap_is_single_operand (struct gdbarch *gdbarch, const char *s)
 {
   return (c_isdigit (*s) /* Literal number.  */
@@ -4313,14 +4306,14 @@ riscv_gdbarch_init (struct gdbarch_info info,
   set_gdbarch_long_double_bit (gdbarch, 128);
   set_gdbarch_long_double_format (gdbarch, floatformats_ieee_quad);
   set_gdbarch_ptr_bit (gdbarch, riscv_isa_xlen (gdbarch) * 8);
-  set_gdbarch_char_signed (gdbarch, 0);
+  set_gdbarch_char_signed (gdbarch, false);
   set_gdbarch_type_align (gdbarch, riscv_type_align);
 
   /* Information about the target architecture.  */
   set_gdbarch_return_value_as_value (gdbarch, riscv_return_value);
   set_gdbarch_breakpoint_kind_from_pc (gdbarch, riscv_breakpoint_kind_from_pc);
   set_gdbarch_sw_breakpoint_from_kind (gdbarch, riscv_sw_breakpoint_from_kind);
-  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
+  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, true);
 
   /* Functions to analyze frames.  */
   set_gdbarch_skip_prologue (gdbarch, riscv_skip_prologue);
@@ -5207,27 +5200,15 @@ class riscv_recorded_insn final
 	    && save_reg (decode_rd (ival)));
   }
 
-  /* Returns true if instruction is successfully recordered.  The length of
-     the instruction must be equal 4 bytes.  */
+  /* Returns true if instruction is successfully recorded.  The length of
+     the instruction must be equal to 4 bytes.  Helper function for
+     record_insn_len4.  */
   bool
-  record_insn_len4 (ULONGEST ival) noexcept
+  record_insn_len4_1 (ULONGEST ival) noexcept
   {
     mem_len len = 0;
-    ULONGEST reg_val = 0;
 
-    if (is_ecall_insn (ival))
-      {
-	/* We are in baremetal mode.  */
-	if (m_in_baremetal_mode)
-	  {
-	    warning (_("Syscall record is not supported"));
-	    return false;
-	  }
-
-	/* We are in linux mode.  */
-	return (read_reg (RISCV_A7_REGNUM, reg_val)
-		&& m_gdbarch->riscv_syscall_record (m_regcache, reg_val) == 0);
-      }
+    gdb_assert (!is_ecall_insn (ival));
 
     if (is_ebreak_insn (ival))
       return true;
@@ -5265,8 +5246,34 @@ class riscv_recorded_insn final
     return false;
   }
 
-  /* Returns true if instruction is successfully recordered.  The length of
-     the instruction must be equal 2 bytes.  */
+  /* Returns RECORD_SUCCESS if instruction is successfully recorded.  The
+     length of the instruction must be equal to 4 bytes.  */
+  int
+  record_insn_len4 (ULONGEST ival) noexcept
+  {
+    ULONGEST reg_val = 0;
+
+    if (is_ecall_insn (ival))
+      {
+	/* We are in baremetal mode.  */
+	if (m_in_baremetal_mode)
+	  {
+	    warning (_("Syscall record is not supported"));
+	    return RECORD_FAILURE;
+	  }
+
+	/* We are in linux mode.  */
+	if (!read_reg (RISCV_A7_REGNUM, reg_val))
+	  return RECORD_FAILURE;
+
+	return m_gdbarch->riscv_syscall_record (m_regcache, reg_val);
+      }
+
+    return record_insn_len4_1 (ival) ? RECORD_SUCCESS : RECORD_FAILURE;
+  }
+
+  /* Returns true if instruction is successfully recorded.  The length of
+     the instruction must be equal to 2 bytes.  */
   bool
   record_insn_len2 (ULONGEST ival) noexcept
   {
@@ -5397,8 +5404,9 @@ class riscv_recorded_insn final
   }
 
 public:
-  /* Record instruction at address addr.  Returns false if error happened.  */
-  bool
+  /* Record instruction at address addr.  Return RECORD_FAILURE if error
+     happened.  */
+  int
   record (gdbarch *gdbarch, struct regcache *regcache, CORE_ADDR addr) noexcept
   {
     gdb_assert (gdbarch != nullptr);
@@ -5421,14 +5429,14 @@ public:
     catch (const gdb_exception_error &ex)
       {
 	warning ("%s", ex.what ());
-	return false;
+	return RECORD_FAILURE;
       }
 
     if (!save_reg (RISCV_PC_REGNUM))
-      return false;
+      return RECORD_FAILURE;
 
     if (insn_length == 2)
-      return record_insn_len2 (ival);
+      return record_insn_len2 (ival) ? RECORD_SUCCESS : RECORD_FAILURE;
 
     if (insn_length == 4)
       return record_insn_len4 (ival);
@@ -5440,7 +5448,7 @@ public:
 
     warning (_("Can not record unknown instruction (opcode = %s)"),
 	     hex_string (ival));
-    return false;
+    return RECORD_FAILURE;
   }
 };
 
@@ -5456,11 +5464,9 @@ riscv_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
   gdb_assert (regcache != nullptr);
 
   riscv_recorded_insn insn;
-  if (!insn.record (gdbarch, regcache, addr))
-    return -1;
-
-  if (record_full_arch_list_add_end ())
-    return -1;
+  int res = insn.record (gdbarch, regcache, addr);
+  if (res != RECORD_SUCCESS)
+    return res;
 
   return 0;
 }

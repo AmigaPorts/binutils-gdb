@@ -326,7 +326,7 @@ ctf_dump_header (ctf_dict_t *fp, ctf_dump_state_t *state)
 
   if (fp->ctf_openflags > 0)
     {
-      if (asprintf (&flagstr, "%s%s%s%s%s%s%s%s%s",
+      if (asprintf (&flagstr, "%s%s%s%s%s%s%s",
 		    fp->ctf_openflags & CTF_F_COMPRESS
 		    ? "CTF_F_COMPRESS": "",
 		    (fp->ctf_openflags & CTF_F_COMPRESS)
@@ -342,12 +342,6 @@ ctf_dump_header (ctf_dict_t *fp, ctf_dump_state_t *state)
 		    fp->ctf_openflags & (CTF_F_IDXSORTED)
 		    && (fp->ctf_openflags & ~(CTF_F_COMPRESS | CTF_F_NEWFUNCINFO
 					      | CTF_F_IDXSORTED))
-		    ? ", " : "",
-		    fp->ctf_openflags & CTF_F_ARRNELEMS
-		    ? "CTF_F_ARRNELEMS" : "",
-		    fp->ctf_openflags & (CTF_F_ARRNELEMS)
-		    && (fp->ctf_openflags & ~(CTF_F_COMPRESS | CTF_F_NEWFUNCINFO
-					      | CTF_F_IDXSORTED | CTF_F_ARRNELEMS))
 		    ? ", " : "",
 		    fp->ctf_openflags & CTF_F_DYNSTR
 		    ? "CTF_F_DYNSTR" : "") < 0)
@@ -445,11 +439,12 @@ ctf_dump_objts (ctf_dict_t *fp, ctf_dump_state_t *state, int functions)
   ctf_next_t *i = NULL;
   char *str = NULL;
 
-  if ((functions && fp->ctf_funcidx_names)
-      || (!functions && fp->ctf_objtidx_names))
-    str = str_append (str, _("Section is indexed.\n"));
+  if (functions ? fp->ctf_funcidx_names : fp->ctf_objtidx_names)
+    str = str_append (str, _("  (Section is indexed.)\n"));
   else if (fp->ctf_ext_symtab.cts_data == NULL)
-    str = str_append (str, _("No symbol table.\n"));
+    str = str_append (str, _("  (No symbol table.)\n"));
+  if (str)
+    ctf_dump_append (state, str);
 
   while ((id = ctf_symbol_next (fp, &i, &name, functions)) != CTF_ERR)
     {

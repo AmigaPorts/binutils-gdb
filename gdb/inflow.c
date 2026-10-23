@@ -552,7 +552,7 @@ child_interrupt (struct target_ops *self)
   thread_info *resumed = NULL;
   for (thread_info &thr : all_non_exited_threads ())
     {
-      if (thr.executing ())
+      if (thr.internal_state () == THREAD_INT_RUNNING)
 	{
 	  resumed = &thr;
 	  break;
@@ -639,13 +639,7 @@ terminal_info::~terminal_info ()
 static struct terminal_info *
 get_inflow_inferior_data (struct inferior *inf)
 {
-  struct terminal_info *info;
-
-  info = inflow_inferior_data.get (inf);
-  if (info == NULL)
-    info = inflow_inferior_data.emplace (inf);
-
-  return info;
+  return &inflow_inferior_data.try_emplace (inf);
 }
 
 /* This is a "inferior_exit" observer.  Releases the TERMINAL_INFO member

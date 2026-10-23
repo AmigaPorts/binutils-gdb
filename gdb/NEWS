@@ -3,6 +3,9 @@
 
 *** Changes since GDB 17
 
+* Support for the Common Trace Format (CTF) has been removed.  GDB now
+  saves trace information exclusively in its own "tfile" format.
+
 * Support for .gdb_index sections with version less than 7 has been
   removed.
 
@@ -36,11 +39,21 @@
   subsequent runs of the inferior will use the same arguments as the
   first run.
 
+* GDB now supports arbitrary (non-standard) baud rates for serial
+  connections to remote targets on systems where the host libc accepts
+  them via cfsetispeed/cfsetospeed, such as glibc 2.42 and later and
+  GNU Hurd.  On other systems, existing platform-specific mechanisms
+  are used.
+
 * Support for stabs debug information has been removed.
 
 * Support for mdebug debug information has been removed.
 
 * Support for the binary file format dbx has been removed.
+
+* The format for a saved execution record, created when the command
+  'record save' is used, has been updated, and previous formats are
+  no longer supported.
 
 * When connected to an extended-remote target GDB can now
   automatically set the 'remote exec-file' in some cases.  GDB will
@@ -66,11 +79,58 @@
   automatically set to UTF-8.  (Users can use the Windows 'chcp'
   command to change the output codepage of the console.)
 
+* The Windows native target now supports scheduler-locking.  E.g.,
+  "set scheduler-locking on" now works.  Previously it gave an error.
+
+* The Windows native target now supports non-stop mode.  This feature
+  requires Windows 10 or later.
+
+* Support for native Thread Local Storage (TLS) variables on Windows.
+
+* GDB now normalizes backslashes to forward slashes on Windows.
+
+  E.g., depending on compiler and build system used by your project,
+  previously GDB could show a mix of slash styles, like for example:
+
+     C:/proj/src\main.c
+
+  GDB will now consistently show forward slashes:
+
+     C:/proj/src/main.c
+
+  This impacts all interpreters, including the CLI, the TUI, the
+  GDB/MI interface, and the Debug Adapter Protocol, and affects
+  everywhere GDB shows a filename/dirname: source filenames,
+  executable filename, shared libraries, the cd/pwd commands, etc.
+
+* GDB now supports libipt v2.2 events originating from Event Tracing (set
+  record btrace pt event-tracing on) on a FRED-enabled system and from
+  Trigger Tracing.
+
+* The s390 32-bit target (s390-*) is deprecated and planned for
+  removal in a future release, along with the elf32-s390 target
+  format.  configure now emits an error for this target, which can be
+  overridden using --enable-obsolete.
+  Linux Kernel 6.19 removed s390 32-bit compatibility support.
+  Glibc 2.43 and GCC 16.1 have deprecated s390 32-bit, both with the
+  intent to remove it in a future release.
+  The s390 64-bit target (s390x-*) remains supported.
+
+* Configure changes
+
+** --with-babeltrace has been removed.  The babeltrace library was
+   only used to help GDB parse Common Trace Format (CTF) data.  The
+   support for CTF has also been removed.
+
 * New targets
 
 GNU/Linux/MicroBlaze (gdbserver) microblazeel-*linux*
 
 AArch64 MinGW                   aarch64-*-mingw*
+
+* Deprecated targets
+
+GNU/Linux/S390 32-bit		s390-*-*
 
 * New commands
 
@@ -81,9 +141,27 @@ unset local-environment
   environment.  The local environment is used by "shell", "pipe", and
   other commands that launch a subprocess other than an inferior.
 
+save history FILENAME
+  Save the command history to the given file.
+
+save skip FILENAME
+  Save all current "skip"s to the given file.
+
+save user FILENAME
+  Save all user-defined commands to the given file.
+
 maintenance test-remote-args ARGS
   Test splitting and joining of inferior arguments ARGS as they would
   be split and joined when being passed to a remote target.
+
+set debug gnu-ifunc on|off
+show debug gnu-ifunc
+  Turn on or off debug messages related to GNU ifunc resolution.
+
+set debug ctf on|off
+show debug ctf
+  Turn on or off debug messages about Compact C Type Format (CTF)
+  reading.
 
 set progress-bars enabled on|off
 show progress-bars enabled
@@ -91,7 +169,24 @@ show progress-bars enabled
   content, to be disabled (the set command), or to see if
   progress-bars are currently enabled or not (the show command).
 
+info proc environ
+  Print the initial environment variables of the specified process.
+  Supported on Linux.
+
+delete skip
+enable skip
+disable skip
+  These are new aliases for 'skip delete', 'skip enable', and 'skip
+  disable' respectively.
+
+* MI changes
+
+** The "-trace-save" command no longer supports the "-ctf" flag.
+
 * Changed commands
+
+tsave
+  This command no longer supports the "-ctf" flag.
 
 maintenance info program-spaces
   This command no longer displays the core file name.
@@ -106,6 +201,17 @@ New command class for help
   commands that we, as developers, believe would be close to a minimal
   set of commands for a new user of GDB.
 
+* Removed commands
+
+target ctf
+  Support for the Common Trace Format (CTF) has been removed.
+
+maint check psymtabs
+maint info psymtabs
+maint print psymbols
+  These commands have been removed, as GDB no longer uses partial
+  symbol tables internally.
+
 * Debugger Adapter Protocol changes
 
   ** Unhandled Ada exceptions can now be caught using the "unhandled"
@@ -113,6 +219,8 @@ New command class for help
 
   ** The launch and attach requests now accept the adaSourceCharset
      parameter.
+
+  ** The attach request now accepts the coreFile parameter.
 
   ** Constants are now returned in scopes.
 
@@ -177,6 +285,37 @@ qExecAndArgs
      contains the gdb.Corefile object if a core file is loaded into
      the inferior, otherwise, this contains None.
 
+  ** New event registry gdb.events.selected_context that emits a
+     SelectedContextEvent event whenever the user changes the inferior
+     context.  The context consists of which inferior, thread, and
+     frame are currently selected.  The event object has 'inferior',
+     'thread' and 'frame' attributes containing gdb.Inferior,
+     gdb.InferiorThread, and gdb.Frame objects respectively.
+
+  ** New method gdb.Symtab.source_lines(start, end, unstyled).  This
+     returns a tuple of strings, each string represents a single
+     source line for the file associated with the symtab.  The 'start'
+     and 'end' are line numbers, and allow for only some lines to be
+     returned, these default to the first and last lines in the file
+     respectively.  If 'unstyled' is true then the returned lines will
+     have no styling applied, otherwise, styling will be applied if
+     the appropriate user setting is enabled, and GDB knows how to
+     style this source file.
+
+  ** The Architecture.disassemble method accepts a new 'styling'
+     argument, which defaults to False.  When set to True the 'asm'
+     strings in the disassembler output can contain ANSI escape
+     sequences to indicate styling.
+
+  ** New gdb.Block.ranges attribute.  This read only attribute contains
+     a tuple of pairs each representing a single range.  Contiguous blocks
+     have only one range.
+
+  ** New event registry gdb.events.corefile_changed, which emits a
+     CorefileChangedEvent whenever the core file associated with an
+     inferior changes.  The event has an 'inferior' attribute which is
+     the gdb.Inferior in which the core file has changed.
+
 * Guile API
 
   ** Procedures 'memory-port-read-buffer-size',
@@ -184,6 +323,12 @@ qExecAndArgs
      and 'set-memory-port-write-buffer-size!' have been removed.  They were
      deprecated since GDB 10.  Users who need to control the size of a
      memory port's internal buffer can use the 'setvbuf' procedure.
+
+* Removed targets and native configurations
+
+  GDB no longer supports AIX 7.1.  The minimum supported
+  AIX version is now AIX 7.2 TL5.  GDB will only support
+  DWARF debugging in AIX, going forward.
 
 *** Changes in GDB 17
 

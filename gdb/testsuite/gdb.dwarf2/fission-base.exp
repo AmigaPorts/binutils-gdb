@@ -32,19 +32,24 @@ if {[build_executable_and_dwo_files "$testfile.exp" "${binfile}" {nodebug} \
 	 [list $srcfile \
 	      [list nodebug split-dwo additional_flags=-DDWO=\"$dwo\"] \
 	      $obj]]} {
-    return -1
+    return
 }
 
 clean_restart $::testfile
 
 if {![runto_main]} {
-    return -1
+    return
 }
 
 # Do a few basic things to verify we're finding the DWO debug info.
 
 gdb_test "ptype main" "type = int \\(\\)"
 gdb_test "ptype func" "type = int \\(int\\)"
+
+# If test is compiled with clang, GDB would display absolute path.
+# This command keeps output consistent across toolchains.
+
+gdb_test_no_output "set filename-display basename"
 
 gdb_test "frame" "#0 *main \\(\\) at $testfile\\.c:$decimal.*" \
     "frame in main"

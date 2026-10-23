@@ -81,7 +81,7 @@ static struct {
   int value;
 } parm_constants[] =
 {
-  { "PARAM_BOOLEAN", param_boolean }, /* ARI: param_boolean */
+  { "PARAM_BOOLEAN", param_boolean },
   { "PARAM_AUTO_BOOLEAN", param_auto_boolean },
   { "PARAM_UINTEGER", param_uinteger },
   { "PARAM_INTEGER", param_integer },
@@ -124,10 +124,8 @@ union parmpy_variable
 };
 
 /* A GDB parameter.  */
-struct parmpy_object
+struct parmpy_object : public PyObject
 {
-  PyObject_HEAD
-
   /* The type of the parameter.  */
   enum var_types type;
 
@@ -142,6 +140,8 @@ struct parmpy_object
      NULL-terminated.  */
   const char **enumeration;
 };
+
+static_assert (gdb::is_python_allocatable_v<parmpy_object>);
 
 /* Wraps a setting around an existing parmpy_object.  This abstraction
    is used to manipulate the value in S->VALUE in a type safe manner using
@@ -244,7 +244,7 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 	if (str == NULL)
 	  return -1;
 	for (i = 0; self->enumeration[i]; ++i)
-	  if (! strcmp (self->enumeration[i], str.get ()))
+	  if (streq (self->enumeration[i], str.get ()))
 	    break;
 	if (! self->enumeration[i])
 	  {
@@ -330,8 +330,8 @@ set_parameter_value (parmpy_object *self, PyObject *value)
 		  buffer += ", ";
 		buffer = buffer + "'" + l->literal + "'";
 		if (allowed == TRIBOOL_UNKNOWN
-		    && ((value == Py_None && !strcmp ("unlimited", l->literal))
-			|| (s != nullptr && !strcmp (s, l->literal))))
+		    && ((value == Py_None && streq ("unlimited", l->literal))
+			|| (s != nullptr && streq (s, l->literal))))
 		  {
 		    val = l->use;
 		    allowed = TRIBOOL_TRUE;
@@ -858,7 +858,7 @@ parmpy_init (PyObject *self, PyObject *args, PyObject *kwds)
       return -1;
     }
 
-  if (parmclass != param_boolean /* ARI: param_boolean */
+  if (parmclass != param_boolean
       && parmclass != param_auto_boolean
       && parmclass != param_uinteger && parmclass != param_integer
       && parmclass != param_string && parmclass != param_string_noescape

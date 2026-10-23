@@ -23,7 +23,7 @@ standard_testfile coremaker.c
 
 if {[build_executable $testfile.exp $testfile $srcfile debug] == -1} {
     untested "failed to compile"
-    return -1
+    return
 }
 
 # Do not delete coremap.data when calling core_find.  This file is
@@ -32,7 +32,7 @@ if {[build_executable $testfile.exp $testfile $srcfile debug] == -1} {
 set corefile [core_find $binfile {}]
 if {$corefile == ""} {
     untested "unable to create or find corefile"
-    return 0
+    return
 }
 
 # Start GDB with COREFILE passed as a command line argument.  COREOPT
@@ -130,11 +130,11 @@ gdb_test_multiple "core-file $corefile" "core-file command" {
 
 # Test correct mapping of corefile sections by printing some variables.
 
-gdb_test "print coremaker_data" "\\\$$decimal = 202"
-gdb_test "print coremaker_bss" "\\\$$decimal = 10"
-gdb_test "print coremaker_ro" "\\\$$decimal = 201"
+gdb_test "print coremaker_data" "${::valnum_re} = 202"
+gdb_test "print coremaker_bss" "${::valnum_re} = 10"
+gdb_test "print coremaker_ro" "${::valnum_re} = 201"
 
-gdb_test "print func2::coremaker_local" "\\\$$decimal = \\{0, 1, 2, 3, 4\\}"
+gdb_test "print func2::coremaker_local" "${::valnum_re} = \\{0, 1, 2, 3, 4\\}"
 
 # Test the presence and the correct values of $_exitsignal and
 # $_exitcode variables.  The corefile is generated with a SIGABRT,
@@ -229,7 +229,7 @@ gdb_test "x/8bd buf2" \
     "accessing mmapped data in core file with coremmap.data removed"
 
 gdb_test "x/8bd buf2ro" \
-    "$hex\[^:\]*:\\s+Cannot access memory at address $hex" \
+    "$hex\[^:\]*:(\\s+<unavailable>){8}" \
     "accessing read-only mmapped data in core file with coremmap.data removed"
 
 # Restore the coremmap.data file so later tests don't give warnings

@@ -15,7 +15,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "gdbsupport/common-defs.h"
 #include "gdbsupport/remote-args.h"
 #include "gdbsupport/common-inferior.h"
 #include "gdbsupport/buildargv.h"
@@ -32,12 +31,4 @@ gdb::remote_args::split (const std::string &args)
     results.emplace_back (argv[i]);
 
   return results;
-}
-
-/* See remote-args.h.  */
-
-std::string
-gdb::remote_args::join (const std::vector<char *> &args)
-{
-  return construct_inferior_arguments (args, true);
 }

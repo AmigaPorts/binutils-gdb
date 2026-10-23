@@ -128,7 +128,7 @@ get_aarch64_opcode (const opcode_node *opcode_node)
   return &index2table (opcode_node->index)[real_index (opcode_node->index)];
 }
 
-static bool iclass_has_subclasses_p[last_iclass];
+static bool iclass_has_subclasses_p[last_iclass + 1];
 
 static void
 read_table (const struct aarch64_opcode* table)
@@ -149,6 +149,11 @@ read_table (const struct aarch64_opcode* table)
   do
     {
       bool match = false;
+
+      unsigned int operand_count = 0;
+      while (operand_count < ARRAY_SIZE (ent->operands)
+	     && ent->operands[operand_count] != AARCH64_OPND_NIL)
+	operand_count++;
 
       /* F_PSEUDO needs to be used together with F_ALIAS to indicate an alias
 	 opcode is a programmer friendly pseudo instruction available only in
@@ -187,6 +192,47 @@ read_table (const struct aarch64_opcode* table)
 	  fprintf (stderr, "%s: no operands match, but tied=%u\n",
 		   ent->name, ent->tied_operand);
 	  ++errors;
+	}
+
+      /* Check that the qualifier sequence lengths match the number of
+	 operands.  */
+      bool qlf_end = false;
+      for (unsigned int i = 0; i < ARRAY_SIZE (ent->qualifiers_list); i++)
+	{
+	  for (unsigned int j = 0; j < ARRAY_SIZE (ent->qualifiers_list[0]); j++)
+	    {
+	      if (j >= operand_count || qlf_end)
+		{
+		  if (ent->qualifiers_list[i][j] != AARCH64_OPND_QLF_UNUSED)
+		    {
+		      fprintf (stderr,
+			       "%s (%08x,%08x): Qualifier %u for sequence %u should be UNUSED.\n",
+			       ent->name, ent->opcode, ent->mask, j, i);
+		      ++errors;
+		    }
+		}
+	      else if (ent->qualifiers_list[i][j] == AARCH64_OPND_QLF_UNUSED)
+		{
+		  if (j == 0)
+		    {
+		      qlf_end = true;
+		      if (i == 0 && operand_count > 0)
+			{
+			  fprintf (stderr,
+				   "%s (%08x,%08x): No qualifiers specified.\n",
+				   ent->name, ent->opcode, ent->mask);
+			  ++errors;
+			}
+		    }
+		  else
+		    {
+		      fprintf (stderr,
+			       "%s (%08x,%08x): Qualifier %u for sequence %u is missing.\n",
+			       ent->name, ent->opcode, ent->mask, j, i);
+		      ++errors;
+		    }
+		}
+	    }
 	}
 
       if (ent->flags & F_SUBCLASS)
@@ -927,7 +973,7 @@ struct operand
   const char *extractor;
   const char *str;
   const char *flags;
-  const char *fields;
+  aarch64_field fields[6];
   const char *desc;
   unsigned processed : 1;
   unsigned has_inserter : 1;
@@ -948,18 +994,28 @@ typedef struct operand operand;
 #undef F
 #endif
 
+#define FLD(lsb, w)  { .num = lsb, .width = w }
+
+#define FLD_CONST_0  { .num = 0, .width = 1, .is_const = true }
+#define FLD_CONST_00 { .num = 0, .width = 2, .is_const = true }
+#define FLD_CONST_01 { .num = 1, .width = 2, .is_const = true }
+#define FLD_CONST_1  { .num = 1, .width = 1, .is_const = true }
+
+/* The parentheses used when calling this macro ensure that the list of fields
+   appears as a single argument to the X and Y macros.  */
+#define F(...) {__VA_ARGS__}
+
 /* Get the operand information in strings.  */
 
 static operand operands[] =
 {
-    {"NIL", "0", "0", "", "0", "{0}", "<none>", 0, 0, 0},
-#define F(...)	#__VA_ARGS__
+    {"NIL", "0", "0", "", "0", {}, "<none>", 0, 0, 0},
 #define X(a,b,c,d,e,f,g)	\
-    {#a, #b, #c, d, #e, "{"f"}", g, 0, 0, 0},
+    {#a, #b, #c, d, #e, f, g, 0, 0, 0},
 #define Y(a,b,d,e,f,g)		\
-    {#a, "ins_"#b, "ext_"#b, d, #e, "{"f"}", g, 0, 0, 0},
+    {#a, "ins_"#b, "ext_"#b, d, #e, f, g, 0, 0, 0},
     AARCH64_OPERANDS
-    {"NIL", "0", "0", "", "0", "{0}", "DUMMY", 0, 0, 0},
+    {"NIL", "0", "0", "", "0", {}, "DUMMY", 0, 0, 0},
 };
 
 #undef F
@@ -1018,8 +1074,21 @@ print_operand_table (void)
 	  flags[0] = '0';
 	  flags[1] = '\0';
 	}
-    printf ("  {AARCH64_OPND_CLASS_%s, \"%s\", %s, %s, \"%s\"},\n",
-	    opnd->class, opnd->str, flags, opnd->fields, opnd->desc);
+      char fields[256] = "";
+      char *str = fields;
+      for (int j = 0; j < 6; j++)
+	{
+	  aarch64_field field = opnd->fields[j];
+	  if (field.width == 0)
+	    continue;
+	  if (j != 0)
+	    str += sprintf (str, ", ");
+	  str += sprintf (str, "{%d, %d, %s}",
+			  field.width, field.num,
+			  field.is_const ? "true" : "false");
+	}
+    printf ("  {AARCH64_OPND_CLASS_%s, \"%s\", %s, {%s}, \"%s\"},\n",
+	    opnd->class, opnd->str, flags, fields, opnd->desc);
     }
   printf ("};\n");
 }

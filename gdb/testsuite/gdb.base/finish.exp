@@ -17,9 +17,9 @@
 
 set allow_float_test [allow_float_test]
 
-# re-use the program from the "return2" test.
+# reuse the program from the "return2" test.
 if { [prepare_for_testing "failed to prepare" finish return2.c] } {
-    return -1
+    return
 }
 
 proc finish_1 { type } {
@@ -65,7 +65,7 @@ proc finish_void { } {
 	-re ".*void_checkpoint.*$gdb_prompt $" {
 	    pass "finish from void_func"
 	}
-	-re "0x\[0-9a-fA-F\]+ in main.*call to void_func.*$gdb_prompt $" {
+	-re "${::hex} in main.*call to void_func.*$gdb_prompt $" {
 	    pass "finish from void_func"
 	}
     }
@@ -94,7 +94,7 @@ proc finish_no_print {} {
     }
     gdb_test_no_output "set print finish off"
     gdb_test "finish" \
-	"Value returned is \\\$$decimal = <not displayed>"
+	"Value returned is ${::valnum_re} = <not displayed>"
     gdb_test "print \$" " = 1" \
 	"Ensure return value was properly saved"
 }

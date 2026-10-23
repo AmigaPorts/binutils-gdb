@@ -103,7 +103,7 @@ arm_wince_skip_main_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 
       if (s.minsym != NULL
 	  && s.minsym->linkage_name () != NULL
-	  && strcmp (s.minsym->linkage_name (), "__gccmain") == 0)
+	  && streq (s.minsym->linkage_name (), "__gccmain"))
 	pc += 4;
     }
 
@@ -128,9 +128,6 @@ arm_wince_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->jb_pc = ARM_WINCE_JB_PC;
   tdep->jb_elt_size = ARM_WINCE_JB_ELEMENT_SIZE;
 
-  /* On ARM WinCE char defaults to signed.  */
-  set_gdbarch_char_signed (gdbarch, 1);
-
   /* Shared library handling.  */
   set_gdbarch_skip_trampoline_code (gdbarch, arm_pe_skip_trampoline_code);
 
@@ -146,7 +143,7 @@ arm_wince_osabi_sniffer (bfd *abfd)
 {
   const char *target_name = bfd_get_target (abfd);
 
-  if (strcmp (target_name, "pei-arm-wince-little") == 0)
+  if (streq (target_name, "pei-arm-wince-little"))
     return GDB_OSABI_WINCE;
 
   return GDB_OSABI_UNKNOWN;

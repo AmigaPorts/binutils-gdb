@@ -30,6 +30,7 @@
 #include "gdbsupport/gdb_regex.h"
 #include "gdbsupport/enum-flags.h"
 #include "gdbsupport/function-view.h"
+#include "gdbsupport/iteration-status.h"
 #include <optional>
 #include <string_view>
 #include "gdbsupport/next-iterator.h"
@@ -403,11 +404,11 @@ typedef bool (symbol_name_matcher_ftype)
      struct partial_symbol
 
    These structures are laid out to encourage good packing.
-   They use ENUM_BITFIELD and short int fields, and they order the
+   They use bitfields and short int fields, and they order the
    structure members so that fields less than a word are next
    to each other so they can be packed together.  */
 
-/* Rearranged: used ENUM_BITFIELD and rearranged field order in
+/* Rearranged: used bitfields and rearranged field order in
    all the space critical structures (plus struct minimal_symbol).
    Memory usage dropped from 99360768 bytes to 90001408 bytes.
    I measured this with before-and-after tests of
@@ -585,7 +586,7 @@ struct general_symbol_info
      This is used to select one of the fields from the language specific
      union above.  */
 
-  ENUM_BITFIELD(language) m_language : LANGUAGE_BITS;
+  enum language m_language : LANGUAGE_BITS;
 
   /* This is only used by Ada.  If set, then the 'demangled_name' field
      of language_specific is valid.  Otherwise, the 'obstack' field is
@@ -814,7 +815,7 @@ struct minimal_symbol : public general_symbol_info
 
   /* Classification type for this minimal symbol.  */
 
-  ENUM_BITFIELD(minimal_symbol_type) m_type : MINSYM_TYPE_BITS;
+  minimal_symbol_type m_type : MINSYM_TYPE_BITS;
 
   /* Non-zero if this symbol was created by gdb.
      Such symbols do not appear in the output of "info var|fun".  */
@@ -1153,12 +1154,11 @@ struct symbol_computed_ops
 
 struct symbol_block_ops
 {
-  /* Fill in *START and *LENGTH with DWARF block data of function
-     FRAMEFUNC valid for inferior context address PC.  Set *LENGTH to
-     zero if such location is not valid for PC; *START is left
-     uninitialized in such case.  */
-  void (*find_frame_base_location) (struct symbol *framefunc, CORE_ADDR pc,
-				    const gdb_byte **start, size_t *length);
+  /* Return the DWARF block data of function FRAMEFUNC valid for inferior
+     context address PC.  Return an empty view if no such location is
+     valid for PC.  */
+  gdb::array_view<const gdb_byte> (*find_frame_base_location)
+    (struct symbol *framefunc, CORE_ADDR pc);
 
   /* Return the frame base address.  FRAME is the frame for which we want to
      compute the base address while FRAMEFUNC is the symbol for the
@@ -1468,7 +1468,7 @@ struct symbol : public general_symbol_info, public allocate_on_obstack<symbol>
 
   /* Domain code.  */
 
-  ENUM_BITFIELD(domain_enum) m_domain : SYMBOL_DOMAIN_BITS;
+  domain_enum m_domain : SYMBOL_DOMAIN_BITS;
 
   /* Location class.  This holds an index into the 'symbol_impls'
      table.  The actual location_class value is stored there,
@@ -1498,7 +1498,7 @@ struct symbol : public general_symbol_info, public allocate_on_obstack<symbol>
 
   /* The concrete type of this symbol.  */
 
-  ENUM_BITFIELD (symbol_subclass_kind) subclass : 2;
+  symbol_subclass_kind subclass : 2;
 
   /* Whether this symbol is artificial.  */
 
@@ -1671,21 +1671,20 @@ struct linetable
 
 struct symtab
 {
-  symtab (struct compunit_symtab *cust, const char *filename,
+  symtab (struct compunit_symtab &cust, const char *filename,
 	  const char *filename_for_id, enum language language)
     : m_filename (filename),
       m_filename_for_id (filename_for_id),
-      m_compunit (cust),
+      m_compunit (&cust),
       m_language (language)
   {
     gdb_assert (m_filename != nullptr);
     gdb_assert (m_filename_for_id != nullptr);
-    gdb_assert (m_compunit != nullptr);
   }
 
-  struct compunit_symtab *compunit () const
+  struct compunit_symtab &compunit () const
   {
-    return m_compunit;
+    return *m_compunit;
   }
 
   const struct linetable *linetable () const
@@ -2008,14 +2007,13 @@ struct compunit_symtab : intrusive_list_node<compunit_symtab>
      the given compilation unit, but it currently is.  */
   struct macro_table *m_macro_table = nullptr;
 
-  /* If non-NULL, then this points to a NULL-terminated vector of
-     included compunits.  When searching the static or global
+  /* Vector of included compunit symtabs.  When searching the static or global
      block of this compunit, the corresponding block of all
      included compunits will also be searched.  Note that this
      list must be flattened -- the symbol reader is responsible for
      ensuring that this vector contains the transitive closure of all
      included compunits.  */
-  struct compunit_symtab **includes = nullptr;
+  std::vector<compunit_symtab *> includes;
 
   /* If this is an included compunit, this points to one includer
      of the table.  This user is considered the canonical compunit
@@ -2029,7 +2027,7 @@ struct compunit_symtab : intrusive_list_node<compunit_symtab>
 static inline bool
 is_main_symtab_of_compunit_symtab (struct symtab *symtab)
 {
-  return symtab == symtab->compunit ()->primary_filetab ();
+  return symtab == symtab->compunit ().primary_filetab ();
 }
 
 /* Return true if epilogue unwind info of CUST is valid.  */
@@ -2201,6 +2199,12 @@ extern struct type *lookup_enum (const char *, const struct block *);
    function will be returned instead.  */
 
 extern struct symbol *find_symbol_for_pc (CORE_ADDR);
+
+/* Lookup the function symbol corresponding to the address.  The return value
+   will be the closest enclosing function, which might be an inline
+   function.  */
+
+extern struct symbol *find_symbol_for_pc_maybe_inline (CORE_ADDR pc);
 
 /* lookup the function corresponding to the address and section.  The
    return value will not be an inlined function; the containing
@@ -2693,7 +2697,7 @@ private:
    we return a vector of this type.  The first item in the pair is the
    module symbol, and the second item is the symbol for the function or
    variable we found.  */
-typedef std::pair<symbol_search, symbol_search> module_symbol_search;
+using module_symbol_search = std::pair<symbol_search, symbol_search>;
 
 /* Searches the symbols to find function and variables symbols (depending
    on KIND) within Fortran modules.  The MODULE_REGEXP matches against the
@@ -2783,42 +2787,37 @@ extern bool basenames_may_differ;
 bool compare_filenames_for_search (const char *filename,
 				   const char *search_name);
 
-bool compare_glob_filenames_for_search (const char *filename,
-					const char *search_name);
+/* Callback type for function for_each_symtab.  */
 
-/* Check in PSPACE for a symtab of a specific name; first in symtabs, then in
-   psymtabs.  *If* there is no '/' in the name, a match after a '/' in the
-   symtab filename will also work.
+using for_each_symtab_callback_ftype = std::function<void (symtab *)>;
 
-   Call CALLBACK with each symtab that is found.  If CALLBACK returns
-   true, the search stops.  */
+/* Check in PSPACE for symtabs of a specific name.  *If* there is no '/' in
+   the name, a match after a '/' in the symtab filename will also work.
 
-void iterate_over_symtabs (program_space *pspace, const char *name,
-			   gdb::function_view<bool (symtab *)> callback);
+   Call CALLBACK with each symtab that is found.  */
+
+void for_each_symtab (program_space *pspace, const char *name,
+		      for_each_symtab_callback_ftype callback);
+
+/* Callback type for function find_symtab.  */
+
+using find_symtab_callback_ftype = std::function<bool (symtab *)>;
 
 std::vector<const linetable_entry *> find_linetable_entries_for_symtab_line
     (struct symtab *symtab, int line, const linetable_entry **best_entry);
 
-/* Prototype for callbacks for LA_ITERATE_OVER_SYMBOLS.  The callback
-   is called once per matching symbol SYM.  The callback should return
-   true to indicate that LA_ITERATE_OVER_SYMBOLS should continue
-   iterating, or false to indicate that the iteration should end.  */
+/* Callback type for function for_each_symbol.  */
 
-typedef bool (symbol_found_callback_ftype) (struct block_symbol *bsym);
+using for_each_symbol_callback_ftype
+  = gdb::function_view<void (block_symbol *)>;
 
 /* Iterate over the symbols named NAME, matching DOMAIN, in BLOCK.
 
-   For each symbol that matches, CALLBACK is called.  The symbol is
-   passed to the callback.
+   For each symbol that matches, call CALLBACK with the symbol.  */
 
-   If CALLBACK returns false, the iteration ends and this function
-   returns false.  Otherwise, the search continues, and the function
-   eventually returns true.  */
-
-bool iterate_over_symbols (const struct block *block,
-			   const lookup_name_info &name,
-			   const domain_search_flags domain,
-			   gdb::function_view<symbol_found_callback_ftype> callback);
+void for_each_symbol (const struct block *block, const lookup_name_info &name,
+		      const domain_search_flags domain,
+		      for_each_symbol_callback_ftype callback);
 
 /* Storage type used by demangle_for_lookup.  demangle_for_lookup
    either returns a const char * pointer that points to either of the

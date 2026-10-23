@@ -23,7 +23,7 @@ require {istarget *-linux*}
 standard_testfile
 
 if { [build_executable "failed to prepare" $testfile $srcfile] } {
-    return -1
+    return
 }
 
 set test_spawn_id [spawn_wait_for_attach $binfile]
@@ -96,8 +96,6 @@ if { [target_info gdb_protocol] == "extended-remote" } {
 } else {
     set filename_re "\[^\r\n\]+/${testfile} \\(deleted\\)"
 }
-
-verbose -log "APB: warning: No executable has been specified, and target executable $filename_re could not be found\\.  Try using the \"file\" command\\."
 
 gdb_test "attach $testpid" \
     [multi_line \

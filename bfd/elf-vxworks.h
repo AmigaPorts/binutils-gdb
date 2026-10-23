@@ -19,6 +19,8 @@
 #include "elf/common.h"
 #include "elf/internal.h"
 
+#ifdef OBJ_MAYBE_ELF_VXWORKS
+
 bool elf_vxworks_add_symbol_hook
   (bfd *, struct bfd_link_info *, Elf_Internal_Sym *, const char **,
    flagword *, asection **, bfd_vma *) ATTRIBUTE_HIDDEN;
@@ -33,8 +35,16 @@ bool elf_vxworks_final_write_processing
 bool elf_vxworks_create_dynamic_sections
   (bfd *, struct bfd_link_info *, asection **) ATTRIBUTE_HIDDEN;
 bool elf_vxworks_add_dynamic_entries
-  (bfd *, struct bfd_link_info *) ATTRIBUTE_HIDDEN;
+  (struct bfd_link_info *) ATTRIBUTE_HIDDEN;
 bool elf_vxworks_finish_dynamic_entry
   (bfd *, Elf_Internal_Dyn *) ATTRIBUTE_HIDDEN;
 bool _bfd_elf_maybe_vxworks_add_dynamic_tags
-  (bfd *, struct bfd_link_info *, bool) ATTRIBUTE_HIDDEN;
+  (struct bfd_link_info *, bool) ATTRIBUTE_HIDDEN;
+
+#else /* !OBJ_MAYBE_ELF_VXWORKS */
+
+static inline bool _bfd_elf_maybe_vxworks_add_dynamic_tags (
+  struct bfd_link_info *info, bool need_dynamic_reloc)
+{ return _bfd_elf_add_dynamic_tags (info, need_dynamic_reloc); }
+
+#endif /* OBJ_MAYBE_ELF_VXWORKS */

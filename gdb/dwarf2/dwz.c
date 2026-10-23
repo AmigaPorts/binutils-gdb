@@ -31,6 +31,7 @@
 #include "gdbsupport/pathstuff.h"
 #include "gdbsupport/scoped_fd.h"
 #include "run-on-main-thread.h"
+#include "cli/cli-style.h"
 
 const char *
 dwz_file::read_string (struct objfile *objfile, LONGEST str_offset)
@@ -96,7 +97,8 @@ locate_dwz_sections (objfile *objfile, dwz_file &dwz_file)
 static void
 debug_sup_failure (const char *text, bfd *abfd)
 {
-  error (_("%s [in modules %s]"), text, bfd_get_filename (abfd));
+  error (_("%s [in modules %ps]"), text,
+	 styled_string (file_name_style.style (), bfd_get_filename (abfd)));
 }
 
 /* Look for the .debug_sup section and read it.  If the section does
@@ -169,7 +171,7 @@ get_debug_sup_info (bfd *abfd,
 static bool
 verify_id (bfd *abfd, size_t len, const bfd_byte *buildid, bool dwarf5)
 {
-  if (!bfd_check_format (abfd, bfd_object))
+  if (!gdb_bfd_check_format (abfd, bfd_object))
     return false;
 
   if (dwarf5)
@@ -379,8 +381,9 @@ dwz_file::read_dwz_file (dwarf2_per_objfile *per_objfile)
 	  dwz_bfd = gdb_bfd_open (alt_filename.get (), gnutarget);
 
 	  if (dwz_bfd == nullptr)
-	    warning (_("File \"%s\" from debuginfod cannot be opened as bfd"),
-		     alt_filename.get ());
+	    warning (_("File \"%ps\" from debuginfod cannot be opened as bfd"),
+		     styled_string (file_name_style.style (),
+				    alt_filename.get ()));
 	  else if (!verify_id (dwz_bfd.get (), buildid_len, buildid.get (),
 			       dwarf5))
 	    dwz_bfd.reset (nullptr);
@@ -388,9 +391,9 @@ dwz_file::read_dwz_file (dwarf2_per_objfile *per_objfile)
     }
 
   if (dwz_bfd == NULL)
-    error (_("could not find supplementary DWARF file (%s) for %s"),
-	   filename.c_str (),
-	   per_bfd->filename ());
+    error (_("could not find supplementary DWARF file (%ps) for %ps"),
+	   styled_string (file_name_style.style (), filename.c_str ()),
+	   styled_string (file_name_style.style (), per_bfd->filename ()));
 
   dwz_file_up result (new dwz_file (std::move (dwz_bfd)));
 

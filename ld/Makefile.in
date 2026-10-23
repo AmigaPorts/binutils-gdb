@@ -1029,8 +1029,8 @@ GEN_DEPENDS = $(srcdir)/genscripts.sh ldscripts/stamp
 
 # Dependency tracking for the generated emulation files.
 EXTRA_ld_new_SOURCES = deffilep.y ldlex.l ldelf.c ldelfgen.c pdb.c \
-	pep-dll.c pe-dll.c pep-dll-aarch64.c pep-dll-x86_64.c \
-	$(ALL_EMULATION_SOURCES) $(ALL_64_EMULATION_SOURCES)
+	pep-dll.c pe-dll.c $(ALL_EMULATION_SOURCES) \
+	$(ALL_64_EMULATION_SOURCES)
 ld_new_SOURCES = ldgram.y ldlex-wrapper.c lexsup.c ldlang.c mri.c ldctor.c ldmain.c \
 	ldwrite.c ldexp.c ldemul.c ldver.c ldmisc.c ldfile.c ldcref.c plugin.c \
 	ldbuildid.c
@@ -1259,10 +1259,6 @@ ldgram.h: ldgram.c
 deffilep.h: deffilep.c
 	@if test ! -f $@; then rm -f deffilep.c; else :; fi
 	@if test ! -f $@; then $(MAKE) $(AM_MAKEFLAGS) deffilep.c; else :; fi
-
-ld-new$(EXEEXT): $(ld_new_OBJECTS) $(ld_new_DEPENDENCIES) $(EXTRA_ld_new_DEPENDENCIES) 
-	@rm -f ld-new$(EXEEXT)
-	$(AM_V_CCLD)$(LINK) $(ld_new_OBJECTS) $(ld_new_LDADD) $(LIBS)
 
 mostlyclean-compile:
 	-rm -f *.$(OBJEXT)
@@ -1602,8 +1598,6 @@ distclean-compile:
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/mri.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pdb.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pe-dll.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pep-dll-aarch64.Po@am__quote@
-@AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pep-dll-x86_64.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/pep-dll.Po@am__quote@
 @AMDEP_TRUE@@am__include@ @am__quote@./$(DEPDIR)/plugin.Po@am__quote@
 
@@ -2376,8 +2370,13 @@ $(ALL_EMULATION_SOURCES) $(ALL_64_EMULATION_SOURCES): $(GEN_DEPENDS)
 
 @AMDEP_TRUE@-include $(patsubst %.c,./$(DEPDIR)/%.Pc,$(ALL_EMULATION_SOURCES) $(ALL_64_EMULATION_SOURCES))
 
+# The standard rule plus set up a symlink when --enable-shared for "make check"
+ld-new$(EXEEXT): $(ld_new_OBJECTS) $(ld_new_DEPENDENCIES) $(EXTRA_ld_new_DEPENDENCIES)
+	@rm -f ld-new$(EXEEXT)
+	$(AM_V_at)cd .libs; test -e ldscripts || $(LN_S) ../ldscripts .
+	$(AM_V_CCLD)$(LINK) $(ld_new_OBJECTS) $(ld_new_LDADD) $(LIBS)
+
 check-DEJAGNU: site.exp
-	(cd .libs; test -e ldscripts || test ! -e ld-new || $(LN_S) ../ldscripts .)
 	srcroot=`cd $(srcdir) && pwd`; export srcroot; \
 	r=`pwd`; export r; \
 	LC_ALL=C; export LC_ALL; \

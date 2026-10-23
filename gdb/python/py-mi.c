@@ -278,7 +278,7 @@ serialize_mi_result_1 (PyObject *result, const char *field_name)
 	gdbpy_handle_exception ();
       for (Py_ssize_t i = 0; i < len; ++i)
 	{
-	  gdbpy_ref<> item (PySequence_ITEM (result, i));
+	  gdbpy_ref<> item (PySequence_GetItem (result, i));
 	  if (item == nullptr)
 	    gdbpy_handle_exception ();
 	  serialize_mi_result_1 (item.get (), nullptr);
@@ -379,7 +379,7 @@ gdbpy_notify_mi (PyObject *self, PyObject *args, PyObject *kwargs)
       PyErr_Format
 	(PyExc_ValueError,
 	 _("MI notification data must be either None or a dictionary, not %s"),
-	 Py_TYPE (data)->tp_name);
+	 gdbpy_py_obj_tp_name (data).c_str ());
       return nullptr;
     }
 
@@ -406,5 +406,5 @@ gdbpy_notify_mi (PyObject *self, PyObject *args, PyObject *kwargs)
       gdb_flush (mi->event_channel);
     }
 
-  Py_RETURN_NONE;
+  return py_none ().release ();
 }

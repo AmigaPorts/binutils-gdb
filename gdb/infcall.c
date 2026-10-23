@@ -29,6 +29,7 @@
 #include "language.h"
 #include "objfiles.h"
 #include "cli/cli-cmds.h"
+#include "cli/cli-style.h"
 #include "command.h"
 #include "dummy-frame.h"
 #include "ada-lang.h"
@@ -43,6 +44,7 @@
 #include <algorithm>
 #include "gdbsupport/scope-exit.h"
 #include <list>
+#include "cli/cli-style.h"
 
 /* True if we are debugging inferior calls.  */
 
@@ -276,10 +278,20 @@ value_arg_coerce (struct gdbarch *gdbarch, struct value *arg,
 	  return value_cast_pointers (type, arg, 0);
 
 	/* Cast the value to the reference's target type, and then
-	   convert it back to a reference.  This will issue an error
-	   if the value was not previously in memory - in some cases
-	   we should clearly be allowing this, but how?  */
+	   convert it back to a reference.  If the value is not already
+	   in memory (e.g., a literal), we need to allocate space in the
+	   inferior and copy it there.  */
 	new_value = value_cast (type->target_type (), arg);
+	if (new_value->lval () != lval_memory
+	    && (language_pass_by_reference (new_value->type ())
+		.trivially_copyable))
+	  {
+	    LONGEST length = check_typedef (new_value->type ())->length ();
+	    struct value *addr_val = value_allocate_space_in_inferior (length);
+	    CORE_ADDR addr = value_as_address (addr_val);
+	    new_value->force_lval (addr);
+	  }
+
 	new_value = value_ref (new_value, type->code ());
 	return new_value;
       }
@@ -797,7 +809,7 @@ run_inferior_call (std::unique_ptr<call_thread_fsm> sm,
 
   struct gdb_exception caught_error;
   ptid_t call_thread_ptid = call_thread->ptid;
-  int was_running = call_thread->state == THREAD_RUNNING;
+  int was_running = call_thread->state () == THREAD_RUNNING;
   *timed_out_p = false;
 
   infcall_debug_printf ("call function at %s in thread %s, was_running = %d",
@@ -906,12 +918,20 @@ run_inferior_call (std::unique_ptr<call_thread_fsm> sm,
       current_ui->register_file_handler ();
     }
 
-  /* If the infcall does NOT succeed, normal_stop will have already
-     finished the thread states.  However, on success, normal_stop
-     defers here, so that we can set back the thread states to what
-     they were before the call.  Note that we must also finish the
-     state of new threads that might have spawned while the call was
-     running.  The main cases to handle are:
+  /* Sync the user/frontend thread states from the internal thread
+     states.  proceed marked threads in resume_ptid as THREAD_RUNNING
+     for this infcall; we must now sync them back, regardless of how
+     the call ended.  For the success path and for the unwind paths
+     (unwind-on-{signal,timeout,terminating-exception}),
+     call_thread_fsm::should_notify_stop returns false and normal_stop
+     is skipped -- this call is the canonical place to do the sync.
+     For other failure paths normal_stop does run and has already
+     finished the thread state; finish_thread_state is idempotent, so
+     calling it again here is harmless.  Note that we must also finish
+     the state of new threads that might have spawned while the call
+     was running.
+
+     The main cases to handle are:
 
      - "(gdb) print foo ()", or any other command that evaluates an
      expression at the prompt.  (The thread was marked stopped before.)
@@ -922,8 +942,7 @@ run_inferior_call (std::unique_ptr<call_thread_fsm> sm,
      evaluates true and thus we'll present a user-visible stop is
      decided elsewhere.  */
   if (!was_running
-      && call_thread_ptid == inferior_ptid
-      && stop_stack_dummy == STOP_STACK_DUMMY)
+      && call_thread_ptid == inferior_ptid)
     finish_thread_state (call_thread->inf->process_target (),
 			 user_visible_resume_ptid (0));
 
@@ -936,7 +955,7 @@ run_inferior_call (std::unique_ptr<call_thread_fsm> sm,
      of error out of resume()), then we wouldn't need this.  */
   if (caught_error.reason < 0)
     {
-      if (call_thread->state != THREAD_EXITED)
+      if (call_thread->state () != THREAD_EXITED)
 	breakpoint_auto_delete (call_thread->control.stop_bpstat);
     }
 
@@ -1090,9 +1109,11 @@ call_function_by_hand_dummy (struct value *function,
   CORE_ADDR funaddr = find_function_addr (function, &values_type, &ftype);
 
   if (is_nocall_function (ftype))
-    error (_("Cannot call the function '%s' which does not follow the "
+    error (_("Cannot call the function '%ps' which does not follow the "
 	     "target calling convention."),
-	   get_function_name (funaddr, name_buf, sizeof (name_buf)));
+	   styled_string (function_name_style.style (),
+			  get_function_name (funaddr, name_buf,
+					     sizeof (name_buf))));
 
   if (values_type == NULL || values_type->is_stub ())
     values_type = default_return_type;
@@ -1100,9 +1121,9 @@ call_function_by_hand_dummy (struct value *function,
     {
       const char *name = get_function_name (funaddr,
 					    name_buf, sizeof (name_buf));
-      error (_("'%s' has unknown return type; "
+      error (_("'%ps' has unknown return type; "
 	       "cast the call to its declared return type"),
-	     name);
+	     styled_string (function_name_style.style (), name));
     }
 
   values_type = check_typedef (values_type);
@@ -1279,7 +1300,7 @@ call_function_by_hand_dummy (struct value *function,
 	CORE_ADDR dummy_addr;
 
 	real_pc = funaddr;
-	dummy_addr = entry_point_address (current_program_space);
+	dummy_addr = current_program_space->entry_point_address ();
 
 	/* A call dummy always consists of just a single breakpoint, so
 	   its address is the same as the address of the dummy.
@@ -1579,7 +1600,7 @@ call_function_by_hand_dummy (struct value *function,
       infcall_debug_printf ("after inferior call, exception (%d): %s",
 			    e.reason, e.what ());
     infcall_debug_printf ("after inferior call, thread state is: %s",
-			  thread_state_string (call_thread->state));
+			  thread_state_string (call_thread->state ()));
 
     gdb::observers::inferior_call_post.notify (call_thread_ptid, funaddr);
 
@@ -1590,7 +1611,7 @@ call_function_by_hand_dummy (struct value *function,
        threads appear after GDB has reported a stop.  */
     update_thread_list ();
 
-    if (call_thread->state != THREAD_EXITED)
+    if (call_thread->state () != THREAD_EXITED)
       {
 	/* The FSM should still be the same.  */
 	gdb_assert (call_thread->thread_fsm () == sm);
@@ -1665,9 +1686,10 @@ call_function_by_hand_dummy (struct value *function,
 	  throw_error (e.error, _("%s\n\
 An error occurred while in a function called from GDB.\n\
 Evaluation of the expression containing the function\n\
-(%s) will be abandoned.\n\
+(%ps) will be abandoned.\n\
 When the function is done executing, GDB will silently stop."),
-		       e.what (), name);
+		       e.what (),
+		       styled_string (function_name_style.style (), name));
 	case RETURN_QUIT:
 	default:
 	  throw_exception (std::move (e));
@@ -1693,8 +1715,8 @@ When the function is done executing, GDB will silently stop."),
       error (_("The program being debugged exited while in a function "
 	       "called from GDB.\n"
 	       "Evaluation of the expression containing the function\n"
-	       "(%s) will be abandoned."),
-	     name);
+	       "(%ps) will be abandoned."),
+	     styled_string (function_name_style.style (), name));
     }
 
   if (call_thread_ptid != inferior_ptid)
@@ -1714,16 +1736,16 @@ When the function is done executing, GDB will silently stop."),
 The program received a signal in another thread while\n\
 making a function call from GDB.\n\
 Evaluation of the expression containing the function\n\
-(%s) will be abandoned.\n\
+(%ps) will be abandoned.\n\
 When the function is done executing, GDB will silently stop."),
-	       name);
+	       styled_string (function_name_style.style (), name));
       else
 	error (_("\
 The program stopped in another thread while making a function call from GDB.\n\
 Evaluation of the expression containing the function\n\
-(%s) will be abandoned.\n\
+(%ps) will be abandoned.\n\
 When the function is done executing, GDB will silently stop."),
-	       name);
+	       styled_string (function_name_style.style (), name));
     }
 
     {
@@ -1764,10 +1786,11 @@ The program being debugged received signal %s, %s\n\
 while in a function called from GDB.  GDB has restored the context\n\
 to what it was before the call.  To change this behavior use\n\
 \"set unwind-on-signal off\".  Evaluation of the expression containing\n\
-the function (%s) will be abandoned."),
+the function (%ps) will be abandoned."),
 		     gdb_signal_to_name (stop_signal),
 		     gdb_signal_to_string (stop_signal),
-		     name.c_str ());
+		     styled_string (function_name_style.style (),
+				    name.c_str ()));
 	    }
 	  else
 	    {
@@ -1784,9 +1807,10 @@ The program being debugged was signaled while in a function called from GDB.\n\
 GDB remains in the frame where the signal was received.\n\
 To change this behavior use \"set unwind-on-signal on\".\n\
 Evaluation of the expression containing the function\n\
-(%s) will be abandoned.\n\
+(%ps) will be abandoned.\n\
 When the function is done executing, GDB will silently stop."),
-		     name.c_str ());
+		     styled_string (function_name_style.style (),
+				    name.c_str ()));
 	    }
 	}
 
@@ -1812,8 +1836,9 @@ The program being debugged timed out while in a function called from GDB.\n\
 GDB has restored the context to what it was before the call.\n\
 To change this behavior use \"set unwind-on-timeout off\".\n\
 Evaluation of the expression containing the function\n\
-(%s) will be abandoned."),
-		     name.c_str ());
+(%ps) will be abandoned."),
+		     styled_string (function_name_style.style (),
+				    name.c_str ()));
 	    }
 	  else
 	    {
@@ -1827,9 +1852,10 @@ The program being debugged timed out while in a function called from GDB.\n\
 GDB remains in the frame where the timeout occurred.\n\
 To change this behavior use \"set unwind-on-timeout on\".\n\
 Evaluation of the expression containing the function\n\
-(%s) will be abandoned.\n\
+(%ps) will be abandoned.\n\
 When the function is done executing, GDB will silently stop."),
-		     name.c_str ());
+		     styled_string (function_name_style.style (),
+				    name.c_str ()));
 	    }
 	}
 
@@ -1849,9 +1875,10 @@ caused by an unhandled C++ exception.  GDB blocked this call in order\n\
 to prevent the program from being terminated, and has restored the\n\
 context to its original state before the call.\n\
 To change this behavior use \"set unwind-on-terminating-exception off\".\n\
-Evaluation of the expression containing the function (%s)\n\
+Evaluation of the expression containing the function (%ps)\n\
 will be abandoned."),
-		 name.c_str ());
+		 styled_string (function_name_style.style (),
+				name.c_str ()));
 	}
       else if (stop_stack_dummy == STOP_NONE)
 	{
@@ -1873,9 +1900,10 @@ will be abandoned."),
 	  error (_("\
 The program being debugged stopped while in a function called from GDB.\n\
 Evaluation of the expression containing the function\n\
-(%s) will be abandoned.\n\
+(%ps) will be abandoned.\n\
 When the function is done executing, GDB will silently stop."),
-		 name.c_str ());
+		 styled_string (function_name_style.style (),
+				name.c_str ()));
 	}
 
     }

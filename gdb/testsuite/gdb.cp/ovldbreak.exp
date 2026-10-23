@@ -33,7 +33,7 @@ require allow_cplus_tests
 standard_testfile .cc
 
 if {[prepare_for_testing "failed to prepare" $testfile $srcfile {debug c++}]} {
-    return -1
+    return
 }
 
 # set it up at a breakpoint so we can play with the variable values
@@ -196,7 +196,7 @@ foreach type $all_types {
 
 		# Create an inverse mapping of the actual type to
 		# the synthetic type.
-		set type_map("$types($type)") $type
+		set type_map($types($type)) $type
 		pass "detect $type"
 	    }
     }
@@ -237,16 +237,16 @@ set method "foo::overload1arg"
 for {set idx 0} {$idx < [llength $overloads]} {incr idx} {
     set type [lindex $overloads $idx]
     set_bp_overloaded $method $menu_overload1arg \
-	[expr {$idx + 2}] [incr bpnum] $line($type_map("$type"))
+	[expr {$idx + 2}] [incr bpnum] $line($type_map($type))
 }
 
 # Verify the breakpoints.
 set bptable "Num\[\t \]+Type\[\t \]+Disp Enb Address\[\t \]+What\\s*\r\n"
-append bptable "\[0-9\]+\[\t \]+breakpoint\[\t \]+keep\[\t \]y\[\t \]+$hex\[\t \]+in main(\\((|void)\\))? at.*$srcfile:49\r\n"
+append bptable "${::decimal}\[\t \]+breakpoint\[\t \]+keep\[\t \]y\[\t \]+$hex\[\t \]+in main(\\((|void)\\))? at.*$srcfile:49\r\n"
 append bptable "\[\t \]+breakpoint already hit 1 time"
 foreach ovld $overloads {
-    append bptable [format "\r\n\[0-9\]+\[\t \]+breakpoint\[\t \]+keep y\[\t \]+$hex\[\t \]+in foo::overload1arg\\(%s\\) at.*$srcfile:%d" $ovld \
-			$line($type_map("$ovld"))]
+    append bptable [format "\r\n${::decimal}\[\t \]+breakpoint\[\t \]+keep y\[\t \]+$hex\[\t \]+in foo::overload1arg\\(%s\\) at.*$srcfile:%d" $ovld \
+			$line($type_map($ovld))]
 }
 gdb_test "info break" $bptable "breakpoint info, after setting one-by-one"
 
@@ -298,7 +298,7 @@ with_test_prefix "multiple breakpoints" {
     set expected_lines {}
     for {set i 0} {$i < 2} {incr i} {
 	set type [lindex $overloads $i]
-	lappend expected_lines $line($type_map("$type"))
+	lappend expected_lines $line($type_map($type))
     }
     set_bp_overloaded $method $menu_overload1arg \
 	"2-3" [incr bpnum] $expected_lines
@@ -367,11 +367,11 @@ gdb_expect {
 
 # Create the breakpoint table for "info breakpoint".
 set bptable "Num\[\t \]+Type\[\t \]+Disp Enb Address\[\t \]+What\\s*\r\n"
-append bptable "\[0-9\]+\[\t \]+breakpoint\[\t \]+keep\[\t \]y\[\t \]+<MULTIPLE>\\s*"
+append bptable "${::decimal}\[\t \]+breakpoint\[\t \]+keep\[\t \]y\[\t \]+<MULTIPLE>\\s*"
 foreach ovld {void char signed_char unsigned_char short_int \
 		  unsigned_short_int int unsigned_int long_int \
 		  unsigned_long_int float double} {
-  append bptable [format "\r\n\[0-9\]+.\[0-9\]+\[\t \]+y\[\t \]+$hex\[\t \]+in foo::overload1arg\\(%s\\) at.*$srcfile:%d" \
+  append bptable [format "\r\n${::decimal}.${::decimal}\[\t \]+y\[\t \]+$hex\[\t \]+in foo::overload1arg\\(%s\\) at.*$srcfile:%d" \
 		      $types($ovld) $line($ovld)]
 }
 
@@ -444,7 +444,7 @@ gdb_test "break foo::foofunc" \
 # is set to "all"
 gdb_test_no_output "set multiple-symbols all"
 gdb_test "break foo::foofunc" \
-    "Breakpoint \[0-9\]+ at ${hex}: foo::foofunc. .2 locations..*" \
+    "Breakpoint ${::decimal} at ${hex}: foo::foofunc. .2 locations..*" \
     "break on ambiguous symbol when multiple-symbols is set to all"
 
 # That's all, folks.

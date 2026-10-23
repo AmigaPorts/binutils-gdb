@@ -44,7 +44,6 @@
 
 /* Standard headers.  */
 #include <algorithm>
-#include <sstream>
 
 /* The frame unwind cache for ARC.  */
 
@@ -861,13 +860,13 @@ arc_push_dummy_code (struct gdbarch *gdbarch, CORE_ADDR sp, CORE_ADDR funaddr,
 		     struct regcache *regcache)
 {
   *real_pc = funaddr;
-  *bp_addr = entry_point_address (current_program_space);
+  *bp_addr = current_program_space->entry_point_address ();
   return sp;
 }
 
 /* Implement the "cannot_fetch_register" gdbarch method.  */
 
-static int
+static bool
 arc_cannot_fetch_register (struct gdbarch *gdbarch, int regnum)
 {
   /* Assume that register is readable if it is unknown.  LIMM and RESERVED are
@@ -887,7 +886,7 @@ arc_cannot_fetch_register (struct gdbarch *gdbarch, int regnum)
 
 /* Implement the "cannot_store_register" gdbarch method.  */
 
-static int
+static bool
 arc_cannot_store_register (struct gdbarch *gdbarch, int regnum)
 {
   /* Assume that register is writable if it is unknown.  See comment in
@@ -1007,7 +1006,7 @@ arc_store_return_value (struct gdbarch *gdbarch, struct type *type,
 
 /* Implement the "get_longjmp_target" gdbarch method.  */
 
-static int
+static bool
 arc_get_longjmp_target (const frame_info_ptr &frame, CORE_ADDR *pc)
 {
   arc_debug_printf ("called");
@@ -1019,11 +1018,11 @@ arc_get_longjmp_target (const frame_info_ptr &frame, CORE_ADDR *pc)
   CORE_ADDR jb_addr = get_frame_register_unsigned (frame, ARC_FIRST_ARG_REGNUM);
 
   if (target_read_memory (jb_addr + pc_offset, buf, ARC_REGISTER_SIZE))
-    return 0; /* Failed to read from memory.  */
+    return false; /* Failed to read from memory.  */
 
   *pc = extract_unsigned_integer (buf, ARC_REGISTER_SIZE,
 				  gdbarch_byte_order (gdbarch));
-  return 1;
+  return true;
 }
 
 /* Implement the "return_value" gdbarch method.  */
@@ -2100,16 +2099,16 @@ arc_check_tdesc_feature (struct tdesc_arch_data *tdesc_data,
 
       if (!found && reg.required_p)
 	{
-	  std::ostringstream reg_names;
+	  std::string reg_names;
 	  for (std::size_t i = 0; i < reg.names.size(); ++i)
 	    {
 	      if (i == 0)
-		reg_names << "'" << reg.names[0] << "'";
+		string_appendf (reg_names, "'%s'", reg.names[0]);
 	      else
-		reg_names << " or '" << reg.names[0] << "'";
+		string_appendf (reg_names, " or '%s'", reg.names[i]);
 	    }
 	  arc_print (_("Error: Cannot find required register(s) %s "
-		       "in feature '%s'.\n"), reg_names.str ().c_str (),
+		       "in feature '%s'.\n"), reg_names.c_str (),
 		       feature->name.c_str ());
 	  return false;
 	}
@@ -2286,7 +2285,7 @@ arc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_double_format (gdbarch, floatformats_ieee_double);
   set_gdbarch_ptr_bit (gdbarch, 32);
   set_gdbarch_addr_bit (gdbarch, 32);
-  set_gdbarch_char_signed (gdbarch, 0);
+  set_gdbarch_char_signed (gdbarch, false);
 
   set_gdbarch_write_pc (gdbarch, arc_write_pc);
 
@@ -2308,8 +2307,6 @@ arc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_cannot_fetch_register (gdbarch, arc_cannot_fetch_register);
   set_gdbarch_cannot_store_register (gdbarch, arc_cannot_store_register);
 
-  set_gdbarch_believe_pcc_promotion (gdbarch, 1);
-
   set_gdbarch_return_value (gdbarch, arc_return_value);
 
   set_gdbarch_skip_prologue (gdbarch, arc_skip_prologue);
@@ -2328,7 +2325,7 @@ arc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_print_insn (gdbarch, arc_delayed_print_insn);
 
-  set_gdbarch_cannot_step_breakpoint (gdbarch, 1);
+  set_gdbarch_cannot_step_breakpoint (gdbarch, true);
 
   /* "nonsteppable" watchpoint means that watchpoint triggers before
      instruction is committed, therefore it is required to remove watchpoint
@@ -2338,7 +2335,7 @@ arc_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      significant delay, like one or two instructions, depending on type of
      memory where write is performed (CCM or external) and next instruction
      after the memory write.  */
-  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 0);
+  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, false);
 
   /* This doesn't include possible long-immediate value.  */
   set_gdbarch_max_insn_length (gdbarch, 4);

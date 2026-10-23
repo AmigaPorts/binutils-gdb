@@ -443,10 +443,7 @@ static const registry<gdbarch>::key<tdesc_arch_data> tdesc_data;
 static tdesc_arch_data *
 get_arch_data (struct gdbarch *gdbarch)
 {
-  tdesc_arch_data *result = tdesc_data.get (gdbarch);
-  if (result == nullptr)
-    result = tdesc_data.emplace (gdbarch);
-  return result;
+  return &tdesc_data.try_emplace (gdbarch);
 }
 
 /* Fetch the current target's description, and switch the current
@@ -959,7 +956,7 @@ tdesc_register_in_reggroup_p (struct gdbarch *gdbarch, int regno,
    group specified go to the default reggroup function and are handled
    by type.  */
 
-static int
+static bool
 tdesc_register_reggroup_p (struct gdbarch *gdbarch, int regno,
 			   const struct reggroup *reggroup)
 {

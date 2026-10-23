@@ -18,6 +18,8 @@
 
 #include "buildsym.h"
 #include "gdbsupport/gdb_obstack.h"
+#include "gdbsupport/pathstuff.h"
+#include "filesystem.h"
 #include "symtab.h"
 #include "symfile.h"
 #include "objfiles.h"
@@ -53,6 +55,9 @@ buildsym_compunit::buildsym_compunit (struct objfile *objfile_,
     m_language (language_),
     m_last_source_start_addr (last_addr)
 {
+  if (should_normalize_slashes ())
+    normalize_slashes (&m_comp_dir[0]);
+
   /* Build the subfile for NAME (the main source file) so that we can record
      a pointer to it for later.
      IMPORTANT: Do not allocate a struct symtab for NAME here.
@@ -309,31 +314,6 @@ buildsym_compunit::finish_block (struct symbol *symbol,
 				false);
 }
 
-/* Record that the range of addresses from START to END_INCLUSIVE
-   (inclusive, like it says) belongs to BLOCK.  BLOCK's start and end
-   addresses must be set already.  You must apply this function to all
-   BLOCK's children before applying it to BLOCK.
-
-   If a call to this function complicates the picture beyond that
-   already provided by BLOCK_START and BLOCK_END, then we create an
-   address map for the block.  */
-void
-buildsym_compunit::record_block_range (struct block *block,
-				       CORE_ADDR start,
-				       CORE_ADDR end_inclusive)
-{
-  /* If this is any different from the range recorded in the block's
-     own BLOCK_START and BLOCK_END, then note that the address map has
-     become interesting.  Note that even if this block doesn't have
-     any "interesting" ranges, some later block might, so we still
-     need to record this block in the addrmap.  */
-  if (start != block->start ()
-      || end_inclusive + 1 != block->end ())
-    m_pending_addrmap_interesting = true;
-
-  m_pending_addrmap.set_empty (start, end_inclusive, block);
-}
-
 std::unique_ptr<struct blockvector>
 buildsym_compunit::make_blockvector ()
 {
@@ -341,10 +321,17 @@ buildsym_compunit::make_blockvector ()
   std::unique_ptr<struct blockvector> blockvector;
   int i;
 
-  /* Count the length of the list of blocks.  */
+  /* Count the length of the list of blocks.  Also, if any blocks are
+     non-contiguous then we need to make use of the addrmap for mapping
+     addresses to blocks (PENDING_ADDRMAP_INTERESTING is set to true).  If
+     all the blocks are contiguous then we can avoid creating the addrmap,
+     and perform block look up using the blockvector.  */
 
+  bool pending_addrmap_interesting = false;
   for (next = m_pending_blocks, i = 0; next; next = next->next, i++)
     {
+      if (!next->block->is_contiguous ())
+	pending_addrmap_interesting = true;
     }
 
   blockvector = std::make_unique<struct blockvector> (i);
@@ -365,10 +352,44 @@ buildsym_compunit::make_blockvector ()
 
   /* If we needed an address map for this symtab, record it in the
      blockvector.  */
-  if (m_pending_addrmap_interesting)
-    blockvector->set_map
-      (new (&m_objfile->objfile_obstack) addrmap_fixed
-       (&m_objfile->objfile_obstack, &m_pending_addrmap));
+  if (pending_addrmap_interesting)
+    {
+      struct addrmap_mutable pending_addrmap;
+      int num_blocks = blockvector->num_blocks ();
+
+      /* If PENDING_ADDRMAP_INTERESTING is true then we must have seen
+	 an interesting block.  If we see one block, then we should at a
+	 minimum have a global block, and a static block.  */
+      gdb_assert (num_blocks > 1);
+
+      /* Assert our understanding of how the blocks are laid out.  */
+      gdb_assert (blockvector->block (0)->is_global_block ());
+      gdb_assert (blockvector->block (1)->is_static_block ());
+
+      /* The 'J > 1' here is so that we don't place the global block into
+	 the map.  For CU with gaps, the static block will reflect the
+	 gaps, while the global block will just reflect the full extent of
+	 the range.  */
+      for (int j = num_blocks; j > 1; )
+	{
+	  --j;
+	  struct block *b = blockvector->block (j);
+
+	  gdb_assert (!b->is_global_block ());
+
+	  if (b->is_contiguous ())
+	    pending_addrmap.set_empty (b->start (), (b->end () - 1), b);
+	  else
+	    {
+	      for (const auto &br : b->ranges ())
+		pending_addrmap.set_empty (br.start (), (br.end () - 1), b);
+	    }
+	}
+
+      blockvector->set_map
+	(new (&m_objfile->objfile_obstack) addrmap_fixed
+	 (&m_objfile->objfile_obstack, &pending_addrmap));
+    }
   else
     blockvector->set_map (nullptr);
 
@@ -609,28 +630,9 @@ buildsym_compunit::end_compunit_symtab_get_static_block (CORE_ADDR end_addr,
 							 bool expandable,
 							 bool required)
 {
-  /* Finish the lexical context of the last function in the file; pop
-     the context stack.  */
-
-  if (!m_context_stack.empty ())
-    {
-      struct context_stack cstk = pop_context ();
-
-      /* Make a block for the local symbols within.  */
-      finish_block (cstk.name, cstk.old_blocks, NULL,
-		    cstk.start_addr, end_addr);
-
-      if (!m_context_stack.empty ())
-	{
-	  /* This is said to happen with SCO.  The old coffread.c
-	     code simply emptied the context stack, so we do the
-	     same.  FIXME: Find out why it is happening.  This is not
-	     believed to happen in most cases (even for coffread.c);
-	     it used to be an abort().  */
-	  complaint (_("Context stack not empty in end_compunit_symtab"));
-	  m_context_stack.clear ();
-	}
-    }
+  /* The user should have guaranteed that all previous blocks have
+     been created.  */
+  gdb_assert (m_context_stack.empty ());
 
   /* Executables may have out of order pending blocks; sort the
      pending blocks.  */
@@ -927,31 +929,37 @@ buildsym_compunit::augment_type_symtab ()
     }
 }
 
-/* Push a context block.  Args are an identifying nesting level
-   (checkable when you pop it), and the starting PC address of this
+/* Push a context block.  VALUE is the starting PC address of this
    context.  */
 
-context_stack &
-buildsym_compunit::push_context (int desc, CORE_ADDR valu)
+void
+buildsym_compunit::push_context (CORE_ADDR value)
 {
-  context_stack &ctx
-    = m_context_stack.emplace_back (std::move (m_local_symbols),
-				    m_local_using_directives,
-				    m_pending_blocks, valu, desc);
-
+  m_context_stack.emplace_back (std::move (m_local_symbols),
+				m_local_using_directives,
+				m_pending_blocks, value);
   m_local_using_directives = nullptr;
-
-  return ctx;
 }
 
-/* Pop a context block.  Returns the address of the context block just
-   popped.  */
+/* See buildsym.h.  */
 
-context_stack
-buildsym_compunit::pop_context ()
+block *
+buildsym_compunit::pop_context (CORE_ADDR end_addr,
+				const struct dynamic_prop *static_link,
+				bool required)
 {
   gdb_assert (!m_context_stack.empty ());
-  context_stack result = m_context_stack.back ();
+  lexical_context cstk = std::move (m_context_stack.back ());
   m_context_stack.pop_back ();
+
+  block *result = nullptr;
+  if (required || !m_local_symbols.empty ()
+      || m_local_using_directives != nullptr)
+    result = finish_block (cstk.name, cstk.old_blocks, static_link,
+			   cstk.start_addr, end_addr);
+
+  m_local_symbols = std::move (cstk.locals);
+  m_local_using_directives = cstk.local_using_directives;
+
   return result;
 }

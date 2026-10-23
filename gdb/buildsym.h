@@ -68,39 +68,6 @@ struct subfile
 
 using subfile_up = std::unique_ptr<subfile>;
 
-/* Stack representing unclosed lexical contexts (that will become
-   blocks, eventually).  */
-
-struct context_stack
-{
-  context_stack (std::vector<symbol *> locals, using_direct *local_using_directives,
-		 pending_block *old_blocks, CORE_ADDR start_addr, int depth)
-    : locals (std::move (locals)),
-      local_using_directives (local_using_directives),
-      old_blocks (old_blocks),
-      start_addr (start_addr),
-      depth (depth)
-  {}
-
-  /* Outer locals at the time we entered.  */
-  std::vector<symbol *> locals;
-
-  /* Pending using directives at the time we entered.  */
-  using_direct *local_using_directives;
-
-  /* Pointer into blocklist as of entry.  */
-  pending_block *old_blocks;
-
-  /* Name of function, if any, defining context.  */
-  symbol *name = nullptr;
-
-  /* PC where this context starts.  */
-  CORE_ADDR start_addr;
-
-  /* For error-checking matching push/pop.  */
-  int depth;
-};
-
 /* Flags associated with a linetable entry.  */
 
 enum linetable_entry_flag : unsigned
@@ -170,9 +137,6 @@ struct buildsym_compunit
 			      const struct dynamic_prop *static_link,
 			      CORE_ADDR start, CORE_ADDR end);
 
-  void record_block_range (struct block *block,
-			   CORE_ADDR start, CORE_ADDR end_inclusive);
-
   /* Start recording information about source code that comes from a source
      file.  This sets the current subfile, creating it if necessary.
 
@@ -196,11 +160,6 @@ struct buildsym_compunit
     return &m_local_using_directives;
   }
 
-  void set_local_using_directives (struct using_direct *new_local)
-  {
-    m_local_using_directives = new_local;
-  }
-
   struct using_direct **get_global_using_directives ()
   {
     return &m_global_using_directives;
@@ -211,11 +170,22 @@ struct buildsym_compunit
     return m_context_stack.empty ();
   }
 
-  struct context_stack *get_current_context_stack ()
+  /* Return true if the lexical context currently being constructed
+     has a symbol, false otherwise.  */
+  bool current_context_has_function () const
   {
-    if (m_context_stack.empty ())
-      return nullptr;
-    return &m_context_stack.back ();
+    return (!m_context_stack.empty ()
+	    && m_context_stack.back ().name != nullptr);
+  }
+
+  /* Set the symbol on the lexical context currently being
+     constructed.  */
+  void set_current_context_function (symbol *fun)
+  {
+    gdb_assert (!m_context_stack.empty ());
+    gdb_assert (m_context_stack.back ().name == nullptr);
+    gdb_assert (fun != nullptr);
+    m_context_stack.back ().name = fun;
   }
 
   struct subfile *get_current_subfile ()
@@ -248,9 +218,17 @@ struct buildsym_compunit
     m_producer = producer;
   }
 
-  context_stack &push_context (int desc, CORE_ADDR valu);
+  void push_context (CORE_ADDR value);
 
-  context_stack pop_context ();
+  /* Pop a context and create the corresponding block.  Returns the
+     block.  END_ADDR is the final address of the block.  STATIC_LINK,
+     if provided, is the static link.  REQUIRED controls whether the
+     block is required.  When false, if the block does not contain any
+     variables or 'using' directives, this method will return
+     nullptr.  */
+  block *pop_context (CORE_ADDR end_addr,
+		      const struct dynamic_prop *static_link = nullptr,
+		      bool required = true);
 
   struct block *end_compunit_symtab_get_static_block
     (CORE_ADDR end_addr, bool expandable, bool required);
@@ -333,22 +311,40 @@ private:
   /* Global "using" directives.  */
   struct using_direct *m_global_using_directives = nullptr;
 
+  /* Unclosed lexical contexts (that will become blocks,
+     eventually).  */
+  struct lexical_context
+  {
+    lexical_context (std::vector<symbol *> locals,
+		     using_direct *local_using_directives,
+		     pending_block *old_blocks, CORE_ADDR start_addr)
+      : locals (std::move (locals)),
+	local_using_directives (local_using_directives),
+	old_blocks (old_blocks),
+	start_addr (start_addr)
+    {}
+
+    /* Outer locals at the time we entered.  */
+    std::vector<symbol *> locals;
+
+    /* Pending using directives at the time we entered.  */
+    using_direct *local_using_directives;
+
+    /* Pointer into blocklist as of entry.  */
+    pending_block *old_blocks;
+
+    /* Name of function, if any, defining context.  */
+    symbol *name = nullptr;
+
+    /* PC where this context starts.  */
+    CORE_ADDR start_addr;
+  };
+
   /* The stack of contexts that are pushed by push_context and popped
      by pop_context.  */
-  std::vector<struct context_stack> m_context_stack;
+  std::vector<lexical_context> m_context_stack;
 
   struct subfile *m_current_subfile = nullptr;
-
-  /* The mutable address map for the compilation unit whose symbols
-     we're currently reading.  The symtabs' shared blockvector will
-     point to a fixed copy of this.  */
-  struct addrmap_mutable m_pending_addrmap;
-
-  /* True if we recorded any ranges in the addrmap that are different
-     from those in the blockvector already.  We set this to false when
-     we start processing a symfile, and if it's still false at the
-     end, then we just toss the addrmap.  */
-  bool m_pending_addrmap_interesting = false;
 
   /* An obstack used for allocating pending blocks.  */
   auto_obstack m_pending_block_obstack;

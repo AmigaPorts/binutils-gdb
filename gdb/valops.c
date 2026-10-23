@@ -40,6 +40,7 @@
 #include "extension.h"
 #include "gdbsupport/byte-vector.h"
 #include "typeprint.h"
+#include "cli/cli-style.h"
 
 /* Local functions.  */
 
@@ -212,10 +213,10 @@ value_cast_structs (struct type *type, struct value *v2)
 	       || t2->code () == TYPE_CODE_UNION)
 	      && !!"Precondition is that value is of STRUCT or UNION kind");
 
-  if (t1->name () != NULL
-      && t2->name () != NULL
-      && !strcmp (t1->name (), t2->name ()))
-    return NULL;
+  if (t1->name () != nullptr
+      && t2->name () != nullptr
+      && streq (t1->name (), t2->name ()))
+    return nullptr;
 
   /* Upcasting: look in the type of the source to see if it contains the
      type of the target as a superclass.  If so, we'll need to
@@ -248,7 +249,7 @@ value_cast_structs (struct type *type, struct value *v2)
 	  /* We might be trying to cast to the outermost enclosing
 	     type, in which case search_struct_field won't work.  */
 	  if (real_type->name () != NULL
-	      && !strcmp (real_type->name (), t1->name ()))
+	      && streq (real_type->name (), t1->name ()))
 	    return v;
 
 	  v = search_struct_field (t2->name (), v, real_type, 1);
@@ -1207,7 +1208,7 @@ value_assign (struct value *toval, struct value *fromval)
 	    LONGEST offset = parent->offset () + toval->offset ();
 	    size_t changed_len;
 	    gdb_byte buffer[sizeof (LONGEST)];
-	    int optim, unavail;
+	    bool optim, unavail;
 
 	    changed_len = (toval->bitpos ()
 			   + toval->bitsize ()
@@ -1224,11 +1225,9 @@ value_assign (struct value *toval, struct value *fromval)
 					   &unavail))
 	      {
 		if (optim)
-		  throw_error (OPTIMIZED_OUT_ERROR,
-			       _("value has been optimized out"));
+		  error_value_optimized_out ();
 		if (unavail)
-		  throw_error (NOT_AVAILABLE_ERROR,
-			       _("value is not available"));
+		  error_value_not_available ();
 	      }
 
 	    modify_field (type, buffer, value_as_long (fromval),
@@ -1546,8 +1545,7 @@ value_addr (struct value *arg1)
 
   if (TYPE_IS_REFERENCE (type))
     {
-      if (arg1->bits_synthetic_pointer (arg1->embedded_offset (),
-					TARGET_CHAR_BIT * type->length ()))
+      if (arg1->bits_synthetic_pointer (0, TARGET_CHAR_BIT * type->length ()))
 	arg1 = coerce_ref (arg1);
       else
 	{
@@ -1936,7 +1934,7 @@ struct_field_searcher::update_result (struct value *v, LONGEST boffset)
 		 found occupy the same space.  */
 	      && m_last_boffset != boffset)
 	    error (_("base class '%s' is ambiguous in type '%s'"),
-		   m_name, TYPE_SAFE_NAME (m_outermost_type));
+		   m_name, m_outermost_type->safe_name ());
 
 	  m_baseclass = v;
 	  m_last_boffset = boffset;
@@ -2160,15 +2158,15 @@ search_struct_field (const char *name, struct value *arg1,
 		}
 
 	      candidates += string_printf ("\n  '%s %s::%s' (%s)",
-					   TYPE_SAFE_NAME (field_type),
-					   TYPE_SAFE_NAME (struct_type),
+					   field_type->safe_name (),
+					   struct_type->safe_name (),
 					   name,
 					   path.c_str ());
 	    }
 
 	  error (_("Request for member '%s' is ambiguous in type '%s'."
 		   " Candidates are:%s"),
-		 name, TYPE_SAFE_NAME (type),
+		 name, type->safe_name (),
 		 candidates.c_str ());
 	}
     }
@@ -2209,7 +2207,6 @@ search_struct_method (const char *name, struct value **arg1p,
 	  struct fn_field *f = TYPE_FN_FIELDLIST1 (type, i);
 
 	  name_matched = 1;
-	  check_stub_method_group (type, i);
 	  if (j > 0 && !args.has_value ())
 	    error (_("cannot resolve overloaded method "
 		     "`%s': no arguments supplied"), name);
@@ -2509,9 +2506,6 @@ find_method_list (struct value **argp, const char *method,
 
 	      *basetype = type;
 	      *boffset = offset;
-
-	      /* Resolve any stub methods.  */
-	      check_stub_method_group (type, i);
 
 	      break;
 	    }
@@ -2881,7 +2875,7 @@ find_overload_match (gdb::array_view<value *> args,
 		 probably a C-style function.  */
 	      if (temp_func != nullptr)
 		{
-		  if (strcmp (temp_func.get (), qualified_name) == 0)
+		  if (streq (temp_func.get (), qualified_name))
 		    func_name = NULL;
 		  else
 		    func_name = temp_func.get ();
@@ -2966,26 +2960,29 @@ find_overload_match (gdb::array_view<value *> args,
     {
       std::string hint = incomplete_type_hint (args);
       if (method == METHOD)
-	error (_("Cannot resolve method %s%s%s to any overloaded instance%s"),
+	error (_("Cannot resolve method %p[%s%s%s%p] to any overloaded instance%s"),
+	       function_name_style.style ().ptr (),
 	       obj_type_name,
 	       (obj_type_name && *obj_type_name) ? "::" : "",
-	       name, hint.c_str ());
+	       name, nullptr, hint.c_str ());
       else
-	error (_("Cannot resolve function %s to any overloaded instance%s"),
-	       func_name, hint.c_str ());
+	error (_("Cannot resolve function %ps to any overloaded instance%s"),
+	       styled_string (function_name_style.style (), func_name),
+	       hint.c_str ());
     }
   else if (match_quality == NON_STANDARD)
     {
       if (method == METHOD)
 	warning (_("Using non-standard conversion to match "
-		   "method %s%s%s to supplied arguments"),
+		   "method %p[%s%s%s%p] to supplied arguments"),
+		 function_name_style.style ().ptr (),
 		 obj_type_name,
 		 (obj_type_name && *obj_type_name) ? "::" : "",
-		 name);
+		 name, nullptr);
       else
 	warning (_("Using non-standard conversion to match "
-		   "function %s to supplied arguments"),
-		 func_name);
+		   "function %ps to supplied arguments"),
+		 styled_string (function_name_style.style (), func_name));
     }
 
   if (staticp != NULL)
@@ -3252,26 +3249,26 @@ find_oload_champ (gdb::array_view<value *> args,
       if (overload_debug)
 	{
 	  if (methods != NULL)
-	    gdb_printf (gdb_stderr,
+	    gdb_printf (gdb_stdlog,
 			"Overloaded method instance %s, # of parms %d\n",
 			methods[ix].physname, (int) parm_types.size ());
 	  else if (xmethods != NULL)
-	    gdb_printf (gdb_stderr,
+	    gdb_printf (gdb_stdlog,
 			"Xmethod worker, # of parms %d\n",
 			(int) parm_types.size ());
 	  else
-	    gdb_printf (gdb_stderr,
+	    gdb_printf (gdb_stdlog,
 			"Overloaded function instance "
 			"%s # of parms %d\n",
 			functions[ix]->demangled_name (),
 			(int) parm_types.size ());
 
-	  gdb_printf (gdb_stderr,
+	  gdb_printf (gdb_stdlog,
 		      "...Badness of length : {%d, %d}\n",
 		      bv[0].rank, bv[0].subrank);
 
 	  for (jj = 1; jj < bv.size (); jj++)
-	    gdb_printf (gdb_stderr,
+	    gdb_printf (gdb_stdlog,
 			"...Badness of arg %d : {%d, %d}\n",
 			jj, bv[jj].rank, bv[jj].subrank);
 	}
@@ -3301,7 +3298,7 @@ find_oload_champ (gdb::array_view<value *> args,
 	    break;
 	  }
       if (overload_debug)
-	gdb_printf (gdb_stderr, "Overload resolution "
+	gdb_printf (gdb_stdlog, "Overload resolution "
 		    "champion is %d, ambiguous? %d\n",
 		    oload_champ, oload_ambiguous);
     }
@@ -3406,7 +3403,7 @@ enum_constant_from_type (struct type *type, const char *name)
       if (len + 2 >= name_len
 	  && fname[len - name_len - 2] == ':'
 	  && fname[len - name_len - 1] == ':'
-	  && strcmp (&fname[len - name_len], name) == 0)
+	  && streq (&fname[len - name_len], name))
 	return value_from_longest (type, type->field (i).loc_enumval ());
     }
 
@@ -3566,7 +3563,7 @@ value_struct_elt_for_reference (struct type *domain, int offset,
     {
       const char *t_field_name = t->field (i).name ();
 
-      if (t_field_name && strcmp (t_field_name, name) == 0)
+      if (t_field_name && streq (t_field_name, name))
 	{
 	  if (t->field (i).is_static ())
 	    {
@@ -3643,13 +3640,11 @@ value_struct_elt_for_reference (struct type *domain, int offset,
     {
       const char *t_field_name = TYPE_FN_FIELDLIST_NAME (t, i);
 
-      if (t_field_name && strcmp (t_field_name, name) == 0)
+      if (t_field_name && streq (t_field_name, name))
 	{
 	  int j;
 	  int len = TYPE_FN_FIELDLIST_LENGTH (t, i);
 	  struct fn_field *f = TYPE_FN_FIELDLIST1 (t, i);
-
-	  check_stub_method_group (t, i);
 
 	  if (intype)
 	    {
@@ -3731,8 +3726,8 @@ value_struct_elt_for_reference (struct type *domain, int offset,
 	      else if (noside == EVAL_AVOID_SIDE_EFFECTS)
 		return value::allocate (TYPE_FN_FIELD_TYPE (f, j));
 	      else
-		error (_("Cannot reference virtual member function \"%s\""),
-		       name);
+		error (_("Cannot reference virtual member function \"%ps\""),
+		       styled_string (function_name_style.style (), name));
 	    }
 	  else
 	    {
@@ -3991,8 +3986,9 @@ value_of_this (const struct language_defn *lang)
 
   sym = lookup_language_this (lang, b);
   if (sym.symbol == NULL)
-    error (_("current stack frame does not contain a variable named `%s'"),
-	   lang->name_of_this ());
+    error (_("current stack frame does not contain a variable named `%ps'"),
+	   styled_string (variable_name_style.style (),
+			  lang->name_of_this ()));
 
   return read_var_value (sym.symbol, sym.block, frame);
 }

@@ -26,7 +26,7 @@ require allow_python_tests
 standard_testfile
 
 if {[gdb_compile "$srcdir/$subdir/$srcfile" $binfile executable {debug}] != "" } {
-    return -1
+    return
 }
 
 mi_clean_restart $::testfile
@@ -86,7 +86,7 @@ mi_gdb_test "-var-info-path-expression c1.car.atom.ival" \
   "-var-info-path-expression c1.car.atom.ival"
 
 
-# Regression test for a crasher that would occur when deleting a
+# Regression test for a crash that would occur when deleting a
 # varobj that held an iterator that hadn't yet been completed.
 # See PR varobj/28131.
 mi_gdb_test "-var-create c1_again * &c1" \

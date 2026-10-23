@@ -142,7 +142,7 @@ static const struct serial_ops *
 serial_interface_lookup (const char *name)
 {
   for (const serial_ops *ops : serial_ops_list)
-    if (strcmp (name, ops->name) == 0)
+    if (streq (name, ops->name))
       return ops;
 
   return NULL;
@@ -238,7 +238,7 @@ serial_open_ops_1 (const struct serial_ops *ops, const char *open_name)
 
   if (!serial_logfile.empty ())
     {
-      stdio_file_up file (new stdio_file ());
+      stdio_file_up file = std::make_unique<stdio_file> ();
 
       if (!file->open (serial_logfile.c_str (), "w"))
 	perror_with_name (serial_logfile.c_str ());

@@ -283,7 +283,7 @@ nds32_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
 /* The same insn machine code is used for little-endian and big-endian.  */
 constexpr gdb_byte nds32_break_insn[] = { 0xEA, 0x00 };
 
-typedef BP_MANIPULATION (nds32_break_insn) nds32_breakpoint;
+using nds32_breakpoint = BP_MANIPULATION (nds32_break_insn);
 
 /* Implement the "dwarf2_reg_to_regnum" gdbarch method.  */
 
@@ -329,6 +329,7 @@ static const reggroup *nds32_secur_reggroup;
 static void
 nds32_init_reggroups (void)
 {
+  /* codespell:ignore-begin.  */
   nds32_cr_reggroup = reggroup_new ("cr", USER_REGGROUP);
   nds32_ir_reggroup = reggroup_new ("ir", USER_REGGROUP);
   nds32_mr_reggroup = reggroup_new ("mr", USER_REGGROUP);
@@ -339,6 +340,7 @@ nds32_init_reggroups (void)
   nds32_racr_reggroup = reggroup_new ("racr", USER_REGGROUP);
   nds32_idr_reggroup = reggroup_new ("idr", USER_REGGROUP);
   nds32_secur_reggroup = reggroup_new ("secur", USER_REGGROUP);
+  /* codespell:ignore-end.  */
 }
 
 static void
@@ -359,7 +361,7 @@ nds32_add_reggroups (struct gdbarch *gdbarch)
 
 /* Implement the "register_reggroup_p" gdbarch method.  */
 
-static int
+static bool
 nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 			   const struct reggroup *reggroup)
 {
@@ -368,7 +370,7 @@ nds32_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   int ret;
 
   if (reggroup == all_reggroup)
-    return 1;
+    return true;
 
   /* General reggroup contains only GPRs and PC.  */
   if (reggroup == general_reggroup)
@@ -1217,7 +1219,7 @@ nds32_analyze_epilogue (struct gdbarch *gdbarch, CORE_ADDR pc,
 
 /* Implement the "stack_frame_destroyed_p" gdbarch method.  */
 
-static int
+static bool
 nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
   nds32_gdbarch_tdep *tdep = gdbarch_tdep<nds32_gdbarch_tdep> (gdbarch);
@@ -1243,13 +1245,13 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
     }
 
   if (insn_type == INSN_NORMAL || insn_type == INSN_RESET_SP)
-    return 0;
+    return false;
 
   /* Search the required 'return' instruction within the following reasonable
      instructions.  */
   ret_found = nds32_analyze_epilogue (gdbarch, addr, NULL);
   if (ret_found == 0)
-    return 0;
+    return false;
 
   /* Scan backwards to make sure that the last instruction has adjusted
      stack.  Both a 16-bit and a 32-bit instruction will be tried.  This is
@@ -1263,7 +1265,7 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
 
       insn_type = nds32_analyze_epilogue_insn16 (insn >> 16, NULL);
       if (insn_type == INSN_RECOVER)
-	return 1;
+	return true;
     }
 
   insn = read_memory_unsigned_integer (addr - 4, 4, BFD_ENDIAN_BIG);
@@ -1277,10 +1279,10 @@ nds32_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR addr)
 
       insn_type = nds32_analyze_epilogue_insn32 (abi_use_fpr, insn, NULL);
       if (insn_type == INSN_RECOVER || insn_type == INSN_RESET_SP)
-	return 1;
+	return true;
     }
 
-  return 0;
+  return false;
 }
 
 /* Implement the "sniffer" frame_unwind method.  */
@@ -1823,7 +1825,7 @@ nds32_return_value (struct gdbarch *gdbarch, struct value *func_type,
 
 /* Implement the "get_longjmp_target" gdbarch method.  */
 
-static int
+static bool
 nds32_get_longjmp_target (const frame_info_ptr &frame, CORE_ADDR *pc)
 {
   gdb_byte buf[4];
@@ -1834,10 +1836,10 @@ nds32_get_longjmp_target (const frame_info_ptr &frame, CORE_ADDR *pc)
   jb_addr = get_frame_register_unsigned (frame, NDS32_R0_REGNUM);
 
   if (target_read_memory (jb_addr + 11 * 4, buf, 4))
-    return 0;
+    return false;
 
   *pc = extract_unsigned_integer (buf, 4, byte_order);
-  return 1;
+  return true;
 }
 
 /* Validate the given TDESC, and fixed-number some registers in it.
@@ -1993,7 +1995,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdep->elf_abi = elf_abi;
 
   set_gdbarch_wchar_bit (gdbarch, 16);
-  set_gdbarch_wchar_signed (gdbarch, 0);
+  set_gdbarch_wchar_signed (gdbarch, false);
 
   if (fpu_freg == -1)
     num_regs = NDS32_NUM_REGS;
@@ -2031,7 +2033,7 @@ nds32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 	{
 	  const char *regname = gdbarch_register_name (gdbarch, j);
 
-	  if (strcmp (regname, nds32_register_aliases[i].name) == 0)
+	  if (streq (regname, nds32_register_aliases[i].name))
 	    {
 	      regnum = j;
 	      break;

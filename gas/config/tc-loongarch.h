@@ -121,10 +121,6 @@ extern void tc_loongarch_parse_to_dw2regnum (expressionS *);
 
 extern int tc_loongarch_regname_to_dw2regnum (char *);
 
-#define tc_symbol_new_hook(sym) \
-  if (0 == strcmp (sym->bsym->name, FAKE_LABEL_NAME)) \
-    S_SET_OTHER (sym, STV_HIDDEN);
-
 extern void loongarch_pre_output_hook (void);
 #define md_pre_output_hook loongarch_pre_output_hook ()
 #define GAS_SORT_RELOCS 1
@@ -151,5 +147,16 @@ extern void loongarch_md_finish (void);
 
 /* The target supports Object Attributes v1.  */
 #define TC_OBJ_ATTR_v1 1
+
+
+/* Define target fragment type.  */
+#define TC_FRAG_TYPE struct loongarch_frag_type
+struct loongarch_frag_type
+{
+  bool linker_relax;
+};
+
+#define TC_FRAG_INIT(FRAGP, MAX_BYTES) \
+  do { (FRAGP)->tc_frag_data.linker_relax = false; } while (0)
 
 #endif

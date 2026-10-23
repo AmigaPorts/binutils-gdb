@@ -513,9 +513,11 @@ jit_symtab_close_impl (struct gdb_symbol_callbacks *cb,
      ABI).  */
 }
 
-/* Transform STAB to a proper symtab, and add it it OBJFILE.  */
+/* Transform STAB to a proper symtab, and add it it OBJFILE.
 
-static void
+   Return the created symtab.  */
+
+static compunit_symtab *
 finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
 {
   CORE_ADDR begin, end;
@@ -653,6 +655,8 @@ finalize_symtab (struct gdb_symtab *stab, struct objfile *objfile)
 
   /* Move just built blockvector over to CUST.  */
   cust->set_blockvector (std::move (bv));
+
+  return cust;
 }
 
 /* Called when closing a gdb_objfile.  Converts OBJ to a proper
@@ -673,10 +677,14 @@ jit_object_close_impl (struct gdb_symbol_callbacks *cb,
   objfile->section_offsets.push_back (0);
   objfile->sect_index_text = 0;
   objfile->per_bfd->gdbarch = priv_data->gdbarch;
-  objfile->qf.emplace_front (new expanded_symbols_functions);
+
+  std::vector<compunit_symtab *> compunit_symtabs;
 
   for (gdb_symtab &symtab : obj->symtabs)
-    finalize_symtab (&symtab, objfile);
+    compunit_symtabs.emplace_back (finalize_symtab (&symtab, objfile));
+
+  objfile->qf.emplace_front (std::make_unique<expanded_symbols_functions>
+			     (std::move (compunit_symtabs)));
 
   add_objfile_entry (objfile, priv_data->entry_addr,
 		     priv_data->entry.symfile_addr,
@@ -774,7 +782,7 @@ jit_bfd_try_read_symtab (struct jit_code_entry *code_entry,
 
   /* Check the format.  NOTE: This initializes important data that GDB uses!
      We would segfault later without this line.  */
-  if (!bfd_check_format (nbfd.get (), bfd_object))
+  if (!gdb_bfd_check_format (nbfd.get (), bfd_object))
     {
       gdb_printf (gdb_stderr, _("\
 JITed symbol file is not an object file, ignoring it.\n"));
@@ -1151,9 +1159,7 @@ static const registry<gdbarch>::key<jit_gdbarch_data_type> jit_gdbarch_data;
 static void
 jit_prepend_unwinder (struct gdbarch *gdbarch)
 {
-  struct jit_gdbarch_data_type *data = jit_gdbarch_data.get (gdbarch);
-  if (data == nullptr)
-    data = jit_gdbarch_data.emplace (gdbarch);
+  struct jit_gdbarch_data_type *data = &jit_gdbarch_data.try_emplace (gdbarch);
 
   if (!data->unwinder_registered)
     {

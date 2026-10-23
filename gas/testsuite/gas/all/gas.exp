@@ -262,13 +262,14 @@ proc do_930509a {} {
     set x 0
     gas_start "x930509.s" "-al"
     while 1 {
-# We need to accommodate both byte orders here.
+# We need to accommodate little, big and pdp endian here.
 # If ".long" means an 8-byte value on some target someday, this test will have
 # to be fixed.
 	expect {
 	    -re "^ +1 .... 00 ?00 ?00 ?00" { fail $testname; set x 1 }
 	    -re "^ +1 .... 04 ?00 ?00 ?00" { pass $testname; set x 1 }
 	    -re "^ +1 .... 00 ?00 ?00 ?04" { pass $testname; set x 1 }
+	    -re "^ +1 .... 00 ?00 ?04 ?00" { pass $testname; set x 1 }
 	    -re "\[^\n\]*\n" { }
 	    timeout { perror "timeout\n"; break }
 	    eof { break }
@@ -292,7 +293,7 @@ if {    ![istarget *c30*-*-*]
      && ![istarget h8300*-*-*]
      && ![istarget hppa*-*-*] } then {
     # msp430, mn10[23]00 and riscv emit two relocs to handle the difference of two symbols.
-    setup_xfail "am3*-*-*" "loongarch*-*-*" "mn10200-*-*" "mn10300*-*-*" "msp430*-*-*" "riscv*-*-*"
+    setup_xfail "am3*-*-*" "mn10200-*-*" "mn10300*-*-*" "msp430*-*-*" "riscv*-*-*"
     do_930509a
 }
 
@@ -509,6 +510,8 @@ run_dump_test base64
 run_dump_test base64-bad
 
 run_dump_test string
+run_dump_test string2
+
 if [is_elf_format] {
     run_dump_test none
 }

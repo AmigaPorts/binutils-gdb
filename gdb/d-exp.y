@@ -48,6 +48,7 @@
 #include "block.h"
 #include "type-stack.h"
 #include "expop.h"
+#include "cli/cli-style.h"
 
 #define parse_type(ps) builtin_type (ps->gdbarch ())
 #define parse_d_type(ps) builtin_d_type (ps->gdbarch ())
@@ -466,9 +467,10 @@ PrimaryExpression:
 			= lookup_minimal_symbol (current_program_space, copy.c_str ());
 		      if (msymbol.minsym != NULL)
 			pstate->push_new<var_msym_value_operation> (msymbol);
-		      else if (!have_full_symbols (current_program_space)
-			       && !have_partial_symbols (current_program_space))
-			error (_("No symbol table is loaded.  Use the \"file\" command"));
+		      else if (!current_program_space->has_full_symbols ()
+			       && !current_program_space->has_partial_symbols ())
+			error (_("No symbol table is loaded.  Use the \"%ps\" command"),
+			       styled_string (command_style.style (), "file"));
 		      else
 			error (_("No symbol \"%s\" in current context."),
 			       copy.c_str ());
@@ -483,7 +485,7 @@ PrimaryExpression:
 			  if (type->code () == TYPE_CODE_MODULE)
 			    {
 			      struct block_symbol sym;
-			      const char *type_name = TYPE_SAFE_NAME (type);
+			      const char *type_name = type->safe_name ();
 			      int type_name_len = strlen (type_name);
 			      std::string name
 				= string_printf ("%.*s.%.*s",
@@ -502,7 +504,7 @@ PrimaryExpression:
 				 of an aggregate or an enum type.  */
 			      if (!type_aggregate_p (type))
 				error (_("`%s' is not defined as an aggregate type."),
-				       TYPE_SAFE_NAME (type));
+				       type->safe_name ());
 
 			      pstate->push_new<scope_operation>
 				(type, copy_name ($3));

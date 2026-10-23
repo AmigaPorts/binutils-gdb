@@ -495,7 +495,7 @@
 #define elf_backend_strip_zero_sized_dynamic_sections 0
 #endif
 #ifndef elf_backend_init_index_section
-#define elf_backend_init_index_section _bfd_void_bfd_link
+#define elf_backend_init_index_section _bfd_elf_init_0_index_sections
 #endif
 #ifndef elf_backend_relocate_section
 #define elf_backend_relocate_section	0
@@ -554,12 +554,17 @@
 #ifndef elf_backend_default_obj_attr_version
 #define elf_backend_default_obj_attr_version	OBJ_ATTR_V1
 #endif
+#ifdef OBJ_MAYBE_ELF_ATTRIBUTES
 #ifndef elf_backend_obj_attrs_version_dec
 #define elf_backend_obj_attrs_version_dec	_bfd_obj_attrs_version_dec
 #endif
 #ifndef elf_backend_obj_attrs_version_enc
 #define elf_backend_obj_attrs_version_enc	_bfd_obj_attrs_version_enc
 #endif
+#else /* OBJ_MAYBE_ELF_ATTRIBUTES */
+#define elf_backend_obj_attrs_version_dec	NULL
+#define elf_backend_obj_attrs_version_enc	NULL
+#endif /* OBJ_MAYBE_ELF_ATTRIBUTES */
 #ifndef elf_backend_obj_attr_v2_known_subsections
 #define elf_backend_obj_attr_v2_known_subsections	NULL
 #endif
@@ -615,7 +620,7 @@
 #define elf_backend_output_arch_syms		NULL
 #endif
 #ifndef elf_backend_filter_implib_symbols
-#define elf_backend_filter_implib_symbols	NULL
+#define elf_backend_filter_implib_symbols	_bfd_elf_filter_implib_symbols
 #endif
 #ifndef elf_backend_copy_indirect_symbol
 #define elf_backend_copy_indirect_symbol	_bfd_elf_link_hash_copy_indirect

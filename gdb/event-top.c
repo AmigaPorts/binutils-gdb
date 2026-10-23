@@ -821,7 +821,7 @@ command_line_handler (gdb::unique_xmalloc_ptr<char> &&rl)
 	 Which we will get with a newer readline, but this really is the
 	 best we can do with older versions of readline.  */
       const char *value = rl_variable_value ("enable-bracketed-paste");
-      if (value != nullptr && strcmp (value, "on") == 0
+      if (value != nullptr && streq (value, "on")
 	  && ((rl_readline_version >> 8) & 0xff) > 0x07)
 	printf_unfiltered ("\n");
       printf_unfiltered ("quit\n");
@@ -1038,7 +1038,7 @@ handle_fatal_signal (int sig)
 #ifdef SIGABRT
   signal (SIGABRT, SIG_DFL);
 #endif
-  abort ();		/* ARI: abort */
+  abort ();
 }
 
 /* The SIGSEGV handler for this thread, or NULL if there is none.  GDB

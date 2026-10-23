@@ -685,35 +685,34 @@ starti_command (const char *args, int from_tty)
   run_command_1 (args, from_tty, RUN_STOP_AT_FIRST_INSN);
 }
 
-static bool
+static void
 proceed_thread_callback (struct thread_info *thread)
 {
   /* We go through all threads individually instead of compressing
      into a single target `resume_all' request, because some threads
      may be stopped in internal breakpoints/events, or stopped waiting
      for its turn in the displaced stepping queue (that is, they are
-     running && !executing).  The target side has no idea about why
-     the thread is stopped, so a `resume_all' command would resume too
-     much.  If/when GDB gains a way to tell the target `hold this
-     thread stopped until I say otherwise', then we can optimize
-     this.  */
-  if (thread->state != THREAD_STOPPED)
-    return false;
+     running from the user's perspective but internally stopped).  The
+     target side has no idea about why the thread is stopped, so a
+     `resume_all' command would resume too much.  If/when GDB gains a
+     way to tell the target `hold this thread stopped until I say
+     otherwise', then we can optimize this.  */
+  if (thread->state () != THREAD_STOPPED)
+    return;
 
   if (!thread->inf->has_execution ())
-    return false;
+    return;
 
   switch_to_thread (thread);
   clear_proceed_status (0);
   proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
-  return false;
 }
 
 static void
 ensure_valid_thread (void)
 {
   if (inferior_ptid == null_ptid
-      || inferior_thread ()->state == THREAD_EXITED)
+      || inferior_thread ()->state () == THREAD_EXITED)
     error (_("Cannot execute this command without a live selected thread."));
 }
 
@@ -742,7 +741,7 @@ error_is_running (void)
 static void
 ensure_not_running (void)
 {
-  if (inferior_thread ()->state == THREAD_RUNNING)
+  if (inferior_thread ()->state () == THREAD_RUNNING)
     error_is_running ();
 }
 
@@ -763,7 +762,7 @@ continue_1 (int all_threads)
       scoped_disable_commit_resumed disable_commit_resumed
 	("continue all threads in non-stop");
 
-      iterate_over_threads (proceed_thread_callback);
+      for_each_thread (proceed_thread_callback);
 
       if (current_ui->prompt_state == PROMPT_BLOCKED)
 	{
@@ -898,8 +897,7 @@ set_step_frame (thread_info *tp)
   symtab_and_line sal = find_frame_sal (frame);
   set_step_info (tp, frame, sal);
 
-  CORE_ADDR pc = get_frame_pc (frame);
-  tp->control.step_start_function = find_symbol_for_pc (pc);
+  tp->control.set_step_start_function (frame);
 }
 
 /* Step until outside of current statement.  */
@@ -1100,7 +1098,8 @@ prepare_one_step (thread_info *tp, struct step_command_fsm *sm)
 
 	      /* Pretend that we've ran.  */
 	      resume_ptid = user_visible_resume_ptid (1);
-	      set_running (tp->inf->process_target (), resume_ptid, true);
+	      set_state (tp->inf->process_target (), resume_ptid,
+			 THREAD_RUNNING);
 
 	      step_into_inline_frame (tp);
 
@@ -1249,8 +1248,7 @@ jump_command (const char *arg, int from_tty)
 
   /* See if we are trying to jump to another function.  */
   fn = get_frame_function (get_current_frame ());
-  sfn = find_symbol_for_pc_sect_maybe_inline (sal.pc,
-					  find_pc_mapped_section (sal.pc));
+  sfn = find_symbol_for_pc_maybe_inline (sal.pc);
   if (fn != nullptr && sfn != fn)
     {
       if (!query (_("Line %ps is not in `%ps'.  Jump anyway? "),
@@ -1819,7 +1817,7 @@ finish_backward (struct finish_command_fsm *sm)
   CORE_ADDR func_addr;
   CORE_ADDR alt_entry_point;
   CORE_ADDR entry_point;
-  frame_info_ptr frame = get_selected_frame (nullptr);
+  frame_info_ptr frame = get_selected_frame ();
   struct gdbarch *gdbarch = get_frame_arch (frame);
 
   pc = get_frame_pc (get_current_frame ());
@@ -1949,11 +1947,13 @@ finish_command (const char *arg, int from_tty)
   prepare_execution_command (current_inferior ()->top_target (), async_exec);
 
   if (arg)
-    error (_("The \"finish\" command does not take any arguments."));
+    error (_("The \"%ps\" command does not take any arguments."),
+	   styled_string (command_style.style (), "finish"));
 
   frame = get_prev_frame (get_selected_frame (_("No selected frame.")));
   if (frame == 0)
-    error (_("\"finish\" not meaningful in the outermost frame."));
+    error (_("\"%ps\" not meaningful in the outermost frame."),
+	   styled_string (command_style.style (), "finish"));
 
   clear_proceed_status (0);
 
@@ -1983,7 +1983,7 @@ finish_command (const char *arg, int from_tty)
       if (from_tty)
 	{
 	  gdb_printf (_("Run till exit from "));
-	  print_stack_frame (get_selected_frame (nullptr), 1, LOCATION, 0);
+	  print_stack_frame (get_selected_frame (), 1, LOCATION, 0);
 	}
 
       proceed ((CORE_ADDR) -1, GDB_SIGNAL_DEFAULT);
@@ -1991,7 +1991,7 @@ finish_command (const char *arg, int from_tty)
     }
 
   /* Find the function we will return from.  */
-  frame_info_ptr callee_frame = get_selected_frame (nullptr);
+  frame_info_ptr callee_frame = get_selected_frame ();
   sm->function = find_symbol_for_pc (get_frame_pc (callee_frame));
   sm->return_buf = 0;    /* Initialize buffer address is not available.  */
 
@@ -2078,12 +2078,12 @@ info_program_command (const char *args, int from_tty)
 		  print_thread_id (tp),
 		  target_pid_to_str (tp->ptid).c_str ());
 
-      if (tp->state == THREAD_EXITED)
+      if (tp->state () == THREAD_EXITED)
 	{
 	  gdb_printf (_("Selected thread has exited.\n"));
 	  return;
 	}
-      else if (tp->state == THREAD_RUNNING)
+      else if (tp->state () == THREAD_RUNNING)
 	{
 	  gdb_printf (_("Selected thread is running.\n"));
 	  return;
@@ -2105,13 +2105,13 @@ info_program_command (const char *args, int from_tty)
 		  print_thread_id (tp),
 		  target_pid_to_str (tp->ptid).c_str ());
 
-      if (tp->state == THREAD_EXITED)
+      if (tp->state () == THREAD_EXITED)
 	{
 	  gdb_printf (_("Thread has since exited.\n"));
 	  return;
 	}
 
-      if (tp->state == THREAD_RUNNING)
+      if (tp->state () == THREAD_RUNNING)
 	{
 	  gdb_printf (_("Thread is now running.\n"));
 	  return;
@@ -2475,7 +2475,7 @@ void
 default_print_registers_info (struct gdbarch *gdbarch,
 			      struct ui_file *file,
 			      const frame_info_ptr &frame,
-			      int regnum, int print_all)
+			      int regnum, bool print_all)
 {
   int i;
   const int numregs = gdbarch_num_cooked_regs (gdbarch);
@@ -2505,24 +2505,25 @@ default_print_registers_info (struct gdbarch *gdbarch,
 
       /* If the register name is empty, it is undefined for this
 	 processor, so don't display anything.  */
-      if (*(gdbarch_register_name (gdbarch, i)) == '\0')
+      const char *regname = gdbarch_register_name (gdbarch, i);
+      if (*regname == '\0')
 	continue;
 
       default_print_one_register_info
-	(file, gdbarch_register_name (gdbarch, i),
+	(file, regname,
 	 value_of_register (i, get_next_frame_sentinel_okay (frame)));
     }
 }
 
 void
-registers_info (const char *addr_exp, int fpregs)
+registers_info (const char *addr_exp, bool fpregs)
 {
   frame_info_ptr frame;
   struct gdbarch *gdbarch;
 
   if (!target_has_registers ())
     error (_("The program has no registers now."));
-  frame = get_selected_frame (nullptr);
+  frame = get_selected_frame ();
   gdbarch = get_frame_arch (frame);
 
   if (!addr_exp)
@@ -2639,25 +2640,18 @@ print_vector_info (struct ui_file *file,
 		   const frame_info_ptr &frame, const char *args)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
+  bool printed_something = false;
 
-  if (gdbarch_print_vector_info_p (gdbarch))
-    gdbarch_print_vector_info (gdbarch, file, frame, args);
-  else
+  for (int regnum = 0; regnum < gdbarch_num_cooked_regs (gdbarch); regnum++)
     {
-      int regnum;
-      int printed_something = 0;
-
-      for (regnum = 0; regnum < gdbarch_num_cooked_regs (gdbarch); regnum++)
+      if (gdbarch_register_reggroup_p (gdbarch, regnum, vector_reggroup))
 	{
-	  if (gdbarch_register_reggroup_p (gdbarch, regnum, vector_reggroup))
-	    {
-	      printed_something = 1;
-	      gdbarch_print_registers_info (gdbarch, file, frame, regnum, 1);
-	    }
+	  printed_something = true;
+	  gdbarch_print_registers_info (gdbarch, file, frame, regnum, true);
 	}
-      if (!printed_something)
-	gdb_printf (file, "No vector information\n");
     }
+  if (!printed_something)
+    gdb_printf (file, "No vector information\n");
 }
 
 static void
@@ -2666,7 +2660,7 @@ info_vector_command (const char *args, int from_tty)
   if (!target_has_registers ())
     error (_("The program has no registers now."));
 
-  print_vector_info (gdb_stdout, get_selected_frame (nullptr), args);
+  print_vector_info (gdb_stdout, get_selected_frame (), args);
 }
 
 /* Kill the inferior process.  Make us have no inferior.  */
@@ -2713,7 +2707,7 @@ proceed_after_attach (inferior *inf)
   scoped_restore_current_thread restore_thread;
 
   for (thread_info &thread : inf->non_exited_threads ())
-    if (!thread.executing ()
+    if (thread.internal_state () != THREAD_INT_RUNNING
 	&& !thread.stop_requested
 	&& thread.stop_signal () == GDB_SIGNAL_0)
       {
@@ -2868,6 +2862,10 @@ attach_command (const char *args, int from_tty)
      this function should probably be moved into target_pre_inferior.  */
   target_pre_inferior ();
 
+  /* Set up execution context to know that we should return from
+     wait_for_inferior as soon as the target reports a stop.  */
+  init_wait_for_inferior ();
+
   gdb::unique_xmalloc_ptr<char> stripped = strip_bg_char (args, &async_exec);
   args = stripped.get ();
 
@@ -2909,10 +2907,6 @@ attach_command (const char *args, int from_tty)
        before the attach continuation runs and the command is really
        finished.  */
   target_terminal::inferior ();
-
-  /* Set up execution context to know that we should return from
-     wait_for_inferior as soon as the target reports a stop.  */
-  init_wait_for_inferior ();
 
   inferior->needs_setup = true;
 
@@ -2962,7 +2956,10 @@ attach_command (const char *args, int from_tty)
       return;
     }
   else
-    attach_post_wait (from_tty, mode);
+    {
+      set_normal_stop_state_just_attached ();
+      attach_post_wait (from_tty, mode);
+    }
 
   disable_commit_resumed.reset_and_commit ();
 }
@@ -2993,7 +2990,7 @@ notice_new_inferior (thread_info *thr, bool leave_running, int from_tty)
   /* When we "notice" a new inferior we need to do all the things we
      would normally do if we had just attached to it.  */
 
-  if (thr->executing ())
+  if (thr->internal_state () == THREAD_INT_RUNNING)
     {
       struct inferior *inferior = current_inferior ();
 
@@ -3045,7 +3042,8 @@ detach_command (const char *args, int from_tty)
      detaching the parent.  Otherwise detaching could close the
      target.  */
   inferior *inf = current_inferior ();
-  auto target_ref = target_ops_ref::new_reference (inf->process_target ());
+  auto target_ref
+    = process_target_ops_ref::new_reference (inf->process_target ());
 
   /* Save this before detaching, since detaching may unpush the
      process_stratum target.  */
@@ -3071,7 +3069,7 @@ detach_command (const char *args, int from_tty)
     deprecated_detach_hook ();
 
   if (!was_non_stop_p)
-    restart_after_all_stop_detach (as_process_stratum_target (target_ref.get ()));
+    restart_after_all_stop_detach (target_ref.get ());
 
   disable_commit_resumed.reset_and_commit ();
 }
@@ -3183,7 +3181,7 @@ default_print_float_info (struct gdbarch *gdbarch, struct ui_file *file,
       if (gdbarch_register_reggroup_p (gdbarch, regnum, float_reggroup))
 	{
 	  printed_something = 1;
-	  gdbarch_print_registers_info (gdbarch, file, frame, regnum, 1);
+	  gdbarch_print_registers_info (gdbarch, file, frame, regnum, true);
 	}
     }
   if (!printed_something)
@@ -3199,7 +3197,7 @@ info_float_command (const char *args, int from_tty)
   if (!target_has_registers ())
     error (_("The program has no registers now."));
 
-  frame = get_selected_frame (nullptr);
+  frame = get_selected_frame ();
   gdbarch_print_float_info (get_frame_arch (frame), gdb_stdout, frame, args);
 }
 
@@ -3265,6 +3263,14 @@ static void
 info_proc_cmd_cmdline (const char *args, int from_tty)
 {
   info_proc_cmd_1 (args, IP_CMDLINE, from_tty);
+}
+
+/* Implement `info proc environ'.  */
+
+static void
+info_proc_cmd_environ (const char *args, int from_tty)
+{
+  info_proc_cmd_1 (args, IP_ENVIRON, from_tty);
 }
 
 /* Implement `info proc exe'.  */
@@ -3643,6 +3649,11 @@ List current working directory of the specified process."),
 
   add_cmd ("cmdline", class_info, info_proc_cmd_cmdline, _("\
 List command line arguments of the specified process."),
+	   &info_proc_cmdlist);
+
+  add_cmd ("environ", class_info, info_proc_cmd_environ, _("\
+List initial environment variables of the specified process.\n\
+See also 'show environment' command."),
 	   &info_proc_cmdlist);
 
   add_cmd ("exe", class_info, info_proc_cmd_exe, _("\

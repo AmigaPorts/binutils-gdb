@@ -62,6 +62,7 @@ struct thread_info;
 #include "displaced-stepping.h"
 
 #include "gdbsupport/unordered_map.h"
+#include "gdbsupport/common-inferior.h"
 
 struct infcall_suspend_state;
 struct infcall_control_state;
@@ -149,7 +150,7 @@ extern void reopen_exec_file (void);
 extern void default_print_registers_info (struct gdbarch *gdbarch,
 					  struct ui_file *file,
 					  const frame_info_ptr &frame,
-					  int regnum, int all);
+					  int regnum, bool all);
 
 /* Default implementation of gdbarch_print_float_info.  Print
    the values of all floating point registers.  */
@@ -199,8 +200,8 @@ extern void child_interrupt (struct target_ops *self);
 /* From fork-child.c */
 
 /* Helper function to call STARTUP_INFERIOR with PID and NUM_TRAPS.
-   This function already calls set_executing.  Return the ptid_t from
-   STARTUP_INFERIOR.  */
+   This function already sets the threads' internal state to
+   THREAD_STOPPED.  Return the ptid_t from STARTUP_INFERIOR.  */
 extern ptid_t gdb_startup_inferior (pid_t pid, int num_traps);
 
 /* From infcmd.c */
@@ -222,7 +223,7 @@ extern void post_create_inferior (int from_tty, bool set_pspace_solib_ops);
 
 extern void attach_command (const char *, int);
 
-extern void registers_info (const char *, int);
+extern void registers_info (const char *, bool);
 
 extern void continue_1 (int all_threads);
 
@@ -545,7 +546,11 @@ public:
      ESCAPE_SHELL_CHAR is true all special shell characters in ARGS are
      escaped, When false only the characters that GDB sees as special will
      be escaped.  See construct_inferior_arguments for more details.  */
-  void set_args (gdb::array_view<char * const> args, bool escape_shell_char);
+  template<typename T>
+  void set_args (gdb::array_view<T const> args, bool escape_shell_char)
+  {
+    this->set_args (construct_inferior_arguments (args, escape_shell_char));
+  }
 
   /* Get the argument string to use when running this inferior.
 

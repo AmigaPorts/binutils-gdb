@@ -100,8 +100,8 @@ public:
   bool filesystem_is_local () override;
 
   int fileio_open (struct inferior *inf, const char *filename,
-		   int flags, int mode, int warn_if_slow,
-		   fileio_error *target_errno) override;
+		   fileio_open_flags flags, fileio_mode_flags mode,
+		   bool warn_if_slow, fileio_error *target_errno) override;
 
   std::optional<std::string>
     fileio_readlink (struct inferior *inf,
@@ -316,7 +316,7 @@ lwp_info_safe_range all_lwps_safe ();
    does whatever is required to have the child LWP under the
    thread_db's control --- e.g., enabling event reporting.  Returns
    true on success, false if the process isn't using libpthread.  */
-extern int thread_db_notice_clone (ptid_t parent, ptid_t child);
+extern bool thread_db_notice_clone (ptid_t parent, ptid_t child);
 
 /* Return the number of signals used by the threads library.  */
 extern unsigned int lin_thread_get_thread_signal_num (void);

@@ -69,7 +69,7 @@
 #endif
 
 #ifndef HAVE_SOCKLEN_T
-typedef int socklen_t;
+using socklen_t = int;
 #endif
 
 #ifndef IN_PROCESS_AGENT
@@ -221,7 +221,7 @@ remote_prepare (const char *name)
   socklen_t tmp;
 
   remote_is_stdio = 0;
-  if (strcmp (name, STDIO_CONNECTION_NAME) == 0)
+  if (streq (name, STDIO_CONNECTION_NAME))
     {
       /* We need to record fact that we're using stdio sooner than the
 	 call to remote_open so start_inferior knows the connection is
@@ -319,10 +319,10 @@ remote_open (const char *name)
   port_str = strchr (name, ':');
 #ifdef USE_WIN32API
   if (port_str == NULL)
-    error ("Only HOST:PORT is supported on this platform.");
+    error (_("Only HOST:PORT is supported on this platform."));
 #endif
 
-  if (strcmp (name, STDIO_CONNECTION_NAME) == 0)
+  if (streq (name, STDIO_CONNECTION_NAME))
     {
       fprintf (stderr, "Remote debugging using stdio\n");
 
@@ -519,43 +519,9 @@ char *
 write_ptid (char *buf, ptid_t ptid)
 {
   client_state &cs = get_client_state ();
-  ptid_t::pid_type pid;
-  ptid_t::lwp_type lwp;
-
-  if (cs.multi_process)
-    {
-      pid = ptid.pid ();
-      if (pid < 0)
-	buf += sprintf (buf, "p-%x.", -pid);
-      else
-	buf += sprintf (buf, "p%x.", pid);
-    }
-  lwp = ptid.lwp ();
-  if (lwp < 0)
-    buf += sprintf (buf, "-%lx", -lwp);
-  else
-    buf += sprintf (buf, "%lx", lwp);
-
-  return buf;
-}
-
-static ULONGEST
-hex_or_minus_one (const char *buf, const char **obuf)
-{
-  ULONGEST ret;
-
-  if (startswith (buf, "-1"))
-    {
-      ret = (ULONGEST) -1;
-      buf += 2;
-    }
-  else
-    buf = unpack_varlen_hex (buf, &ret);
-
-  if (obuf)
-    *obuf = buf;
-
-  return ret;
+  std::string repr = ptid.to_rsp_string (cs.multi_process);
+  strcpy (buf, repr.c_str ());
+  return buf + repr.length ();
 }
 
 /* Extract a PTID from BUF.  If non-null, OBUF is set to one past the last
@@ -563,61 +529,14 @@ hex_or_minus_one (const char *buf, const char **obuf)
 ptid_t
 read_ptid (const char *buf, const char **obuf)
 {
-  const char *p = buf;
-  const char *pp;
-  ptid_t::pid_type pid = 0;
-  ptid_t::lwp_type lwp = 0;
-  ULONGEST hex;
-
-  if (*p == 'p')
-    {
-      /* Multi-process ptid.  */
-      pp = unpack_varlen_hex (p + 1, &hex);
-      if (pp == (p + 1) || *pp != '.')
-	error ("invalid remote ptid: %s\n", buf);
-
-      pid = (ptid_t::pid_type) (LONGEST) hex;
-      if (hex != ((ULONGEST) pid))
-	error (_("invalid remote ptid: %s"), buf);
-
-      p = pp + 1;
-      hex = hex_or_minus_one (p, &pp);
-      if (pp == p)
-	error ("invalid remote ptid: %s\n", buf);
-
-      lwp = (ptid_t::lwp_type) (LONGEST) hex;
-      if (hex != ((ULONGEST) lwp))
-	error (_("invalid remote ptid: %s"), buf);
-
-      if (obuf)
-	*obuf = pp;
-
-      return ptid_t (pid, lwp);
-    }
-
-  /* No multi-process.  Just a thread id.  */
-  hex = hex_or_minus_one (p, &pp);
-
-  /* Handle special thread ids.  */
-  if (hex == (ULONGEST) -1)
-    return minus_one_ptid;
-
-  if (hex == 0)
-    return null_ptid;
-
-  lwp = (ptid_t::lwp_type) (LONGEST) hex;
-  if (hex != ((ULONGEST) lwp))
-    error (_("invalid remote ptid: %s"), buf);
-
-  /* Since GDB is not sending a process id (multi-process extensions
-     are off), then there's only one process.  Default to the first in
-     the list.  */
-  pid = get_first_process ()->pid;
-
-  if (obuf)
-    *obuf = pp;
-
-  return ptid_t (pid, lwp);
+  return ptid_t::parse (buf, obuf, true,
+    [] ()
+      {
+	/* Since GDB is not sending a process id (multi-process
+	   extensions are off), then there's only one process.
+	   Default to the first in the list.  */
+	return get_first_process ()->pid;
+      });
 }
 
 /* Write COUNT bytes in BUF to the client.  Returns true if all bytes
@@ -979,6 +898,7 @@ getpkt (char *buf)
 	    return -1;
 	}
 
+      bool fits_in_buf = true;
       bp = buf;
       while (1)
 	{
@@ -987,7 +907,11 @@ getpkt (char *buf)
 	    return -1;
 	  if (c == '#')
 	    break;
-	  *bp++ = c;
+	  /* The buffer is always allocated as 'PBUFSIZ + 1' so we know
+	     that this write will always be within the buffer.  */
+	  *bp = c;
+	  fits_in_buf = bp - buf < PBUFSIZ;
+	  bp += (fits_in_buf ? 1: 0);
 	  csum += c;
 	}
       *bp = 0;
@@ -995,22 +919,30 @@ getpkt (char *buf)
       c1 = fromhex (readchar ());
       c2 = fromhex (readchar ());
 
-      if (csum == (c1 << 4) + c2)
+      unsigned char sentsum = (c1 << 4) + c2;
+      bool csum_ok = csum == sentsum;
+      if (csum_ok && fits_in_buf)
 	break;
 
+      if (!csum_ok)
+	fprintf (stderr, "Bad checksum, sentsum=0x%x, csum=0x%x, buf=%s\n",
+		 sentsum, csum, buf);
+      if (!fits_in_buf)
+	fprintf (stderr, "Packet too long\n");
       if (cs.noack_mode)
 	{
-	  fprintf (stderr,
-		   "Bad checksum, sentsum=0x%x, csum=0x%x, "
-		   "buf=%s [no-ack-mode, Bad medium?]\n",
-		   (c1 << 4) + c2, csum, buf);
-	  /* Not much we can do, GDB wasn't expecting an ack/nac.  */
-	  break;
+	  fprintf (stderr, "[no-ack-mode, Bad medium?]\n");
+	  /* Not much we can do, GDB wasn't expecting an ack/nak, just
+	     return an error to indicate the packet was bad.  */
+	  return -1;
 	}
 
-      fprintf (stderr, "Bad checksum, sentsum=0x%x, csum=0x%x, buf=%s\n",
-	       (c1 << 4) + c2, csum, buf);
-      if (!write_prim ("-", 1))
+      /* Send '-' (NAK) back to GDB.  If that fails, or if the incoming
+	 packet was too long, then return an error.  For the packet too
+	 long case there's no point repeating the loop, all GDB can do is
+	 resend the original packet, which will be too long again, and
+	 we'll be stuck in this loop forever.  */
+      if (!write_prim ("-", 1) || !fits_in_buf)
 	return -1;
     }
 
@@ -1338,7 +1270,7 @@ prepare_resume_reply (char *buf, ptid_t ptid, const target_waitstatus &status)
       sprintf (buf, "N");
       break;
     default:
-      error ("unhandled waitkind");
+      error (_("unhandled waitkind"));
       break;
     }
 }
@@ -1508,7 +1440,7 @@ look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb)
 
   /* Check the cache first.  */
   for (sym = proc->symbol_cache; sym; sym = sym->next)
-    if (strcmp (name, sym->name) == 0)
+    if (streq (name, sym->name))
       {
 	*addrp = sym->addr;
 	return 1;
@@ -1526,7 +1458,6 @@ look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb)
   if (putpkt (cs.own_buf) < 0)
     return -1;
 
-  /* FIXME:  Eventually add buffer overflow checking (to getpkt?)  */
   len = getpkt (cs.own_buf);
   if (len < 0)
     return -1;
@@ -1606,7 +1537,7 @@ look_up_one_symbol (const char *name, CORE_ADDR *addrp, int may_ask_gdb)
 
   if (!startswith (cs.own_buf, "qSymbol:"))
     {
-      warning ("Malformed response to qSymbol, ignoring: %s", cs.own_buf);
+      warning (_("Malformed response to qSymbol, ignoring: %s"), cs.own_buf);
       return -1;
     }
 
@@ -1656,7 +1587,6 @@ relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc)
   if (putpkt (cs.own_buf) < 0)
     return -1;
 
-  /* FIXME:  Eventually add buffer overflow checking (to getpkt?)  */
   len = getpkt (cs.own_buf);
   if (len < 0)
     return -1;
@@ -1740,14 +1670,14 @@ relocate_instruction (CORE_ADDR *to, CORE_ADDR oldloc)
 
   if (cs.own_buf[0] == 'E')
     {
-      warning ("An error occurred while relocating an instruction: %s",
+      warning (_("An error occurred while relocating an instruction: %s"),
 	       cs.own_buf);
       return -1;
     }
 
   if (!startswith (cs.own_buf, "qRelocInsn:"))
     {
-      warning ("Malformed response to qRelocInsn, ignoring: %s",
+      warning (_("Malformed response to qRelocInsn, ignoring: %s"),
 	       cs.own_buf);
       return -1;
     }

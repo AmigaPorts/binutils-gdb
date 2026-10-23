@@ -30,6 +30,7 @@
 #include "solib.h"
 #include "solib-svr4.h"
 #include "symfile.h"
+#include "filesystem.h"
 
 namespace {
 
@@ -45,34 +46,34 @@ struct rocm_solib_fd_cache
      Open the file FILENAME if it is not already opened, reuse the existing file
      descriptor otherwise.
 
-     On error -1 is returned, and TARGET_ERRNO is set.  */
-  int open (const std::string &filename, fileio_error *target_errno);
+     On error target_fd::INVALID is returned, and TARGET_ERRNO is set.  */
+  target_fd open (const std::string &filename, fileio_error *target_errno);
 
   /* Decrement the reference count to FD and close FD if the reference count
      reaches 0.
 
      On success, return 0.  On error, return -1 and set TARGET_ERRNO.  */
-  int close (int fd, fileio_error *target_errno);
+  int close (target_fd fd, fileio_error *target_errno);
 
 private:
   struct refcnt_fd
   {
-    refcnt_fd (int fd, int refcnt) : fd (fd), refcnt (refcnt) {}
+    refcnt_fd (target_fd fd, int refcnt) : fd (fd), refcnt (refcnt) {}
 
     DISABLE_COPY_AND_ASSIGN (refcnt_fd);
 
     refcnt_fd (refcnt_fd &&) = default;
     refcnt_fd &operator=(refcnt_fd &&other) = default;
 
-    int fd = -1;
+    target_fd fd = target_fd::INVALID;
     int refcnt = 0;
   };
 
   inferior *m_inferior;
-  gdb::unordered_map<std::string, refcnt_fd> m_cache;
+  gdb::unordered_string_map<refcnt_fd> m_cache;
 };
 
-int
+target_fd
 rocm_solib_fd_cache::open (const std::string &filename,
 			   fileio_error *target_errno)
 {
@@ -80,10 +81,10 @@ rocm_solib_fd_cache::open (const std::string &filename,
   if (it == m_cache.end ())
     {
       /* The file is not yet opened on the target.  */
-      int fd
+      target_fd fd
 	= target_fileio_open (m_inferior, filename.c_str (), FILEIO_O_RDONLY,
-			      false, 0, target_errno);
-      if (fd != -1)
+			      0, false, target_errno);
+      if (fd != target_fd::INVALID)
 	m_cache.emplace (std::piecewise_construct,
 			 std::forward_as_tuple (filename),
 			 std::forward_as_tuple (fd, 1));
@@ -94,15 +95,15 @@ rocm_solib_fd_cache::open (const std::string &filename,
       /* The file is already opened.  Increment the refcnt and return the
 	 already opened FD.  */
       it->second.refcnt++;
-      gdb_assert (it->second.fd != -1);
+      gdb_assert (it->second.fd != target_fd::INVALID);
       return it->second.fd;
     }
 }
 
 int
-rocm_solib_fd_cache::close (int fd, fileio_error *target_errno)
+rocm_solib_fd_cache::close (target_fd fd, fileio_error *target_errno)
 {
-  using cache_val = gdb::unordered_map<std::string, refcnt_fd>::value_type;
+  using cache_val = gdb::unordered_string_map<refcnt_fd>::value_type;
   auto it
     = std::find_if (m_cache.begin (), m_cache.end (),
 		    [fd](const cache_val &s) { return s.second.fd == fd; });
@@ -201,7 +202,7 @@ struct rocm_solib_ops : public solib_ops
   { return m_host_ops->find_solib_addr (so); }
 
   bool supports_namespaces () const override
-  { return true; }
+  { return m_host_ops->supports_namespaces (); }
 
   int find_solib_ns (const solib &so) const override
   { return m_host_ops->find_solib_ns (so); }
@@ -232,12 +233,7 @@ private:
 static struct solib_info *
 get_solib_info (inferior *inf)
 {
-  solib_info *info = rocm_solib_data.get (inf);
-
-  if (info == nullptr)
-    info = rocm_solib_data.emplace (inf, inf);
-
-  return info;
+  return &rocm_solib_data.try_emplace (inf, inf);
 }
 
 /* Relocate section addresses.  */
@@ -354,7 +350,7 @@ struct rocm_code_object_stream_file final : rocm_code_object_stream
 {
   DISABLE_COPY_AND_ASSIGN (rocm_code_object_stream_file);
 
-  rocm_code_object_stream_file (inferior *inf, int fd, ULONGEST offset,
+  rocm_code_object_stream_file (inferior *inf, target_fd fd, ULONGEST offset,
 				ULONGEST size);
 
   file_ptr read (bfd *abfd, void *buf, file_ptr size,
@@ -370,7 +366,7 @@ protected:
   inferior *m_inf;
 
   /* The target file descriptor for this stream.  */
-  int m_fd;
+  target_fd m_fd;
 
   /* The offset of the ELF file image in the target file.  */
   ULONGEST m_offset;
@@ -381,7 +377,7 @@ protected:
 };
 
 rocm_code_object_stream_file::rocm_code_object_stream_file
-  (inferior *inf, int fd, ULONGEST offset, ULONGEST size)
+  (inferior *inf, target_fd fd, ULONGEST offset, ULONGEST size)
   : m_inf (inf), m_fd (fd), m_offset (offset), m_size (size)
 {
 }
@@ -591,11 +587,27 @@ rocm_bfd_iovec_open (bfd *abfd, inferior *inferior)
 
       if (protocol == "file")
 	{
+	  /* A Windows absolute file path is encoded in a file: URI with a
+	     leading "/" before the drive letter: "file:///C:/Users/foo/bar".
+	     See grammar in RFC 8089 Section 2, the path-absolute production
+	     requires the leading "/".  'path-absolute' is defined by RFC 3986
+	     Section 3.3.  After decoding, decoded_path would be
+	     "/C:/Users/foo/bar", which is not a valid Windows path.  Drop the
+	     leading "/" as a normalization step.  */
+	  if ((effective_target_file_system_kind ()
+	       == file_system_kind_dos_based)
+	      && decoded_path.length () >= 4
+	      && decoded_path[0] == '/'
+	      && c_isalpha (decoded_path[1])
+	      && decoded_path[2] == ':'
+	      && decoded_path[3] == '/')
+	    decoded_path.erase (0, 1);
+
 	  auto info = get_solib_info (inferior);
 	  fileio_error target_errno;
-	  int fd = info->fd_cache.open (decoded_path, &target_errno);
+	  target_fd fd = info->fd_cache.open (decoded_path, &target_errno);
 
-	  if (fd == -1)
+	  if (fd == target_fd::INVALID)
 	    {
 	      errno = fileio_error_to_host (target_errno);
 	      bfd_set_error (bfd_error_system_call);
@@ -665,7 +677,7 @@ rocm_solib_ops::bfd_open (const char *pathname) const
 	   bfd_errmsg (bfd_get_error ()));
 
   /* Check bfd format.  */
-  if (!bfd_check_format (abfd.get (), bfd_object))
+  if (!gdb_bfd_check_format (abfd.get (), bfd_object))
     error (_("`%s': not in executable format: %s"),
 	   bfd_get_filename (abfd.get ()), bfd_errmsg (bfd_get_error ()));
 
@@ -719,8 +731,8 @@ rocm_solib_ops::bfd_open (const char *pathname) const
 	  if (amd_dbgapi_architecture_get_info
 	      (architecture_id, AMD_DBGAPI_ARCHITECTURE_INFO_NAME,
 	       sizeof (arch_name), &arch_name) != AMD_DBGAPI_STATUS_SUCCESS)
-	    error ("amd_dbgapi_architecture_get_info call failed for arch "
-		   "%#02x.", gfx_arch);
+	    error (_("amd_dbgapi_architecture_get_info call failed for arch "
+		     "%#02x."), gfx_arch);
 	  gdb::unique_xmalloc_ptr<char> arch_name_cleaner (arch_name);
 
 	  error (_("'%s': AMDGCN architecture %s not supported."),

@@ -70,7 +70,7 @@ void
 ui_file::vprintf (const char *format, va_list args)
 {
   ui_out_flags flags = disallow_ui_out_field;
-  cli_ui_out (this, flags).vmessage (m_applied_style, format, args);
+  cli_ui_out (this, flags).vmessage ({}, format, args);
 }
 
 /* See ui-file.h.  */
@@ -78,11 +78,8 @@ ui_file::vprintf (const char *format, va_list args)
 void
 ui_file::emit_style_escape (const ui_file_style &style)
 {
-  if (can_emit_style_escape () && style != m_applied_style)
-    {
-      m_applied_style = style;
-      this->puts (style.to_ansi ().c_str ());
-    }
+  if (can_emit_style_escape ())
+    this->puts (style.to_ansi ().c_str ());
 }
 
 /* See ui-file.h.  */
@@ -345,70 +342,11 @@ stderr_file::stderr_file (FILE *stream)
 
 
 
-tee_file::tee_file (ui_file *one, ui_file *two)
-  : m_one (one),
-    m_two (two)
-{}
-
-tee_file::~tee_file ()
-{
-}
-
-void
-tee_file::flush ()
-{
-  m_one->flush ();
-  m_two->flush ();
-}
-
-void
-tee_file::write (const char *buf, long length_buf)
-{
-  m_one->write (buf, length_buf);
-  m_two->write (buf, length_buf);
-}
-
-void
-tee_file::write_async_safe (const char *buf, long length_buf)
-{
-  m_one->write_async_safe (buf, length_buf);
-  m_two->write_async_safe (buf, length_buf);
-}
-
-void
-tee_file::puts (const char *linebuffer)
-{
-  m_one->puts (linebuffer);
-  m_two->puts (linebuffer);
-}
-
-bool
-tee_file::isatty ()
-{
-  return m_one->isatty ();
-}
-
 /* See ui-file.h.  */
 
-bool
-tee_file::term_out ()
-{
-  return m_one->term_out ();
-}
-
-/* See ui-file.h.  */
-
-bool
-tee_file::can_emit_style_escape ()
-{
-  return (m_one->term_out ()
-	  && term_cli_styling ());
-}
-
-/* See ui-file.h.  */
-
+template<typename T>
 void
-escape_buffering_file::write (const char *buf, long length_buf)
+escape_buffering_file<T>::write (const char *buf, long length_buf)
 {
   std::string copy (buf, length_buf);
   this->puts (copy.c_str ());
@@ -416,8 +354,9 @@ escape_buffering_file::write (const char *buf, long length_buf)
 
 /* See ui-file.h.  */
 
+template<typename T>
 void
-escape_buffering_file::puts (const char *buf)
+escape_buffering_file<T>::puts (const char *buf)
 {
   std::string local_buffer;
   if (!m_buffer.empty ())
@@ -469,8 +408,9 @@ escape_buffering_file::puts (const char *buf)
 
 /* See ui-file.h.  */
 
+template<typename T>
 void
-no_terminal_escape_file::do_puts (const char *buf)
+no_terminal_escape_file<T>::do_puts (const char *buf)
 {
   while (*buf != '\0')
     {
@@ -482,16 +422,25 @@ no_terminal_escape_file::do_puts (const char *buf)
       if (!skip_ansi_escape (esc, &n_read))
 	++esc;
 
-      this->stdio_file::write (buf, esc - buf);
+      /* The immediate superclass is escape_buffering_file, and
+	 calling its "write" would just end up in this function again.
+	 So perform the actual write using the "grandparent"
+	 class.  */
+      T::write (buf, esc - buf);
       buf = esc + n_read;
     }
 
   if (*buf != '\0')
-    this->stdio_file::write (buf, strlen (buf));
+    {
+      /* See comment above to understand which 'write' is being
+	 called.  */
+      T::write (buf, strlen (buf));
+    }
 }
 
+template<typename T>
 void
-no_terminal_escape_file::do_write (const char *buf, long len)
+no_terminal_escape_file<T>::do_write (const char *buf, long len)
 {
   std::string copy (buf, len);
   do_puts (copy.c_str ());
@@ -549,3 +498,10 @@ tab_expansion_file::write (const char *buf, long length_buf)
 	}
     }
 }
+
+/* Any necessary instantiations.  This is done here to avoid putting
+   all the logic in a header file, which seems fine in this case
+   because these classes aren't instantiated in very many ways.  */
+template class escape_buffering_file<stdio_file>;
+template class no_terminal_escape_file<stdio_file>;
+template class no_terminal_escape_file<wrapped_file<ui_file *>>;

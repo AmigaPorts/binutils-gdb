@@ -245,9 +245,12 @@ Eli Zaretskii			eliz@gnu.org
 			Release Manager
 			---------------
 
-The current release manager is: Joel Brobecker  <brobecker@adacore.com>
+The current release managers are:
 
-His responsibilities are:
+Andrew Burgess                  aburgess@redhat.com
+Simon Marchi                    simon.marchi@polymtl.ca
+
+Their responsibilities are:
 
     * organizing, scheduling, and managing releases of GDB.
 
@@ -319,8 +322,8 @@ resolving build issues.  The Target/Architecture maintainer works with
 the native maintainer when resolving ABI issues.
 
 	aarch64		--target=aarch64-elf
-			Alan Hayward		alan.hayward@arm.com
 			Luis Machado		luis.machado.foss@gmail.com
+			Thiago Jung Bauermann   thiago.bauermann@linaro.org
 
 	alpha		--target=alpha-elf
 
@@ -331,8 +334,8 @@ the native maintainer when resolving ABI issues.
 			Shahab Vahedi		list@vahedi.org
 
 	arm		--target=arm-elf
-			Alan Hayward		alan.hayward@arm.com
 			Luis Machado		luis.machado.foss@gmail.com
+			Thiago Jung Bauermann   thiago.bauermann@linaro.org
 
 	avr		--target=avr
 
@@ -499,8 +502,6 @@ readline/		Master version: ftp://ftp.cwru.edu/pub/bash/
 
 tcl/ tk/ itcl/		ALL
 
-contrib/ari		Pierre Muller		muller@sourceware.org
-
 
 		Authorized Committers
 		---------------------
@@ -527,7 +528,7 @@ Pascal support		Pierre Muller		muller@sourceware.org
 To get recommended for the Write After Approval list you need a valid
 FSF assignment and have submitted one good patch.
 
-Tankut Baris Aktemur				tankut.baris.aktemur@intel.com
+Tankut Baris Aktemur				tankutbaris.aktemur@amd.com
 David Anderson					davea@sgi.com
 John David Anglin				dave.anglin@nrc-cnrc.gc.ca
 Andreas Arnez					arnez@linux.ibm.com
@@ -592,6 +593,7 @@ Doug Evans					dje@google.com
 Simon Farre					simon.farre.cx@gmail.com
 Adam Fedor					fedor@gnu.org
 Max Filippov					jcmvbkbc@gmail.com
+Bratislav Filipovic				bfilipov@amd.com
 Brian Ford					ford@vss.fsi.com
 Matthew Fortune					matthew.fortune@imgtec.com
 Pedro Franco de Carvalho			pedromfc@linux.vnet.ibm.com
@@ -741,6 +743,7 @@ Mark Salter					msalter@redhat.com
 Richard Sandiford				richard@codesourcery.com
 Iain Sandoe					iain@codesourcery.com
 Peter Schauer					Peter.Schauer@mytum.de
+Christina Schimpe				christina.schimpe@intel.com
 Will Schmidt					will_schmidt@vnet.ibm.com
 Andreas Schwab					schwab@linux-m68k.org
 Thomas Schwinge					tschwinge@gnu.org
@@ -782,7 +785,7 @@ David Ung					davidu@mips.com
 Shahab Vahedi					shahab.vahedi@amd.com
 D Venkatasubramanian				dvenkat@noida.hcltech.com
 Corinna Vinschen				vinschen@redhat.com
-Jan Vrany					jan.vrany@labware.com
+Jan Vrany					jan@vrany.io
 Sami Wagiaalla					swagiaal@redhat.com
 Keith Walker					keith.walker@arm.com
 Ricard Wanderlof				ricardw@axis.com
@@ -871,6 +874,7 @@ Joel Brobecker (Global, Ada)			brobecker@adacore.com
 Doug Evans (Global)				dje@google.com
 Yao Qi (Global)					qiyao@sourceware.org
 Felix Willgerodt (amd64, i386)			felix.willgerodt@gmail.com
+Alan Hayward (AArch64, arm)			alan.hayward@arm.com
 
 
 Folks that have been caught up in a paper trail:

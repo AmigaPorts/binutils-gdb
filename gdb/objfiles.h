@@ -115,11 +115,11 @@ struct entry_info
   /* The index of the section in which the entry point appears.  */
   int the_bfd_section_index;
 
-  /* Set to 1 iff ENTRY_POINT contains a valid value.  */
-  unsigned entry_point_p : 1;
+  /* Set to true iff ENTRY_POINT contains a valid value.  */
+  bool entry_point_p;
 
-  /* Set to 1 iff this object was initialized.  */
-  unsigned initialized : 1;
+  /* Set to true iff this object was initialized.  */
+  bool initialized;
 };
 
 #define SECT_OFF_DATA(objfile) \
@@ -142,25 +142,6 @@ struct entry_info
    uninitialized section index.  */
 #define SECT_OFF_BSS(objfile) (objfile)->sect_index_bss
 
-/* The "objstats" structure provides a place for gdb to record some
-   interesting information about its internal state at runtime, on a
-   per objfile basis, such as information about the number of symbols
-   read, size of string table (if any), etc.  */
-
-struct objstats
-{
-  /* Number of full symbols read.  */
-  int n_syms = 0;
-
-  /* Number of types.  */
-  int n_types = 0;
-
-  /* Size of stringtable, (if applicable).  */
-  int sz_strtab = 0;
-};
-
-#define OBJSTAT(objfile, expr) (objfile -> stats.expr)
-#define OBJSTATS struct objstats stats
 extern void print_objfile_statistics (void);
 
 /* Number of entries in the minimal symbol hash table.  */
@@ -170,12 +151,12 @@ extern void print_objfile_statistics (void);
 
 struct minimal_symbol_iterator
 {
-  typedef minimal_symbol_iterator self_type;
-  typedef struct minimal_symbol *value_type;
-  typedef struct minimal_symbol *&reference;
-  typedef struct minimal_symbol **pointer;
-  typedef std::forward_iterator_tag iterator_category;
-  typedef int difference_type;
+  using self_type = minimal_symbol_iterator;
+  using value_type = struct minimal_symbol *;
+  using reference = struct minimal_symbol *&;
+  using pointer = struct minimal_symbol **;
+  using iterator_category = std::forward_iterator_tag;
+  using difference_type = int;
 
   explicit minimal_symbol_iterator (struct minimal_symbol *msym)
     : m_msym (msym)
@@ -361,7 +342,7 @@ private:
 
 /* A range adapter wrapping separate_debug_iterator.  */
 
-typedef iterator_range<separate_debug_iterator> separate_debug_range;
+using separate_debug_range = iterator_range<separate_debug_iterator>;
 
 /* Sections in an objfile.  The section offsets are stored in the
    OBJFILE.  */
@@ -486,7 +467,7 @@ public:
   /* A range adapter that makes it possible to iterate over all
      minimal symbols of an objfile.  */
 
-  typedef iterator_range<minimal_symbol_iterator> msymbols_range;
+  using msymbols_range = iterator_range<minimal_symbol_iterator>;
 
   /* Return a range adapter for iterating over all minimal
      symbols.  */
@@ -571,21 +552,17 @@ public:
   /* See quick_symbol_functions.  */
   void forget_cached_source_info ();
 
-  /* Expand and iterate over each "partial" symbol table in OBJFILE
-     where the source file is named NAME.
+  /* Find the first symtab where the source file matches NAME and REAL_PATH,
+     and for which CALLBACK returns true.
 
      If NAME is not absolute, a match after a '/' in the symbol table's
      file name will also work, REAL_PATH is NULL then.  If NAME is
      absolute then REAL_PATH is non-NULL absolute file name as resolved
-     via gdb_realpath from NAME.
+     via gdb_realpath from NAME.  */
 
-     If a match is found, the "partial" symbol table is expanded.
-     Then, this calls iterate_over_some_symtabs (or equivalent) over
-     all newly-created symbol tables, passing CALLBACK to it.
-     The result of this call is returned.  */
-  bool map_symtabs_matching_filename
-    (const char *name, const char *real_path,
-     gdb::function_view<bool (symtab *)> callback);
+  symtab *find_symtab_matching_filename (const char *name,
+					 const char *real_path,
+					 find_symtab_callback_ftype callback);
 
   /* Check to see if the symbol is defined in a "partial" symbol table
      of this objfile.  BLOCK_INDEX should be either GLOBAL_BLOCK or
@@ -618,14 +595,13 @@ public:
   void expand_symtabs_with_fullname (const char *fullname);
 
   /* See quick_symbol_functions.  */
-  bool search
-    (search_symtabs_file_matcher file_matcher,
-     const lookup_name_info *lookup_name,
-     search_symtabs_symbol_matcher symbol_matcher,
-     search_symtabs_expansion_listener listener,
-     block_search_flags search_flags,
-     domain_search_flags domain,
-     search_symtabs_lang_matcher lang_matcher = nullptr);
+  iteration_status search (search_symtabs_file_matcher file_matcher,
+			   const lookup_name_info *lookup_name,
+			   search_symtabs_symbol_matcher symbol_matcher,
+			   compunit_symtab_iteration_callback compunit_callback,
+			   block_search_flags search_flags,
+			   domain_search_flags domain,
+			   search_symtabs_lang_matcher lang_matcher = nullptr);
 
   /* See quick_symbol_functions.  */
   struct compunit_symtab *
@@ -692,6 +668,17 @@ public:
     return (iterator_range<section_iterator>
 	    (section_iterator (sections_start, sections_end),
 	     section_iterator (sections_end, sections_end)));
+  }
+
+  /* Allocate a new symbol on this objfile's obstack.  Normally a
+     symbol is made, but other subtypes (e.g., template_symbol) can
+     also be created.  */
+  template<typename T>
+  T *new_symbol ()
+  {
+    T *result = new (&objfile_obstack) T;
+    ++n_syms;
+    return result;
   }
 
 public:
@@ -823,9 +810,11 @@ public:
 
   struct objfile *separate_debug_objfile_link = nullptr;
 
-  /* Place to stash various statistics about this objfile.  */
+  /* Number of full symbols read.  */
+  int n_syms = 0;
 
-  OBJSTATS;
+  /* Number of types.  */
+  int n_types = 0;
 
   /* A linked list of symbols created when reading template types or
      function templates.  These symbols are not stored in any symbol
@@ -886,7 +875,7 @@ struct objfile_unlinker
 
 /* A unique pointer that holds an objfile.  */
 
-typedef std::unique_ptr<objfile, objfile_unlinker> scoped_objfile_unlinker;
+using scoped_objfile_unlinker = std::unique_ptr<objfile, objfile_unlinker>;
 
 /* Relocation offset applied to the section.  */
 inline CORE_ADDR
@@ -904,16 +893,6 @@ obj_section::set_offset (CORE_ADDR offset)
 
 /* Declarations for functions defined in objfiles.c */
 
-/* If there is a valid and known entry point in PSPACE, fill *ENTRY_P with it
-   and return non-zero.  */
-
-extern int entry_point_address_query (program_space *pspace,
-				      CORE_ADDR *entry_p);
-
-/* Get the entry point address in PSPACE.  Call error if it is not known.  */
-
-extern CORE_ADDR entry_point_address (program_space *pspace);
-
 extern void build_objfile_section_table (struct objfile *);
 
 extern void free_objfile_separate_debug (struct objfile *);
@@ -921,14 +900,6 @@ extern void free_objfile_separate_debug (struct objfile *);
 extern void objfile_relocate (struct objfile *,
 			      gdb::array_view<const CORE_ADDR>);
 extern void objfile_rebase (struct objfile *, CORE_ADDR);
-
-/* Return true if any objfile of PSPACE has partial symbols.  */
-
-extern bool have_partial_symbols (program_space *pspace);
-
-/* Return true if any objfile of PSPACE has full symbols.  */
-
-extern bool have_full_symbols (program_space *pspace);
 
 extern void objfile_set_sym_fns (struct objfile *objfile,
 				 const struct sym_fns *sf);
@@ -957,10 +928,6 @@ extern void objfile_purge_solibs (program_space *pspace);
 
 /* Functions for dealing with the minimal symbol table, really a misc
    address<->symbol mapping for things we don't have debug symbols for.  */
-
-/* Return true if any objfile of PSPACE has minimal symbols.  */
-
-extern bool have_minimal_symbols (program_space *pspace);
 
 extern struct obj_section *find_pc_section (CORE_ADDR pc);
 

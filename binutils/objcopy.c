@@ -1346,8 +1346,39 @@ is_mergeable_note_section (bfd * abfd, asection * sec)
 /* See if a non-group section is being removed.  */
 
 static bool
-is_strip_section_1 (bfd *abfd ATTRIBUTE_UNUSED, asection *sec)
+is_strip_section_1 (bfd *abfd, asection *sec)
 {
+  if (strip_symbols == STRIP_ALL
+      && bfd_get_flavour (abfd) == bfd_target_elf_flavour
+      && elf_elfheader (abfd)->e_ident[EI_OSABI] == ELFOSABI_SOLARIS)
+    {
+      struct bfd_elf_section_data *e = elf_section_data (sec);
+      Elf_Internal_Shdr **sections = elf_elfsections (abfd);
+      switch (e->this_hdr.sh_type)
+	{
+	case SHT_SUNW_symsort:
+	case SHT_SUNW_symnsort:
+	  /* On Solaris, non-SHF_ALLOC SHT_SUNW_symsort and
+	     SHT_SUNW_symnsort sections are linked with a non-SHF_ALLOC
+	     SHT_SYMTAB section.  Since strip removes non-SHF_ALLOC
+	     SHT_SYMTAB section with STRIP_ALL, also remove non-SHF_ALLOC
+	     SHT_SUNW_symsort and SHT_SUNW_symnsort sections.  */
+	  if ((e->this_hdr.sh_flags & SHF_ALLOC) == 0
+	      && sections != NULL
+	      && e->this_hdr.sh_link < elf_numsections (abfd))
+	    {
+	      Elf_Internal_Shdr *l = sections[e->this_hdr.sh_link];
+	      if (l->sh_type == SHT_SYMTAB
+		  && (l->sh_flags & SHF_ALLOC) == 0)
+		return true;
+	    }
+	  break;
+
+	default:
+	  break;
+	}
+    }
+
   if (find_section_list (bfd_section_name (sec), false, SECTION_CONTEXT_KEEP)
       != NULL)
     return false;
@@ -1499,6 +1530,15 @@ is_hidden_symbol (asymbol *sym)
 	return true;
       }
   return false;
+}
+
+static void
+clear_visibility (asymbol *sym)
+{
+  elf_symbol_type *elf_sym = elf_symbol_from (sym);
+
+  if (elf_sym != NULL)
+    elf_sym->internal_elf_sym.st_other &= ~ELF_ST_VISIBILITY (~0);
 }
 
 /* Empty name is hopefully never a valid symbol name.  */
@@ -1734,6 +1774,7 @@ filter_symbols (bfd *abfd, bfd *obfd, asymbol **osyms,
 	    {
 	      flags &= ~(BSF_GLOBAL | BSF_WEAK);
 	      flags |= BSF_LOCAL;
+	      clear_visibility (sym);
 	    }
 
 	  else if (!undefined
@@ -3031,13 +3072,13 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
 	   pupdate = pupdate->next)
 	{
 	  pupdate->section = bfd_get_section_by_name (ibfd, pupdate->name);
-	  if (pupdate->section == NULL)
+	  if (pupdate->section == NULL
+	      || (osec = pupdate->section->output_section) == NULL)
 	    {
-	      non_fatal (_("error: %s not found, can't be updated"), pupdate->name);
+	      non_fatal (_("error: %s can't be updated"), pupdate->name);
 	      return false;
 	    }
 
-	  osec = pupdate->section->output_section;
 	  if (!bfd_set_section_size (osec, pupdate->size))
 	    {
 	      bfd_nonfatal_message (NULL, obfd, osec, NULL);

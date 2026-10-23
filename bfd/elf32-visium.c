@@ -303,7 +303,7 @@ visium_parity_bit (bfd_vma insn)
    It sets instruction parity to even.  This cannot be done by a howto.  */
 
 static bfd_reloc_status_type
-visium_elf_howto_parity_reloc (bfd * input_bfd, arelent *reloc_entry,
+visium_elf_howto_parity_reloc (bfd *input_bfd, arelent *reloc_entry,
 			       asymbol *symbol, void *data,
 			       asection *input_section, bfd *output_bfd,
 			       char **error_message ATTRIBUTE_UNUSED)
@@ -316,7 +316,7 @@ visium_elf_howto_parity_reloc (bfd * input_bfd, arelent *reloc_entry,
   /* This part is from bfd_elf_generic_reloc.
      If we're relocating, and this an external symbol, we don't want
      to change anything.  */
-  if (output_bfd != (bfd *) NULL && (symbol->flags & BSF_SECTION_SYM) == 0)
+  if (output_bfd != NULL && (symbol->flags & BSF_SECTION_SYM) == 0)
     {
       reloc_entry->address += input_section->output_offset;
       return bfd_reloc_ok;
@@ -324,21 +324,21 @@ visium_elf_howto_parity_reloc (bfd * input_bfd, arelent *reloc_entry,
 
   /* Now do the reloc in the usual way.  */
 
-  /* Sanity check the address (offset in section).  */
-  if (reloc_entry->address > bfd_get_section_limit (input_bfd, input_section))
+  if (!bfd_reloc_offset_in_range (reloc_entry->howto, input_bfd,
+				  input_section, reloc_entry->address))
     return bfd_reloc_outofrange;
 
   ret = bfd_reloc_ok;
-  if (bfd_is_und_section (symbol->section) && output_bfd == (bfd *) NULL)
+  if (bfd_is_und_section (symbol->section) && output_bfd == NULL)
     ret = bfd_reloc_undefined;
 
-  if (bfd_is_com_section (symbol->section) || output_bfd != (bfd *) NULL)
+  if (bfd_is_com_section (symbol->section) || output_bfd != NULL)
     relocation = 0;
   else
     relocation = symbol->value;
 
   /* Only do this for a final link.  */
-  if (output_bfd == (bfd *) NULL)
+  if (output_bfd == NULL)
     {
       relocation += symbol->section->output_section->vma;
       relocation += symbol->section->output_offset;
@@ -383,7 +383,7 @@ visium_elf_howto_parity_reloc (bfd * input_bfd, arelent *reloc_entry,
   insn |= visium_parity_bit (insn);
   bfd_put_32 (input_bfd, insn, inplace_address);
 
-  if (output_bfd != (bfd *) NULL)
+  if (output_bfd != NULL)
     reloc_entry->address += input_section->output_offset;
 
   return ret;
@@ -505,7 +505,7 @@ visium_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
   if (bfd_link_relocatable (info))
     return true;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
 
   rel_end = relocs + sec->reloc_count;
@@ -549,8 +549,7 @@ visium_elf_check_relocs (bfd *abfd, struct bfd_link_info *info,
 /* Relocate a VISIUM ELF section.  */
 
 static int
-visium_elf_relocate_section (bfd *output_bfd,
-			     struct bfd_link_info *info, bfd *input_bfd,
+visium_elf_relocate_section (struct bfd_link_info *info, bfd *input_bfd,
 			     asection *input_section, bfd_byte *contents,
 			     Elf_Internal_Rela *relocs,
 			     Elf_Internal_Sym *local_syms,
@@ -561,7 +560,7 @@ visium_elf_relocate_section (bfd *output_bfd,
   Elf_Internal_Rela *rel;
   Elf_Internal_Rela *relend;
 
-  symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
   relend = relocs + input_section->reloc_count;
 
@@ -595,7 +594,8 @@ visium_elf_relocate_section (bfd *output_bfd,
 	  /* This is a local symbol.  */
 	  sym = local_syms + r_symndx;
 	  sec = local_sections[r_symndx];
-	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, &sec, rel);
+	  relocation = _bfd_elf_rela_local_sym (info->output_bfd,
+						sym, &sec, rel);
 
 	  name = bfd_elf_string_from_elf_section
 	    (input_bfd, symtab_hdr->sh_link, sym->st_name);

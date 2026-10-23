@@ -54,11 +54,11 @@ standard_testfile
 require allow_python_tests
 
 if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile}]} {
-    return -1
+    return
 }
 
 if {![runto_main]} {
-    return 0
+    return
 }
 
 set pyfile [gdb_remote_download host ${srcdir}/${subdir}/${testfile}.py]
@@ -71,6 +71,9 @@ gdb_continue_to_breakpoint "stop at test breakpoint"
 # testing point as the script will examine the stack as it is loaded.
 gdb_test_no_output "source ${pyfile}"\
     "import python scripts"
+
+# Print the captured frame IDs.
+gdb_test "python print_frame_ids()"
 
 # Test with and without filters.
 foreach bt_cmd { "bt" "bt -no-filters" } {

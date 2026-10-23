@@ -60,6 +60,11 @@ struct dwarf2_cu
      variants.  */
   const dwarf2_section_info &section () const;
 
+  /* The section offset of the beginning of this unit in its section.
+
+     For a split DWARF unit, this is the offset in the .dwo section.  */
+  sect_offset section_offset () const;
+
   /* TU version of handle_DW_AT_stmt_list for read_type_unit_scope.
      Create the set of symtabs used by this TU, or if this TU is sharing
      symtabs with another TU and the symtabs have already been created
@@ -281,6 +286,13 @@ struct dwarf2_cu
     return m_producer;
   }
 
+  /* The end addresses for some inline blocks.  For blocks with multiple
+     sub-ranges, this is the end address of every sub-range within the
+     block.  These are the inclusive end addresses, that is, these are the
+     last addresses inside the block's ranges.  Only the first block that
+     ends at any given address will be recorded.  */
+  gdb::unordered_map<unrelocated_addr, struct block *> inline_block_ends;
+
 private:
   const char *m_producer = nullptr;
 
@@ -288,21 +300,16 @@ private:
      symbols are being read.  */
   buildsym_compunit_up m_builder;
 
-  /* A set of pointers to dwarf2_per_cu objects for compilation units referenced
-     by this one.  Only used during full symbol processing; partial symbol
-     tables do not have dependencies.  */
+  /* A set of pointers to dwarf2_per_cu objects for compilation units
+     referenced by this one.  Only used during full symbol
+     processing.  */
   gdb::unordered_set<dwarf2_per_cu *> m_dependencies;
 
 public:
   /* The generic symbol table building routines have separate lists for
      file scope symbols and all all other scopes (local scopes).  So
      we need to select the right one to pass to add_symbol_to_list().
-     We do it by keeping a pointer to the correct list in list_in_scope.
-
-     FIXME: The original dwarf code just treated the file scope as the
-     first local scope, and all other local scopes as nested local
-     scopes, and worked fine.  Check to see if we really need to
-     distinguish these in buildsym.c.  */
+     We do it by keeping a pointer to the correct list in list_in_scope.  */
   std::vector<symbol *> *list_in_scope = nullptr;
 
   /* Storage for things with the same lifetime as this read-in
@@ -330,7 +337,7 @@ public:
   /* Header data from the line table, during full symbol processing.  */
   struct line_header *line_header = nullptr;
   /* Non-NULL if LINE_HEADER is owned by this DWARF_CU.  Otherwise,
-     it's owned by dwarf2_per_bfd::line_header_hash.  If non-NULL,
+     it's owned by dwarf2_per_objfile::line_headers.  If non-NULL,
      this is the DW_TAG_compile_unit die for this CU.  We'll hold on
      to the line header as long as this DIE is being processed.  See
      process_die_scope.  */
@@ -413,6 +420,9 @@ public:
 
   /* Mark used when releasing cached dies.  */
   bool m_mark : 1;
+
+  /* Flag indicating this compilation unit is queued for processing.  */
+  bool queued : 1;
 
   /* This CU references .debug_loc.  See the symtab->locations_valid field.
      This test is imperfect as there may exist optimized debug code not using

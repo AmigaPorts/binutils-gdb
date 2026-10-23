@@ -66,7 +66,7 @@ v850_elf_check_relocs (bfd *abfd,
 		      sec, abfd);
 #endif
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
 
   rel_end = relocs + sec->reloc_count;
@@ -813,7 +813,7 @@ v850_elf_perform_relocation (bfd *abfd,
 /* Insert the addend into the instruction.  */
 
 static bfd_reloc_status_type
-v850_elf_reloc (bfd *abfd ATTRIBUTE_UNUSED,
+v850_elf_reloc (bfd *abfd,
 		arelent *reloc,
 		asymbol *symbol,
 		void * data ATTRIBUTE_UNUSED,
@@ -845,8 +845,8 @@ v850_elf_reloc (bfd *abfd ATTRIBUTE_UNUSED,
 
   /* We handle final linking of some relocs ourselves.  */
 
-  /* Is the address of the relocation really within the section?  */
-  if (reloc->address > bfd_get_section_limit (abfd, isection))
+  if (!bfd_reloc_offset_in_range (reloc->howto, abfd,
+				  isection, reloc->address))
     return bfd_reloc_outofrange;
 
   /* Work out which section the relocation is targeted at and the
@@ -1731,7 +1731,7 @@ static const struct v850_elf_reloc_map v850_elf_reloc_map[] =
   { BFD_RELOC_V850_16_S1,		   R_V850_16_S1			 },
   { BFD_RELOC_V850_LO16_S1,		   R_V850_LO16_S1		 },
   { BFD_RELOC_V850_CALLT_15_16_OFFSET,	   R_V850_CALLT_15_16_OFFSET	 },
-  { BFD_RELOC_V850_32_GOTPCREL,		   R_V850_32_GOTPCREL		 },
+  { BFD_RELOC_32_GOT_PCREL,		   R_V850_32_GOTPCREL		 },
   { BFD_RELOC_V850_16_GOT,		   R_V850_16_GOT		 },
   { BFD_RELOC_V850_32_GOT,		   R_V850_32_GOT		 },
   { BFD_RELOC_V850_22_PLT_PCREL,	   R_V850_22_PLT		 },
@@ -1740,8 +1740,8 @@ static const struct v850_elf_reloc_map v850_elf_reloc_map[] =
   { BFD_RELOC_GLOB_DAT,			   R_V850_GLOB_DAT		 },
   { BFD_RELOC_JMP_SLOT,			   R_V850_JMP_SLOT		 },
   { BFD_RELOC_RELATIVE,			   R_V850_RELATIVE		 },
-  { BFD_RELOC_V850_16_GOTOFF,		   R_V850_16_GOTOFF		 },
-  { BFD_RELOC_V850_32_GOTOFF,		   R_V850_32_GOTOFF		 },
+  { BFD_RELOC_16_GOTOFF,		   R_V850_16_GOTOFF		 },
+  { BFD_RELOC_32_GOTOFF,		   R_V850_32_GOTOFF		 },
   { BFD_RELOC_V850_CODE,		   R_V850_CODE			 },
   { BFD_RELOC_V850_DATA,		   R_V850_DATA			 },
 };
@@ -2171,8 +2171,7 @@ v850_elf_final_link_relocate (reloc_howto_type *howto,
 /* Relocate an V850 ELF section.  */
 
 static int
-v850_elf_relocate_section (bfd *output_bfd,
-			   struct bfd_link_info *info,
+v850_elf_relocate_section (struct bfd_link_info *info,
 			   bfd *input_bfd,
 			   asection *input_section,
 			   bfd_byte *contents,
@@ -2185,7 +2184,7 @@ v850_elf_relocate_section (bfd *output_bfd,
   Elf_Internal_Rela *rel;
   Elf_Internal_Rela *relend;
 
-  symtab_hdr = & elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
 
   /* Reset the list of remembered HI16S relocs to empty.  */
@@ -2227,7 +2226,8 @@ v850_elf_relocate_section (bfd *output_bfd,
 	{
 	  sym = local_syms + r_symndx;
 	  sec = local_sections[r_symndx];
-	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, &sec, rel);
+	  relocation = _bfd_elf_rela_local_sym (info->output_bfd,
+						sym, &sec, rel);
 	}
       else
 	{
@@ -2260,7 +2260,7 @@ v850_elf_relocate_section (bfd *output_bfd,
 	continue;
 
       /* FIXME: We should use the addend, but the COFF relocations don't.  */
-      r = v850_elf_final_link_relocate (howto, input_bfd, output_bfd,
+      r = v850_elf_final_link_relocate (howto, input_bfd, info->output_bfd,
 					input_section,
 					contents, rel->r_offset,
 					relocation, rel->r_addend,
@@ -3210,7 +3210,7 @@ v850_elf_relax_delete_bytes (bfd *abfd,
   struct elf_link_hash_entry *sym_hash;
   Elf_External_Sym_Shndx *shndx;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   extsyms = (Elf32_External_Sym *) symtab_hdr->contents;
 
   sec_shndx = _bfd_elf_section_from_bfd_section (abfd, sec);
@@ -3450,7 +3450,7 @@ v850_elf_relax_section (bfd *abfd,
       || sec->reloc_count == 0)
     return true;
 
-  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
 
   internal_relocs = (_bfd_elf_link_read_relocs
 		     (abfd, sec, NULL, NULL, link_info->keep_memory));

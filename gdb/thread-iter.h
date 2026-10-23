@@ -34,12 +34,12 @@ using inf_threads_iterator = intrusive_list<thread_info>::iterator;
 class all_threads_iterator
 {
 public:
-  typedef all_threads_iterator self_type;
-  typedef struct thread_info value_type;
-  typedef struct thread_info &reference;
-  typedef struct thread_info *pointer;
-  typedef std::forward_iterator_tag iterator_category;
-  typedef int difference_type;
+  using self_type = all_threads_iterator;
+  using value_type = struct thread_info;
+  using reference = struct thread_info &;
+  using pointer = struct thread_info *;
+  using iterator_category = std::forward_iterator_tag;
+  using difference_type = int;
 
   /* Tag type.  */
   struct begin_t {};
@@ -83,12 +83,12 @@ private:
 class all_matching_threads_iterator
 {
 public:
-  typedef all_matching_threads_iterator self_type;
-  typedef struct thread_info value_type;
-  typedef struct thread_info &reference;
-  typedef struct thread_info *pointer;
-  typedef std::forward_iterator_tag iterator_category;
-  typedef int difference_type;
+  using self_type = all_matching_threads_iterator;
+  using value_type = struct thread_info;
+  using reference = struct thread_info &;
+  using pointer = struct thread_info *;
+  using iterator_category = std::forward_iterator_tag;
+  using difference_type = int;
 
   /* Creates an iterator that iterates over all threads that match
      FILTER_PTID.  */
@@ -148,7 +148,7 @@ struct non_exited_thread_filter
 {
   bool operator() (struct thread_info &thr) const
   {
-    return thr.state != THREAD_EXITED;
+    return thr.state () != THREAD_EXITED;
   }
 };
 
@@ -162,10 +162,11 @@ using all_non_exited_threads_iterator
 using inf_non_exited_threads_iterator
   = filtered_iterator<inf_threads_iterator, non_exited_thread_filter>;
 
-/* Iterate over all threads of all inferiors, safely.  */
+/* Iterate over all threads that are matched by the wrapped
+   iterator, safely.  */
 
-using all_threads_safe_iterator
-  = basic_safe_iterator<all_threads_iterator>;
+using all_matching_threads_safe_iterator
+  = basic_safe_iterator<all_matching_threads_iterator>;
 
 /* Iterate over all threads of an inferior, safely.  */
 
@@ -189,10 +190,11 @@ using inf_non_exited_threads_range
 using safe_inf_threads_range = iterator_range<safe_inf_threads_iterator>;
 
 /* A range adapter that makes it possible to iterate over all threads
-   with range-for "safely".  I.e., it is safe to delete the
-   currently-iterated thread.  */
+   that are matched by the given iterator with range-for "safely".  I.e.,
+   it is safe to delete the currently-iterated thread.  */
 
-using all_threads_safe_range = iterator_range<all_threads_safe_iterator>;
+using all_matching_threads_safe_range
+  = iterator_range<all_matching_threads_safe_iterator>;
 
 /* A range adapter that makes it possible to iterate over all threads
    that match a PTID filter with range-for.  */

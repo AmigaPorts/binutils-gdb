@@ -23,6 +23,7 @@
 #include "bfdlink.h"
 #include "libbfd.h"
 #include "elf-bfd.h"
+#include "elf-solaris2.h"
 #include "elf/sparc.h"
 #include "opcode/sparc.h"
 #include "elfxx-sparc.h"
@@ -274,6 +275,8 @@ elf32_sparc_reloc_type_class (const struct bfd_link_info *info,
 
 #include "elf32-target.h"
 
+#ifdef OBJ_MAYBE_ELF_SOLARIS2
+
 /* Solaris 2.  */
 
 #undef	TARGET_BIG_SYM
@@ -295,6 +298,9 @@ elf32_sparc_reloc_type_class (const struct bfd_link_info *info,
 #undef	elf_backend_static_tls_alignment
 #define elf_backend_static_tls_alignment	8
 
+#undef	elf_backend_add_symbol_hook
+#define	elf_backend_add_symbol_hook		elf_solaris2_add_symbol_hook
+
 static bool
 elf32_sparc_copy_solaris_special_section_fields (const bfd *ibfd ATTRIBUTE_UNUSED,
 						 bfd *obfd ATTRIBUTE_UNUSED,
@@ -310,6 +316,10 @@ elf32_sparc_copy_solaris_special_section_fields (const bfd *ibfd ATTRIBUTE_UNUSE
 #define elf_backend_copy_special_section_fields elf32_sparc_copy_solaris_special_section_fields
 
 #include "elf32-target.h"
+
+#endif /* OBJ_MAYBE_ELF_SOLARIS2 */
+
+#ifdef OBJ_MAYBE_ELF_VXWORKS
 
 /* A final_write_processing hook that does both the SPARC- and VxWorks-
    specific handling.  */
@@ -361,3 +371,5 @@ elf32_sparc_vxworks_final_write_processing (bfd *abfd)
 #define elf32_bed				sparc_elf_vxworks_bed
 
 #include "elf32-target.h"
+
+#endif /* OBJ_MAYBE_ELF_VXWORKS */

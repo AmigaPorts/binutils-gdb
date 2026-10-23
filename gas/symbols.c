@@ -259,7 +259,7 @@ notes_calloc (size_t n, size_t size)
 {
   size_t amt;
   void *ret;
-  if (gas_mul_overflow (n, size, &amt))
+  if (_bfd_mul_overflow (n, size, &amt))
     {
       obstack_alloc_failed_handler ();
       abort ();
@@ -1871,20 +1871,32 @@ snapshot_symbol (symbolS **symbolPP, valueT *valueP, segT *segP, fragS **fragPP)
 	}
 
       *symbolPP = symbolP;
+      *valueP = exp.X_add_number;
 
-      /* A bogus input file can result in resolve_expression()
-	 generating a local symbol, so we have to check again.  */
+      /* We may have picked up a local symbol above: Check again.  */
       if (symbolP->flags.local_symbol)
 	{
 	  struct local_symbol *locsym = (struct local_symbol *) symbolP;
 
-	  *valueP = locsym->value;
+	  if (locsym->section == expr_section
+	      || locsym->section == absolute_section
+	      || locsym->section == reg_section)
+	    {
+	      switch (exp.X_op)
+		{
+		case O_constant:
+		case O_register:
+		  *valueP += locsym->value;
+		  break;
+		default:
+		  break;
+		}
+	    }
 	  *segP = locsym->section;
 	  *fragPP = locsym->frag;
 	}
       else
 	{
-	  *valueP = exp.X_add_number;
 	  *segP = symbolP->bsym->section;
 	  *fragPP = symbolP->frag;
 	}
@@ -3020,6 +3032,34 @@ symbol_equated_reloc_p (const symbolS *s)
 	      || S_IS_COMMON (s)));
 }
 
+/* Return the final symbol in a chain of equated symbols, and the offset
+   from that symbol.  If the chain has a loop, return NULL.
+   For a non-equated SYM, return SYM.  */
+
+symbolS *
+symbol_equated_to (symbolS *sym, offsetT *off)
+{
+  valueT add = 0;
+  symbolS *ret = sym;
+  while (ret && symbol_equated_p (ret))
+    {
+      const expressionS *e = symbol_get_value_expression (ret);
+      add += e->X_add_number;
+      ret->flags.resolving = 1;
+      ret = e->X_add_symbol;
+      if (ret->flags.resolving)
+	ret = NULL;
+    }
+  while (sym && sym->flags.resolving)
+    {
+      const expressionS *e = symbol_get_value_expression (sym);
+      sym->flags.resolving = 0;
+      sym = e->X_add_symbol;
+    }
+  *off = add;
+  return ret;
+}
+
 /* Return whether a symbol has a constant value.  */
 
 int
@@ -3150,7 +3190,8 @@ symbol_begin (void)
 void
 symbol_end (void)
 {
-  htab_delete (sy_hash);
+  if (ENABLE_LEAK_CHECK)
+    htab_delete (sy_hash);
 }
 
 void
@@ -3189,7 +3230,7 @@ print_symbol_value_1 (FILE *file, symbolS *sym)
 	fprintf (file, " frag %p", locsym->frag);
       if (locsym->flags.resolved)
 	fprintf (file, " resolved");
-      fprintf (file, " local");
+      fprintf (file, " locsym");
     }
   else
     {
@@ -3227,7 +3268,7 @@ print_symbol_value_1 (FILE *file, symbolS *sym)
 
       if (s != undefined_section
 	  && s != expr_section)
-	fprintf (file, " %lx", (unsigned long) S_GET_VALUE (sym));
+	fprintf (file, " %"PRIx64, (uint64_t) S_GET_VALUE (sym));
     }
   else if (indent_level < max_indent_level
 	   && S_GET_SEGMENT (sym) != undefined_section)
@@ -3235,8 +3276,8 @@ print_symbol_value_1 (FILE *file, symbolS *sym)
       indent_level++;
       fprintf (file, "\n%*s<", indent_level * 4, "");
       if (sym->flags.local_symbol)
-	fprintf (file, "constant %lx",
-		 (unsigned long) ((struct local_symbol *) sym)->value);
+	fprintf (file, "constant %"PRIx64,
+		 (uint64_t) ((struct local_symbol *) sym)->value);
       else
 	print_expr_1 (file, &sym->x->value);
       fprintf (file, ">");
@@ -3370,6 +3411,16 @@ print_expr_1 (FILE *file, expressionS *exp)
       print_symbol_value_1 (file, exp->X_op_symbol);
       fprintf (file, ">");
       goto maybe_print_addnum;
+    case O_index:
+      indent_level++;
+      fprintf (file, "index\n%*s<", indent_level * 4, "");
+      if (exp->X_add_symbol != NULL)
+	print_symbol_value_1 (file, exp->X_add_symbol);
+      fprintf (file, ">\n%*s<", indent_level * 4, "");
+      print_symbol_value_1 (file, exp->X_op_symbol);
+      fprintf (file, ">");
+      indent_level--;
+      break;
     default:
       fprintf (file, "{unknown opcode %d}", (int) exp->X_op);
       break;

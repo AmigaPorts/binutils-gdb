@@ -26,13 +26,6 @@
 
 struct target_desc;
 
-/* The inferior's target description.  This is a global because the
-   Windows ports support neither bi-arch nor multi-process.  */
-extern const_target_desc_up win32_tdesc;
-#ifdef __x86_64__
-extern const_target_desc_up wow64_win32_tdesc;
-#endif
-
 #ifdef __CYGWIN__
 constexpr enum gdb_osabi WINDOWS_OSABI = GDB_OSABI_CYGWIN;
 #else
@@ -48,7 +41,7 @@ struct win32_target_ops
   int (*num_regs) (void);
 
   /* Perform initializations on startup.  */
-  void (*initial_stuff) (void);
+  void (*initial_stuff) (process_info *proc);
 
   /* Fetch the context from the inferior.  */
   void (*get_thread_context) (windows_nat::windows_thread_info *th);
@@ -90,7 +83,10 @@ struct win32_target_ops
   int (*remove_point) (enum raw_bkpt_type type, CORE_ADDR addr,
 		       int size, struct raw_breakpoint *bp);
   int (*stopped_by_watchpoint) (void);
-  CORE_ADDR (*stopped_data_address) (void);
+  std::vector<CORE_ADDR> (*stopped_data_addresses) ();
+
+  /* Determine if ER contains a software-breakpoint.  */
+  bool (*is_sw_breakpoint) (const EXCEPTION_RECORD *er);
 };
 
 extern struct win32_target_ops the_low_target;
@@ -182,13 +178,14 @@ public:
 
 struct gdbserver_windows_process : public windows_nat::windows_process_info
 {
-  windows_nat::windows_thread_info *thread_rec
-       (ptid_t ptid,
-	windows_nat::thread_disposition_type disposition) override;
-  int handle_output_debug_string (struct target_waitstatus *ourstatus) override;
+  windows_nat::windows_thread_info *find_thread (ptid_t ptid) override;
+  bool handle_output_debug_string (const DEBUG_EVENT &current_event,
+				   struct target_waitstatus *ourstatus) override;
   void handle_load_dll (const char *dll_name, LPVOID base) override;
-  void handle_unload_dll () override;
+  void handle_unload_dll (const DEBUG_EVENT &current_event) override;
   bool handle_access_violation (const EXCEPTION_RECORD *rec) override;
+
+  void fill_thread_context (windows_nat::windows_thread_info *th) override;
 
   int attaching = 0;
 
@@ -196,14 +193,6 @@ struct gdbserver_windows_process : public windows_nat::windows_process_info
      win32_wait should return it next, instead of fetching the next
      debug event off the win32 API.  */
   struct target_waitstatus cached_status;
-
-  /* Non zero if an interrupt request is to be satisfied by suspending
-     all threads.  */
-  int soft_interrupt_requested = 0;
-
-  /* Non zero if the inferior is stopped in a simulated breakpoint done
-     by suspending all the threads.  */
-  int faked_breakpoint = 0;
 
   /* True if current_process_handle needs to be closed.  */
   bool open_process_used = false;

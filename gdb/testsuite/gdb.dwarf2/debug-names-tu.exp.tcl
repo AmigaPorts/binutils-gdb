@@ -39,6 +39,8 @@ Dwarf::assemble {
 	global $var
     }
 
+    declare_labels type_label
+
     cu { label cu_label version $dwarf_version } {
 	compile_unit {
 	    DW_AT_language @DW_LANG_C
@@ -47,17 +49,18 @@ Dwarf::assemble {
 		DW_AT_name _start
 		DW_AT_low_pc $_start_start DW_FORM_addr
 		DW_AT_high_pc $_start_end DW_FORM_addr
+		DW_AT_external 1 DW_FORM_flag
 	    }
 	}
     }
 
-    tu { label tu_label version $dwarf_version } 0x8ece66f4224fddb3 "" {
+    tu { label tu_label version $dwarf_version } 0x8ece66f4224fddb3 type_label {
 	type_unit {
 	    DW_AT_language @DW_LANG_C
 	} {
 	    declare_labels int_type
 
-	    structure_type {
+	    type_label: structure_type {
 		DW_AT_name struct_with_int_member
 		DW_AT_byte_size 4 sdata
 	    } {
@@ -81,11 +84,15 @@ Dwarf::assemble {
 	name struct_with_int_member structure_type tu_label 0x53A2AE86 \
 	    {DW_LANG_C}
     }
+
+    aranges {} cu_label {
+	arange {} $_start_start $_start_len
+    }
 }
 
 if {[prepare_for_testing "failed to prepare" $testfile "${asm_file} ${srcfile}" \
 	 [list ldflags=-nostartfiles]]} {
-    return -1
+    return
 }
 
 # Verify that .debug_names section is not ignored.

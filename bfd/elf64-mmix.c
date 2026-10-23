@@ -703,16 +703,14 @@ static reloc_howto_type elf_mmix_howto_table[] =
 	 0xff,			/* dst_mask */
 	 false),		/* pcrel_offset */
 
-  /* A register plus an index, corresponding to the relocation expression.
-     The sizes must correspond to the valid range of the expression, while
-     the bitmasks correspond to what we store in the image.  */
+  /* A register plus an index, corresponding to the relocation expression.  */
   HOWTO (R_MMIX_BASE_PLUS_OFFSET,	/* type */
 	 0,			/* rightshift */
-	 8,			/* size */
-	 64,			/* bitsize */
+	 2,			/* size */
+	 16,			/* bitsize */
 	 false,			/* pc_relative */
 	 0,			/* bitpos */
-	 complain_overflow_bitfield, /* complain_on_overflow */
+	 complain_overflow_dont, /* complain_on_overflow */
 	 mmix_elf_reloc,	/* special_function */
 	 "R_MMIX_BASE_PLUS_OFFSET", /* name */
 	 false,			/* partial_inplace */
@@ -1282,8 +1280,7 @@ mmix_elf_reloc (bfd *abfd,
   bfd_vma relocation;
   bfd_reloc_status_type r;
   asection *reloc_target_output_section;
-  bfd_reloc_status_type flag = bfd_reloc_ok;
-  bfd_vma output_base = 0;
+  bfd_vma output_base;
 
   r = bfd_elf_generic_reloc (abfd, reloc_entry, symbol, data,
 			     input_section, output_bfd, error_message);
@@ -1295,12 +1292,8 @@ mmix_elf_reloc (bfd *abfd,
 
   if (bfd_is_und_section (symbol->section)
       && (symbol->flags & BSF_WEAK) == 0
-      && output_bfd == (bfd *) NULL)
+      && output_bfd == NULL)
     return bfd_reloc_undefined;
-
-  /* Is the address of the relocation really within the section?  */
-  if (reloc_entry->address > bfd_get_section_limit (abfd, input_section))
-    return bfd_reloc_outofrange;
 
   /* Work out which section the relocation is targeted at and the
      initial relocation command value.  */
@@ -1322,7 +1315,7 @@ mmix_elf_reloc (bfd *abfd,
 
   relocation += output_base + symbol->section->output_offset;
 
-  if (output_bfd != (bfd *) NULL)
+  if (output_bfd != NULL)
     {
       /* Add in supplied addend.  */
       relocation += reloc_entry->addend;
@@ -1332,8 +1325,12 @@ mmix_elf_reloc (bfd *abfd,
 	 Modify the reloc inplace to reflect what we now know.  */
       reloc_entry->addend = relocation;
       reloc_entry->address += input_section->output_offset;
-      return flag;
+      return bfd_reloc_ok;
     }
+
+  if (!bfd_reloc_offset_in_range (reloc_entry->howto, abfd,
+				  input_section, reloc_entry->address))
+    return bfd_reloc_outofrange;
 
   return mmix_final_link_relocate (reloc_entry->howto, input_section,
 				   data, reloc_entry->address,
@@ -1347,8 +1344,7 @@ mmix_elf_reloc (bfd *abfd,
    for guidance if you're thinking of copying this.  */
 
 static int
-mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
-			   struct bfd_link_info *info,
+mmix_elf_relocate_section (struct bfd_link_info *info,
 			   bfd *input_bfd,
 			   asection *input_section,
 			   bfd_byte *contents,
@@ -1364,7 +1360,7 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
   size_t pjsno = 0;
 
   size = input_section->rawsize ? input_section->rawsize : input_section->size;
-  symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
   relend = relocs + input_section->reloc_count;
 
@@ -1404,7 +1400,8 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	{
 	  sym = local_syms + r_symndx;
 	  sec = local_sections [r_symndx];
-	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, &sec, rel);
+	  relocation = _bfd_elf_rela_local_sym (info->output_bfd,
+						sym, &sec, rel);
 
 	  name = bfd_elf_string_from_elf_section (input_bfd,
 						  symtab_hdr->sh_link,
@@ -1477,7 +1474,7 @@ mmix_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
 		  /* Put a JMP insn at the stub; it goes with the
 		     R_MMIX_JMP reloc.  */
-		  bfd_put_32 (output_bfd, JMP_INSN_BYTE << 24,
+		  bfd_put_32 (info->output_bfd, JMP_INSN_BYTE << 24,
 			      contents
 			      + size
 			      + mmix_elf_section_data (input_section)
@@ -1953,7 +1950,7 @@ mmix_elf_check_relocs (bfd *abfd,
   const Elf_Internal_Rela *rel;
   const Elf_Internal_Rela *rel_end;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
 
   /* First we sort the relocs so that any register relocs come before
@@ -2547,7 +2544,7 @@ mmix_elf_relax_section (bfd *abfd,
 	  && mmix_elf_section_data (sec)->pjs.n_pushj_relocs == 0))
     return true;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
 
   if (bpodata != NULL)
     {

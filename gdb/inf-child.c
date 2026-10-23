@@ -171,7 +171,8 @@ void
 inf_child_target::disconnect (const char *args, int from_tty)
 {
   if (args != NULL)
-    error (_("Argument given to \"disconnect\"."));
+    error (_("Argument given to \"%ps\"."),
+	   styled_string (command_style.style (), "disconnect"));
 
   /* This offers to detach/kill current inferiors, and then pops all
      targets.  */
@@ -233,8 +234,8 @@ inf_child_target::pid_to_exec_file (int pid)
 
 int
 inf_child_target::fileio_open (struct inferior *inf, const char *filename,
-			       int flags, int mode, int warn_if_slow,
-			       fileio_error *target_errno)
+			       fileio_open_flags flags, fileio_mode_flags mode,
+			       bool warn_if_slow, fileio_error *target_errno)
 {
   int nat_flags;
   mode_t nat_mode;

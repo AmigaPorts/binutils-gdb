@@ -915,6 +915,14 @@ adjust_reloc_syms (bfd *abfd ATTRIBUTE_UNUSED,
 	if ((symsec->flags & SEC_THREAD_LOCAL) != 0)
 	  continue;
 
+	/* With --reloc-section-sym=none, skip adjustment.
+	   With --reloc-section-sym=internal, only adjust relocs against
+	   internal labels (e.g. .L prefix symbols in ELF).  */
+	if (flag_reloc_section_sym == reloc_section_sym_none
+	    || (flag_reloc_section_sym == reloc_section_sym_internal
+		&& !bfd_is_local_label (stdoutput, symbol_get_bfdsym (sym))))
+	  continue;
+
 	val = S_GET_VALUE (sym);
 
 #if defined(TC_AARCH64) && defined(OBJ_COFF)
@@ -1235,31 +1243,39 @@ install_reloc (asection *sec, arelent *reloc, fragS *fragp,
     }
 }
 
+fragS *
+get_frag_for_address (fragS *last_frag,
+		      const segment_info_type *seginfo,
+		      addressT addr)
+{
+  fragS *f;
+
+  for (f = last_frag; f != NULL; f = f->fr_next)
+    if (f->fr_address <= addr && addr < f->fr_address + f->fr_fix)
+      return f;
+
+  for (f = seginfo->frchainP->frch_root; f != NULL; f = f->fr_next)
+    if (f->fr_address <= addr && addr < f->fr_address + f->fr_fix)
+      return f;
+
+  for (f = seginfo->frchainP->frch_root; f != NULL; f = f->fr_next)
+    if (f->fr_address <= addr && addr <= f->fr_address + f->fr_fix)
+      return f;
+
+  return NULL;
+}
+
 static fragS *
 get_frag_for_reloc (fragS *last_frag,
 		    const segment_info_type *seginfo,
 		    const struct reloc_list *r)
 {
-  fragS *f;
+  fragS *f = get_frag_for_address (last_frag, seginfo, r->u.b.r.address);
 
-  for (f = last_frag; f != NULL; f = f->fr_next)
-    if (f->fr_address <= r->u.b.r.address
-	&& r->u.b.r.address < f->fr_address + f->fr_fix)
-      return f;
-
-  for (f = seginfo->frchainP->frch_root; f != NULL; f = f->fr_next)
-    if (f->fr_address <= r->u.b.r.address
-	&& r->u.b.r.address < f->fr_address + f->fr_fix)
-      return f;
-
-  for (f = seginfo->frchainP->frch_root; f != NULL; f = f->fr_next)
-    if (f->fr_address <= r->u.b.r.address
-	&& r->u.b.r.address <= f->fr_address + f->fr_fix)
-      return f;
-
-  as_bad_where (r->file, r->line,
-		_("reloc not within (fixed part of) section"));
-  return NULL;
+  if (f == NULL)
+    as_bad_where (r->file, r->line,
+		  _("reloc not within (fixed part of) section"));
+  return f;
 }
 
 static void
@@ -1902,11 +1918,12 @@ subsegs_finish (void)
     subsegs_finish_section (s);
 }
 
-#ifdef OBJ_ELF
+#if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
 
 static void
 create_obj_attrs_section (void)
 {
+#ifdef TC_OBJ_ATTR
   offsetT size = bfd_elf_obj_attr_size (stdoutput);
   if (size == 0)
     return;
@@ -1929,6 +1946,7 @@ create_obj_attrs_section (void)
   subsegs_finish_section (s);
   relax_segment (seg_info (s)->frchainP->frch_root, s, 0);
   size_seg (stdoutput, s, NULL);
+#endif /* TC_OBJ_ATTR */
 }
 
 /* Create a relocation against an entry in a GNU Build attribute section.  */
@@ -2210,7 +2228,7 @@ write_object_file (void)
   md_post_relax_hook;
 #endif
 
-#ifdef OBJ_ELF
+#if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
   if (IS_ELF)
     create_obj_attrs_section ();
 #endif
@@ -2328,7 +2346,7 @@ write_object_file (void)
 
   evaluate_deferred_diags ();
 
-#ifdef OBJ_ELF
+#if defined (OBJ_ELF) || defined (OBJ_MAYBE_ELF)
   if (IS_ELF)
     maybe_generate_build_notes ();
 #endif
@@ -2401,24 +2419,22 @@ write_object_file (void)
 	  if (symbol_equated_reloc_p (symp)
 	      || S_IS_WEAKREFR (symp))
 	    {
-	      const char *sname = S_GET_NAME (symp);
-
 	      if (S_IS_COMMON (symp)
-		  && !TC_FAKE_LABEL (sname)
+		  && !TC_FAKE_LABEL (name)
 		  && !S_IS_WEAKREFR (symp))
 		{
 		  expressionS *e = symbol_get_value_expression (symp);
 
 		  as_bad (_("`%s' can't be equated to common symbol `%s'"),
-			  sname, S_GET_NAME (e->X_add_symbol));
+			  name, S_GET_NAME (e->X_add_symbol));
 		}
-	      if (S_GET_SEGMENT (symp) == reg_section)
-		{
+
+	      if (S_GET_SEGMENT (symp) == reg_section
+		  && S_IS_EXTERNAL (symp)
 		  /* Report error only if we know the symbol name.  */
-		  if (S_GET_NAME (symp) != reg_section->name)
-		    as_bad (_("can't make global register symbol `%s'"),
-			    sname);
-		}
+		  && name != reg_section->name)
+		as_bad (_("can't make global register symbol `%s'"), name);
+
 	      symbol_remove (symp, &symbol_rootP, &symbol_lastP);
 	      continue;
 	    }

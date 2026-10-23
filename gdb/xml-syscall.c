@@ -112,7 +112,7 @@ struct syscall_desc
   std::string alias;
 };
 
-typedef std::unique_ptr<syscall_desc> syscall_desc_up;
+using syscall_desc_up = std::unique_ptr<syscall_desc>;
 
 /* Structure of a syscall group.  */
 struct syscall_group_desc
@@ -131,7 +131,7 @@ struct syscall_group_desc
   std::vector<syscall_desc *> syscalls;
 };
 
-typedef std::unique_ptr<syscall_group_desc> syscall_group_desc_up;
+using syscall_group_desc_up = std::unique_ptr<syscall_group_desc>;
 
 /* Structure that represents syscalls information.  */
 struct syscalls_info
@@ -151,7 +151,7 @@ struct syscalls_info
   std::string my_gdb_datadir;
 };
 
-typedef std::unique_ptr<syscalls_info> syscalls_info_up;
+using syscalls_info_up = std::unique_ptr<syscalls_info>;
 
 /* Callback data for syscall information parsing.  */
 struct syscall_parsing_data
@@ -244,13 +244,13 @@ syscall_start_syscall (struct gdb_xml_parser *parser,
 
   for (const gdb_xml_value &attr : attributes)
     {
-      if (strcmp (attr.name, "name") == 0)
+      if (streq (attr.name, "name"))
 	name = (char *) attr.value.get ();
-      else if (strcmp (attr.name, "number") == 0)
+      else if (streq (attr.name, "number"))
 	number = * (ULONGEST *) attr.value.get ();
-      else if (strcmp (attr.name, "alias") == 0)
+      else if (streq (attr.name, "alias"))
 	alias = (char *) attr.value.get ();
-      else if (strcmp (attr.name, "groups") == 0)
+      else if (streq (attr.name, "groups"))
 	groups = (char *) attr.value.get ();
       else
 	internal_error (_("Unknown attribute name '%s'."), attr.name);

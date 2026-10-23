@@ -46,8 +46,6 @@ cooked_index_worker_result::get_reader (dwarf2_per_cu *per_cu)
 cutu_reader *
 cooked_index_worker_result::preserve (cutu_reader_up reader)
 {
-  m_abbrev_table_cache.add (reader->release_abbrev_table ());
-
   auto [it, inserted] = m_reader_hash.insert (std::move (reader));
   gdb_assert (inserted);
 
@@ -103,6 +101,16 @@ cooked_index_worker_result::emit_complaints_and_exceptions
   for (auto &one_exc : m_exceptions)
     if (seen_exceptions.insert (one_exc).second)
       exception_print (gdb_stderr, one_exc);
+}
+
+/* See cooked-index-worker.h.  */
+
+void
+cooked_index_worker_result::invert_cu_inclusions ()
+{
+  for (auto &iter : m_inclusions)
+    for (dwarf2_per_cu *included : iter.second)
+      included->add_includer (iter.first);
 }
 
 /* See cooked-index-worker.h.  */
@@ -240,6 +248,10 @@ cooked_index_worker::done_reading ()
     for (auto &one_result : m_results)
       m_all_parents_map.add_map (*one_result.get_parent_map ());
   }
+
+  /* Update all the CU inclusion information.  */
+  for (auto &item : m_results)
+    item.invert_cu_inclusions ();
 
   dwarf2_per_bfd *per_bfd = m_per_objfile->per_bfd;
   cooked_index *table

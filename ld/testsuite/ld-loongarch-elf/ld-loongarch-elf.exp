@@ -19,8 +19,11 @@
 # MA 02110-1301, USA.
 #
 
+if [istarget loongarch*-*-*] {
+  run_dump_test "dtprel"
+}
+
 if [istarget "loongarch64-*-*"] {
-    run_dump_test "jmp_op"
     run_dump_test "macro_op"
     run_dump_test "syscall"
     run_dump_test "disas-jirl"
@@ -51,10 +54,13 @@ if [istarget "loongarch64-*-*"] {
     run_dump_test "relax-sym-size-1"
     run_dump_test "relax-sym-size-2"
     run_dump_test "check_got_relax"
+
+    # Tidy up, to not leave huge intermediate files.
+    remote_file host delete tmpdir/relax-medium-call.o
+    remote_file host delete tmpdir/relax-medium-call-1.o
 }
 
 if [istarget "loongarch32-*-*"] {
-    run_dump_test "jmp_op"
     run_dump_test "macro_op_32"
     run_dump_test "syscall"
     run_dump_test "disas-jirl-32"

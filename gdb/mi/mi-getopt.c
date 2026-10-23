@@ -37,7 +37,7 @@ mi_getopt_1 (const char *prefix, int argc, const char *const *argv,
     return -1;
   arg = argv[*oind];
   /* ``--''? */
-  if (strcmp (arg, "--") == 0)
+  if (streq (arg, "--"))
     {
       *oind += 1;
       *oarg = NULL;
@@ -52,7 +52,7 @@ mi_getopt_1 (const char *prefix, int argc, const char *const *argv,
   /* Look the option up.  */
   for (opt = opts; opt->name != NULL; opt++)
     {
-      if (strcmp (opt->name, arg + 1) != 0)
+      if (!streq (opt->name, arg + 1))
 	continue;
       if (opt->arg_p)
 	{
@@ -72,7 +72,7 @@ mi_getopt_1 (const char *prefix, int argc, const char *const *argv,
     }
 
   if (error_on_unknown)
-    error (_("%s: Unknown option ``%s''"), prefix, arg + 1);
+    error (_("%s: Unknown option \"%s\""), prefix, arg + 1);
   else
     return -1;
 }

@@ -171,13 +171,13 @@ struct cmd_list_element
 
   /* Nonzero says this is an abbreviation, and should not
      be mentioned in lists of commands.
-     This allows "br<tab>" to complete to "break", which it
+     This allows "br<TAB>" to complete to "break", which it
      otherwise wouldn't.  */
   unsigned int abbrev_flag : 1;
 
   /* Type of "set" or "show" command (or SET_NOT_SET if not "set"
      or "show").  */
-  ENUM_BITFIELD (cmd_types) type : 2;
+  cmd_types type : 2;
 
   /* Function definition of this command.  NULL for command class
      names and for help topics that are not really commands.  NOTE:

@@ -19,16 +19,16 @@ standard_testfile
 set executable $testfile
 
 if { [prepare_for_testing "failed to prepare" $testfile $srcfile {debug}] } {
-    return -1
+    return
 }
 
 if {![runto_main]} {
-    return -1
+    return
 }
 
 if {![gdb_range_stepping_enabled]} {
     unsupported "range stepping not supported by the target"
-    return -1
+    return
 }
 
 # Check that range stepping can step a range of multiple instructions.
@@ -41,7 +41,7 @@ with_test_prefix "multi insns" {
     set pc_before_stepping ""
     set test "pc before stepping"
     gdb_test_multiple "print/x \$pc" $test {
-	-re "\\\$$decimal = (\[^\r\n\]*)\r\n$gdb_prompt $" {
+	-re "${::valnum_re} = (\[^\r\n\]*)\r\n$gdb_prompt $" {
 	    set pc_before_stepping $expect_out(1,string)
 	    pass $test
 	}
@@ -67,7 +67,7 @@ with_test_prefix "multi insns" {
     set pc_after_stepping ""
     set msg "pc after stepping"
     gdb_test_multiple "print/x \$pc" $msg {
-	-re "\\\$$decimal = (\[^\r\n\]*)\r\n$gdb_prompt $" {
+	-re "${::valnum_re} = (\[^\r\n\]*)\r\n$gdb_prompt $" {
 	    set pc_after_stepping $expect_out(1,string)
 	    pass $msg
 	}

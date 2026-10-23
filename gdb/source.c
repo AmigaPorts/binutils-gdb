@@ -223,11 +223,7 @@ get_lines_to_list (void)
 static current_source_location *
 get_source_location (program_space *pspace)
 {
-  current_source_location *loc
-    = current_source_key.get (pspace);
-  if (loc == nullptr)
-    loc = current_source_key.emplace (pspace);
-  return loc;
+  return &current_source_key.try_emplace (pspace);
 }
 
 /* See source.h.  */
@@ -258,9 +254,10 @@ get_current_source_symtab_and_line (program_space *pspace)
 void
 set_default_source_symtab_and_line (void)
 {
-  if (!have_full_symbols (current_program_space)
-      && !have_partial_symbols (current_program_space))
-    error (_("No symbol table is loaded.  Use the \"file\" command."));
+  if (!current_program_space->has_full_symbols ()
+      && !current_program_space->has_partial_symbols ())
+    error (_("No symbol table is loaded.  Use the \"%ps\" command."),
+	   styled_string (command_style.style (), "file"));
 
   /* Pull in a current source symtab if necessary.  */
   current_source_location *loc = get_source_location (current_program_space);
@@ -302,7 +299,7 @@ clear_current_source_symtab_and_line (objfile *objfile)
     return;
 
   if (loc->symtab () != nullptr
-      && loc->symtab ()->compunit ()->objfile () == objfile)
+      && loc->symtab ()->compunit ().objfile () == objfile)
     clear_current_source_symtab_and_line (objfile->pspace ());
 }
 
@@ -345,8 +342,8 @@ select_source_symtab ()
 	      const char *name = symtab->filename ();
 	      int len = strlen (name);
 
-	      if (!(len > 2 && (strcmp (&name[len - 2], ".h") == 0
-				|| strcmp (name, "<<C++-namespaces>>") == 0)))
+	      if (!(len > 2 && (streq (&name[len - 2], ".h")
+				|| streq (name, "<<C++-namespaces>>"))))
 		new_symtab = symtab;
 	    }
 	}
@@ -674,7 +671,6 @@ info_source_command (const char *ignore, int from_tty)
   current_source_location *loc
     = get_source_location (current_program_space);
   struct symtab *s = loc->symtab ();
-  struct compunit_symtab *cust;
 
   if (!s)
     {
@@ -682,26 +678,27 @@ info_source_command (const char *ignore, int from_tty)
       return;
     }
 
-  cust = s->compunit ();
+  compunit_symtab &cust = s->compunit ();
+
   gdb_printf (_("Current source file is %s\n"), s->filename ());
-  if (s->compunit ()->dirname () != NULL)
-    gdb_printf (_("Compilation directory is %s\n"), s->compunit ()->dirname ());
+  if (s->compunit ().dirname () != NULL)
+    gdb_printf (_("Compilation directory is %s\n"), s->compunit ().dirname ());
   if (s->fullname () != nullptr)
     gdb_printf (_("Located in %s\n"), s->fullname ());
-  const std::vector<off_t> *offsets;
-  if (g_source_cache.get_line_charpos (s, &offsets))
-    gdb_printf (_("Contains %d line%s.\n"), (int) offsets->size (),
-		offsets->size () == 1 ? "" : "s");
+  if (std::optional<int> last_lineno = last_symtab_line (s);
+      last_lineno.has_value ())
+    gdb_printf (_("Contains %d line%s.\n"), last_lineno.value (),
+		last_lineno.value () == 1 ? "" : "s");
 
   gdb_printf (_("Source language is %s.\n"),
 	      language_str (s->language ()));
   gdb_printf (_("Producer is %s.\n"),
-	      (cust->producer ()) != nullptr
-	      ? cust->producer () : _("unknown"));
+	      (cust.producer ()) != nullptr
+	      ? cust.producer () : _("unknown"));
   gdb_printf (_("Compiled with %s debugging format.\n"),
-	      cust->debugformat ());
+	      cust.debugformat ());
   gdb_printf (_("%s preprocessor macro info.\n"),
-	      (cust->macro_table () != nullptr
+	      (cust.macro_table () != nullptr
 	       ? "Includes" : "Does not include"));
 }
 
@@ -840,7 +837,7 @@ openp (const char *path, openp_flags opts, const char *string,
       char *dir = dir_up.get ();
       int reg_file_errno;
 
-      if (strcmp (dir, "$cwd") == 0)
+      if (streq (dir, "$cwd"))
 	{
 	  /* Name is $cwd -- insert current directory name instead.  */
 	  filename = cwd;
@@ -859,7 +856,7 @@ openp (const char *path, openp_flags opts, const char *string,
 	     contexts.  If the user really has '$cdir' one can use './$cdir'.
 	     We can get $cdir when loading scripts.  When loading source files
 	     $cdir must have already been expanded to the correct value.  */
-	  if (strcmp (dir, "$cdir") == 0)
+	  if (streq (dir, "$cdir"))
 	    continue;
 
 	  /* Normal file name in path -- just use it.  */
@@ -1120,44 +1117,41 @@ open_source_file (struct symtab *s)
 
   gdb::unique_xmalloc_ptr<char> fullname = s->release_fullname ();
   scoped_fd fd = find_and_open_source (s->filename (),
-				       s->compunit ()->dirname (),
+				       s->compunit ().dirname (),
 				       &fullname);
 
   if (fd.get () < 0)
     {
-      if (s->compunit () != nullptr)
+      const objfile *ofp = s->compunit ().objfile ();
+
+      std::string srcpath;
+      if (IS_ABSOLUTE_PATH (s->filename ()))
+	srcpath = s->filename ();
+      else if (s->compunit ().dirname () != nullptr)
 	{
-	  const objfile *ofp = s->compunit ()->objfile ();
+	  srcpath = s->compunit ().dirname ();
+	  srcpath += SLASH_STRING;
+	  srcpath += s->filename ();
+	}
 
-	  std::string srcpath;
-	  if (IS_ABSOLUTE_PATH (s->filename ()))
-	    srcpath = s->filename ();
-	  else if (s->compunit ()->dirname () != nullptr)
+      const struct bfd_build_id *build_id
+	= build_id_bfd_get (ofp->obfd.get ());
+
+      /* Query debuginfod for the source file.  */
+      if (build_id != nullptr && !srcpath.empty ())
+	{
+	  scoped_fd query_fd
+	    = debuginfod_source_query (build_id->data,
+				       build_id->size,
+				       srcpath.c_str (),
+				       &fullname);
+
+	  /* Don't return a negative errno from debuginfod_source_query.
+	     It handles the reporting of its own errors.  */
+	  if (query_fd.get () >= 0)
 	    {
-	      srcpath = s->compunit ()->dirname ();
-	      srcpath += SLASH_STRING;
-	      srcpath += s->filename ();
-	    }
-
-	  const struct bfd_build_id *build_id
-	    = build_id_bfd_get (ofp->obfd.get ());
-
-	  /* Query debuginfod for the source file.  */
-	  if (build_id != nullptr && !srcpath.empty ())
-	    {
-	      scoped_fd query_fd
-		= debuginfod_source_query (build_id->data,
-					   build_id->size,
-					   srcpath.c_str (),
-					   &fullname);
-
-	      /* Don't return a negative errno from debuginfod_source_query.
-		 It handles the reporting of its own errors.  */
-	      if (query_fd.get () >= 0)
-		{
-		  s->set_fullname (std::move (fullname));
-		  return query_fd;
-		}
+	      s->set_fullname (std::move (fullname));
+	      return query_fd;
 	    }
 	}
     }
@@ -1220,11 +1214,11 @@ symtab_to_fullname (struct symtab *s)
 	  /* rewrite_source_path would be applied by find_and_open_source, we
 	     should report the pathname where GDB tried to find the file.  */
 
-	  if (s->compunit ()->dirname () == nullptr
+	  if (s->compunit ().dirname () == nullptr
 	      || IS_ABSOLUTE_PATH (s->filename ()))
 	    fullname = make_unique_xstrdup (s->filename ());
 	  else
-	    fullname.reset (concat (s->compunit ()->dirname (), SLASH_STRING,
+	    fullname.reset (concat (s->compunit ().dirname (), SLASH_STRING,
 				    s->filename (), (char *) NULL));
 
 	  s->set_fullname (rewrite_source_path (fullname.get ()));
@@ -1346,11 +1340,12 @@ print_source_lines_base (struct symtab *s, int line, int stopline,
   std::string lines;
   if (!g_source_cache.get_source_lines (s, line, stopline - 1, &lines))
     {
-      const std::vector<off_t> *offsets = nullptr;
-      g_source_cache.get_line_charpos (s, &offsets);
-      error (_("Line number %d out of range; %s has %d lines."),
-	     line, symtab_to_filename_for_display (s),
-	     offsets == nullptr ? 0 : (int) offsets->size ());
+      std::optional<int> last_lineno = last_symtab_line (s);
+      error (_("Line number %ps out of range; %ps has %d lines."),
+	     styled_string (line_number_style.style (), plongest (line)),
+	     styled_string (file_name_style.style (),
+			    symtab_to_filename_for_display (s)),
+	     !last_lineno.has_value () ? 0 : last_lineno.value ());
     }
 
   const char *iter = lines.c_str ();
@@ -1452,16 +1447,16 @@ print_source_lines (struct symtab *s, source_lines_range line_range,
 
 /* See source.h.  */
 
-int
+std::optional<int>
 last_symtab_line (struct symtab *s)
 {
   const std::vector<off_t> *offsets;
 
   /* Try to get the offsets for the start of each line.  */
   if (!g_source_cache.get_line_charpos (s, &offsets))
-    return false;
+    return {};
   if (offsets == nullptr)
-    return false;
+    return {};
 
   return offsets->size ();
 }
@@ -1529,7 +1524,7 @@ info_line_command (const char *arg, int from_tty)
       else if (sal.line > 0
 	       && find_pc_range_for_sal (sal, &start_pc, &end_pc))
 	{
-	  gdbarch *gdbarch = sal.symtab->compunit ()->objfile ()->arch ();
+	  gdbarch *gdbarch = sal.symtab->compunit ().objfile ()->arch ();
 
 	  if (start_pc == end_pc)
 	    {
@@ -1925,7 +1920,8 @@ The address is also stored as the value of \"$_\"."));
 Search for regular expression (see regex(3)) from last line listed.\n\
 The matching line number is also stored as the value of \"$_\"."));
   add_com_alias ("search", forward_search_cmd, class_files, 0);
-  add_com_alias ("fo", forward_search_cmd, class_files, 1);
+  add_com_alias ("fo", /* codespell:ignore.  */
+		 forward_search_cmd, class_files, 1);
 
   cmd_list_element *reverse_search_cmd
     = add_com ("reverse-search", class_files, reverse_search_command, _("\

@@ -170,8 +170,17 @@ in the section entitled ``GNU Free Documentation License''.
 @c man title ar create, modify, and extract from archives
 
 @smallexample
-ar [-]@var{p}[@var{mod}] [@option{--plugin} @var{name}] [@option{--target} @var{bfdname}] [@option{--output} @var{dirname}] [@option{--record-libdeps} @var{libdeps}] [@var{relpos}] [@var{count}] @var{archive} [@var{member}@dots{}]
-ar -M [ <mri-script ]
+@c man begin SYNOPSIS ar
+ar [@option{-X32_64}]
+   [@option{-}]@var{p}[@var{mod}]
+   [@option{--plugin} @var{name}]
+   [@option{--target} @var{bfdname}]
+   [@option{--output} @var{dirname}]
+   [@option{--record-libdeps} @var{libdeps}]
+   [@option{--thin}]
+   [@var{relpos}] [@var{count}] @var{archive} [@var{member}@dots{}]
+ar @option{-M} [< mri-script]
+@c man end
 @end smallexample
 
 @c man begin DESCRIPTION ar
@@ -205,9 +214,7 @@ subroutines.  Since libraries often will depend on other libraries,
 object modules in the archive when you specify the modifier @samp{s}.
 Once created, this index is updated in the archive whenever @command{ar}
 makes a change to its contents (save for the @samp{q} update operation).
-An archive with such an index speeds up linking to the library, and
-allows routines in the library to call each other without regard to
-their placement in the archive.
+An archive with such an index speeds up linking to the library.
 
 You may use @samp{nm -s} or @samp{nm --print-armap} to list this index
 table.  If an archive lacks the table, another form of @command{ar} called
@@ -253,12 +260,6 @@ program.
 @page
 @node ar cmdline
 @section Controlling @command{ar} on the Command Line
-
-@smallexample
-@c man begin SYNOPSIS ar
-ar [@option{-X32_64}] [@option{-}]@var{p}[@var{mod}] [@option{--plugin} @var{name}] [@option{--target} @var{bfdname}] [@option{--output} @var{dirname}] [@option{--record-libdeps} @var{libdeps}] [@option{--thin}] [@var{relpos}] [@var{count}] @var{archive} [@var{member}@dots{}]
-@c man end
-@end smallexample
 
 @cindex Unix compatibility, @command{ar}
 When you use @command{ar} in the Unix style, @command{ar} insists on at least two
@@ -501,10 +502,10 @@ archive is equivalent to running @samp{ranlib} on it.
 @item S
 @cindex not writing archive index
 Do not generate an archive symbol table.  This can speed up building a
-large library in several steps.  The resulting archive can not be used
-with the linker.  In order to build a symbol table, you must omit the
-@samp{S} modifier on the last execution of @samp{ar}, or you must run
-@samp{ranlib} on the archive.
+large library in several steps, but will negatively impact performance
+if the resulting archive is used with the linker.  In order to build a
+symbol table, you must omit the @samp{S} modifier on the last execution
+of @samp{ar}, or you must run @samp{ranlib} on the archive.
 
 @item T
 Deprecated alias for @option{--thin}.  @option{T} is not recommended because in
@@ -1074,7 +1075,7 @@ first character will be used for global indirect function symbols and
 the second character, if present, will be used for local indirect
 function symbols.
 
-@item j
+@item -j
 The same as @option{--format=just-symbols}.
 
 @item -l
@@ -2323,12 +2324,34 @@ objdump [@option{-a}|@option{--archive-headers}]
         [@option{-R}|@option{--dynamic-reloc}]
         [@option{-s}|@option{--full-contents}]
         [@option{-Z}|@option{--decompress}]
-        [@option{-W[lLiaprmfFsoORtUuTgAck]}|
-         @option{--dwarf}[=rawline,=decodedline,=info,=abbrev,=pubnames,=aranges,=macro,=frames,=frames-interp,=str,=str-offsets,=loc,=Ranges,=pubtypes,=trace_info,=trace_abbrev,=trace_aranges,=gdb_index,=addr,=cu_index,=links]]
+        [@option{-W}|@option{--dwarf}]
+        [@option{-Wa}|@option{--dwarf=abbrev}]
+        [@option{-WA}|@option{--dwarf=addr}]
+        [@option{-Wr}|@option{--dwarf=aranges}]
+        [@option{-Wc}|@option{--dwarf=cu_index}]
+        [@option{-WL}|@option{--dwarf=decodedline}]
+        [@option{-Wf}|@option{--dwarf=frames}]
+        [@option{-WF}|@option{--dwarf=frames-interp}]
+        [@option{-Wg}|@option{--dwarf=gdb_index}]
+        [@option{-Wi}|@option{--dwarf=info}]
+        [@option{-Wk}|@option{--dwarf=links}]
+        [@option{-Wo}|@option{--dwarf=loc}]
+        [@option{-Wm}|@option{--dwarf=macro}]
+        [@option{-Wp}|@option{--dwarf=pubnames}]
+        [@option{-Wt}|@option{--dwarf=pubtypes}]
+        [@option{-WR}|@option{--dwarf=Ranges}]
+        [@option{-Wl}|@option{--dwarf=rawline}]
+        [@option{-Ws}|@option{--dwarf=str}]
+        [@option{-WO}|@option{--dwarf=str-offsets}]
+        [@option{-Wu}|@option{--dwarf=trace_abbrev}]
+        [@option{-WT}|@option{--dwarf=trace_aranges}]
+        [@option{-WU}|@option{--dwarf=trace_info}]
         [@option{-WK}|@option{--dwarf=follow-links}]
         [@option{-WN}|@option{--dwarf=no-follow-links}]
-        [@option{-wD}|@option{--dwarf=use-debuginfod}]
-        [@option{-wE}|@option{--dwarf=do-not-use-debuginfod}]
+        [@option{-WD}|@option{--dwarf=use-debuginfod}]
+        [@option{-WE}|@option{--dwarf=do-not-use-debuginfod}]
+        [@option{--debug-dir=@file{dir}}]
+        [@option{--map-global-vars}]
         [@option{-L}|@option{--process-links}]
         [@option{--ctf=}@var{section}]
         [@option{--sframe=}@var{section}]
@@ -2575,6 +2598,12 @@ for specification with @option{-b} or @option{-m}.
 Display information for section @var{name}.  This option may be
 specified multiple times.
 
+@item --map-global-vars
+Display global variable information.  This option only works when the object
+file is compiled with the debug option.  More precisely, it relies on DWARF2
+debug information entries.  It is useful for tracking the location and type of
+all global variables in the given object file.
+
 @item -L
 @itemx --process-links
 Display the contents of non-debug sections found in separate debuginfo
@@ -2662,7 +2691,15 @@ compilers.
 For AArch64 targets this switch can be used to set whether instructions are
 disassembled as the most general instruction using the @option{-M no-aliases}
 option or whether instruction notes should be generated as comments in the
-disasssembly using @option{-M notes}.
+disasssembly using @option{-M notes}.  In addition the @option{-M
+annotate} option can be used to customise the handling of undefined
+instructions when disassembling executables and shared libraries.
+Normally the disassembler will just show the hexadecimal value of tge
+undefined instruction, but if annotation is enabled it will first try
+to find a symbol whose value matches the instruction's encoding.  If
+there is a match then the symbol name will be displayed instead.  This
+can be useful when disassembling non-code sections which may contain
+function and data addresses.
 
 For the x86, some of the options duplicate functions of the @option{-m}
 switch, but allow finer grained control.
@@ -2700,6 +2737,12 @@ When in AT&T mode and also for a limited set of instructions when in Intel
 mode, instructs the disassembler to print a mnemonic suffix even when the
 suffix could be inferred by the operands or, for certain instructions, the
 execution mode's defaults.
+
+@item annotate-immediates
+Display the symbol associated with immediate values, should there be
+one.  Only works on executable binaries and shared libraries, not
+static object files.
+
 @end table
 
 For PowerPC, the @option{-M} argument @option{raw} selects
@@ -2971,6 +3014,9 @@ The @option{off} argument disables colored disassembly.
 @item --dwarf-check
 Enable additional checks for consistency of Dwarf information.
 
+@item --debug-dir=@file{dir}
+Search @file{dir} when looking for separate debug info files.
+
 @include ctf.options.texi
 
 @include sframe.options.texi
@@ -3184,9 +3230,7 @@ member of an archive that is a relocatable object file.
 
 You may use @samp{nm -s} or @samp{nm --print-armap} to list this index.
 
-An archive with such an index speeds up linking to the library and
-allows routines in the library to call each other without regard to
-their placement in the archive.
+An archive with such an index speeds up linking to the library.
 
 The @sc{gnu} @command{ranlib} program is another form of @sc{gnu} @command{ar}; running
 @command{ranlib} is completely equivalent to executing @samp{ar -s}.
@@ -4686,24 +4730,35 @@ dlltool [@option{-d}|@option{--input-def} @var{def-file-name}]
         [@option{-z}|@option{--output-def} @var{def-file-name}]
         [@option{-l}|@option{--output-lib} @var{library-file-name}]
         [@option{-y}|@option{--output-delaylib} @var{library-file-name}]
-        [@option{--export-all-symbols}] [@option{--no-export-all-symbols}]
+        [@option{--export-all-symbols}]
+        [@option{--no-export-all-symbols}]
         [@option{--exclude-symbols} @var{list}]
         [@option{--no-default-excludes}]
-        [@option{-S}|@option{--as} @var{path-to-assembler}] [@option{-f}|@option{--as-flags} @var{options}]
-        [@option{-D}|@option{--dllname} @var{name}] [@option{-m}|@option{--machine} @var{machine}]
+        [@option{-S}|@option{--as} @var{path-to-assembler}]
+        [@option{-f}|@option{--as-flags} @var{options}]
+        [@option{-D}|@option{--dllname} @var{name}]
+        [@option{-m}|@option{--machine} @var{machine}]
         [@option{-a}|@option{--add-indirect}]
-        [@option{-U}|@option{--add-underscore}] [@option{--add-stdcall-underscore}]
-        [@option{-k}|@option{--kill-at}] [@option{-A}|@option{--add-stdcall-alias}]
+        [@option{-U}|@option{--add-underscore}]
+        [@option{--add-stdcall-underscore}]
+        [@option{-k}|@option{--kill-at}]
+        [@option{-A}|@option{--add-stdcall-alias}]
         [@option{-p}|@option{--ext-prefix-alias} @var{prefix}]
-        [@option{-x}|@option{--no-idata4}] [@option{-c}|@option{--no-idata5}]
+        [@option{-x}|@option{--no-idata4}]
+        [@option{-c}|@option{--no-idata5}]
         [@option{--use-nul-prefixed-import-tables}]
-        [@option{-I}|@option{--identify} @var{library-file-name}] [@option{--identify-strict}]
+        [@option{-I}|@option{--identify} @var{library-file-name}]
+        [@option{--identify-strict}]
         [@option{-i}|@option{--interwork}]
-        [@option{-n}|@option{--nodelete}] [@option{-t}|@option{--temp-prefix} @var{prefix}]
+        [@option{-n}|@option{--nodelete}]
+        [@option{-t}|@option{--temp-prefix} @var{prefix}]
         [@option{-v}|@option{--verbose}]
-        [@option{-h}|@option{--help}] [@option{-V}|@option{--version}]
-        [@option{--no-leading-underscore}] [@option{--leading-underscore}]
-        [@option{--deterministic-libraries}] [@option{--non-deterministic-libraries}]
+        [@option{-h}|@option{--help}]
+        [@option{-V}|@option{--version}]
+        [@option{--no-leading-underscore}]
+        [@option{--leading-underscore}]
+        [@option{--deterministic-libraries}]
+        [@option{--non-deterministic-libraries}]
         [object-file @dots{}]
 @c man end
 @end smallexample
@@ -5109,12 +5164,33 @@ readelf [@option{-a}|@option{--all}]
         [@option{-j} <number or name>|@option{--display-section=}<number or name>]
         [@option{-z}|@option{--decompress}]
         [@option{-c}|@option{--archive-index}]
-        [@option{-w[lLiaprmfFsoORtUuTgAck]}|
-         @option{--debug-dump}[=rawline,=decodedline,=info,=abbrev,=pubnames,=aranges,=macro,=frames,=frames-interp,=str,=str-offsets,=loc,=Ranges,=pubtypes,=trace_info,=trace_abbrev,=trace_aranges,=gdb_index,=addr,=cu_index,=links]]
+        [@option{-w}|@option{--debug-dump}]
+        [@option{-wa}|@option{--debug-dump=abbrev}]
+        [@option{-wA}|@option{--debug-dump=addr}]
+        [@option{-wr}|@option{--debug-dump=aranges}]
+        [@option{-wc}|@option{--debug-dump=cu_index}]
+        [@option{-wL}|@option{--debug-dump=decodedline}]
+        [@option{-wf}|@option{--debug-dump=frames}]
+        [@option{-wF}|@option{--debug-dump=frames-interp}]
+        [@option{-wg}|@option{--debug-dump=gdb_index}]
+        [@option{-wi}|@option{--debug-dump=info}]
+        [@option{-wk}|@option{--debug-dump=links}]
+        [@option{-wo}|@option{--debug-dump=loc}]
+        [@option{-wm}|@option{--debug-dump=macro}]
+        [@option{-wp}|@option{--debug-dump=pubnames}]
+        [@option{-wt}|@option{--debug-dump=pubtypes}]
+        [@option{-wR}|@option{--debug-dump=Ranges}]
+        [@option{-wl}|@option{--debug-dump=rawline}]
+        [@option{-ws}|@option{--debug-dump=str}]
+        [@option{-wO}|@option{--debug-dump=str-offsets}]
+        [@option{-wu}|@option{--debug-dump=trace_abbrev}]
+        [@option{-wT}|@option{--debug-dump=trace_aranges}]
+        [@option{-wU}|@option{--debug-dump=trace_info}]
         [@option{-wK}|@option{--debug-dump=follow-links}]
         [@option{-wN}|@option{--debug-dump=no-follow-links}]
         [@option{-wD}|@option{--debug-dump=use-debuginfod}]
         [@option{-wE}|@option{--debug-dump=do-not-use-debuginfod}]
+        [@option{--debug-dir=@file{dir}}]
         [@option{-P}|@option{--process-links}]
         [@option{--dwarf-depth=@var{n}}]
         [@option{--dwarf-start=@var{n}}]
@@ -5419,6 +5495,9 @@ command to @command{ar}, but without using the BFD library.  @xref{ar}.
 @item -w[lLiaprmfFsOoRtUuTgAckK]
 @itemx --debug-dump[=rawline,=decodedline,=info,=abbrev,=pubnames,=aranges,=macro,=frames,=frames-interp,=str,=str-offsets,=loc,=Ranges,=pubtypes,=trace_info,=trace_abbrev,=trace_aranges,=gdb_index,=addr,=cu_index,=links,=follow-links]
 @include debug.options.texi
+
+@item --debug-dir=@file{dir}
+Search @file{dir} when looking for separate debug info files.
 
 @item -P
 @itemx --process-links

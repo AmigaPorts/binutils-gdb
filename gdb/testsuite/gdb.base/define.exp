@@ -24,7 +24,7 @@ standard_testfile break.c break1.c
 
 if {[prepare_for_testing "failed to prepare" ${testfile} \
 	 [list $srcfile $srcfile2] {debug nowarnings}]} {
-    return -1
+    return
 }
 
 set bp_location1 [gdb_get_line_number "set breakpoint 1 here"]
@@ -200,7 +200,7 @@ with_test_prefix "command abbreviations in define" {
   gdb_test "info break \$bpnum" \
     [multi_line \
       "Num     Type\[ \]+Disp Enb Address\[ \]+What.*" \
-      "\[0-9\]+\[\t \]+breakpoint     keep y.* in main at .*" \
+      "${::decimal}\[\t \]+breakpoint     keep y.* in main at .*" \
       "\[\t \]+echo.*"] \
     "info break shows echo command"
 }

@@ -50,14 +50,7 @@ public:
   void set_thread_count (size_t num_threads);
 
   /* Return the number of executing threads.  */
-  size_t thread_count () const
-  {
-#if CXX_STD_THREAD
-    return m_thread_count;
-#else
-    return 0;
-#endif
-  }
+  size_t thread_count ();
 
   /* Post a task to the thread pool.  A future is returned, which can
      be used to wait for the result.  */
@@ -105,7 +98,7 @@ private:
   size_t m_thread_count = 0;
 
   /* A convenience typedef for the type of a task.  */
-  typedef std::packaged_task<void ()> task_t;
+  using task_t = std::packaged_task<void ()>;
 
   /* The tasks that have not been processed yet.  An optional is used
      to represent a task.  If the optional is empty, then this means

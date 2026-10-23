@@ -73,33 +73,6 @@ static value *fortran_prepare_argument (struct expression *exp,
 					int arg_num, bool is_internal_call_p,
 					struct type *func_type, enum noside noside);
 
-/* Return the encoding that should be used for the character type
-   TYPE.  */
-
-const char *
-f_language::get_encoding (struct type *type)
-{
-  const char *encoding;
-
-  switch (type->length ())
-    {
-    case 1:
-      encoding = target_charset (type->arch ());
-      break;
-    case 4:
-      if (type_byte_order (type) == BFD_ENDIAN_BIG)
-	encoding = "UTF-32BE";
-      else
-	encoding = "UTF-32LE";
-      break;
-
-    default:
-      error (_("unrecognized character type"));
-    }
-
-  return encoding;
-}
-
 /* See language.h.  */
 
 struct value *
@@ -799,7 +772,7 @@ eval_op_f_abs (struct type *expect_type, struct expression *exp,
 	return value_from_longest (type, l);
       }
     }
-  error (_("ABS of type %s not supported"), TYPE_SAFE_NAME (type));
+  error (_("ABS of type %s not supported"), type->safe_name ());
 }
 
 /* A helper function for BINOP_MOD.  */
@@ -836,7 +809,7 @@ eval_op_f_mod (struct type *expect_type, struct expression *exp,
 	return value_from_longest (arg1->type (), v3);
       }
     }
-  error (_("MOD of type %s not supported"), TYPE_SAFE_NAME (type));
+  error (_("MOD of type %s not supported"), type->safe_name ());
 }
 
 /* A helper function for the different FORTRAN_CEILING overloads.  Calculates
@@ -954,7 +927,7 @@ eval_op_f_modulo (struct type *expect_type, struct expression *exp,
 	return value_from_host_double (type, result);
       }
     }
-  error (_("MODULO of type %s not supported"), TYPE_SAFE_NAME (type));
+  error (_("MODULO of type %s not supported"), type->safe_name ());
 }
 
 /* A helper function for FORTRAN_CMPLX.  */
@@ -2008,7 +1981,7 @@ fortran_adjust_dynamic_array_base_address_hack (struct type *type,
       struct type *range_type = tmp_type->index_type ();
       LONGEST lowerbound, upperbound, stride;
       if (!get_discrete_bounds (range_type, &lowerbound, &upperbound))
-	error ("failed to get range bounds");
+	error (_("failed to get range bounds"));
 
       /* Figure out the stride for this dimension.  */
       struct type *elt_type = check_typedef (tmp_type->target_type ());

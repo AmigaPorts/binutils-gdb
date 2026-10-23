@@ -301,7 +301,7 @@ struct block : public allocate_on_obstack<block>
      DW_AT_static_link attribute) for a function is a way to get the
      frame corresponding to the enclosing function.
 
-     Note that only objfile-owned and function-level blocks can have a
+     Note that only objfile-owned and in-function blocks can have a
      static link.  Return NULL if there is no such property.  */
 
   struct dynamic_prop *static_link () const;
@@ -553,14 +553,17 @@ extern const struct block *block_for_pc_sect (CORE_ADDR, struct obj_section *);
 
 struct block_iterator
 {
-  /* If we're iterating over a single block, this holds the block.
-     Otherwise, it holds the canonical compunit.  */
+/* Return the compunit over whose static or global block the iterator currently
+   iterates.  Return nullptr if the iteration is finished.  */
+  struct compunit_symtab *compunit_symtab () const;
 
-  union
-  {
-    struct compunit_symtab *compunit_symtab;
-    const struct block *block;
-  } d;
+  /* If iterating on a global or static blocks, iteration starts from the
+     top-level CU and then continues with the global or static blocks of all
+     the included CUs.  This field holds the compunit of the current block.
+
+     This field is not private because block_iterator must remain trivial,
+     but treat it as private.  */
+  struct compunit_symtab *compunit_symtab_;
 
   /* If we're trying to match a name, this will be non-NULL.  */
   const lookup_name_info *name;
@@ -604,8 +607,8 @@ extern struct symbol *block_iterator_next (struct block_iterator *iterator);
    C++.  */
 struct block_iterator_wrapper
 {
-  typedef block_iterator_wrapper self_type;
-  typedef struct symbol *value_type;
+  using self_type = block_iterator_wrapper;
+  using value_type = struct symbol *;
 
   explicit block_iterator_wrapper (const struct block *block,
 				   const lookup_name_info *name = nullptr)
@@ -695,7 +698,7 @@ struct best_symbol_tracker
 };
 
 /* Find symbol NAME in BLOCK and in DOMAIN.  This will return a
-   matching symbol whose type is not a "opaque", see TYPE_IS_OPAQUE.
+   matching symbol whose type is not "opaque", see type::is_opaque.
    If STUB is non-NULL, an otherwise matching symbol whose type is a
    opaque will be stored here.  */
 

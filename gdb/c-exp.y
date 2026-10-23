@@ -52,6 +52,7 @@
 #include "target-float.h"
 #include "c-exp.h"
 #include "macroexp.h"
+#include "cli/cli-style.h"
 
 #define parse_type(ps) builtin_type (ps->gdbarch ())
 
@@ -1078,8 +1079,9 @@ block	:	block COLONCOLON name
 					     nullptr).symbol;
 
 			  if (tem == nullptr)
-			    error (_("No function \"%s\" in specified context."),
-				   copy.c_str ());
+			    error (_("No function \"%ps\" in specified context."),
+				   styled_string (function_name_style.style (),
+						  copy.c_str ()));
 			  $$ = tem->value_block (); }
 	;
 
@@ -1119,7 +1121,7 @@ qualified_name:	TYPENAME COLONCOLON name
 			  type = check_typedef (type);
 			  if (!type_aggregate_p (type))
 			    error (_("`%s' is not defined as an aggregate type."),
-				   TYPE_SAFE_NAME (type));
+				   type->safe_name ());
 
 			  pstate->push_new<scope_operation> (type,
 							     copy_name ($3));
@@ -1131,7 +1133,7 @@ qualified_name:	TYPENAME COLONCOLON name
 			  type = check_typedef (type);
 			  if (!type_aggregate_p (type))
 			    error (_("`%s' is not defined as an aggregate type."),
-				   TYPE_SAFE_NAME (type));
+				   type->safe_name ());
 			  std::string name = "~" + std::string ($4.ptr,
 								$4.length);
 
@@ -1145,7 +1147,7 @@ qualified_name:	TYPENAME COLONCOLON name
 			  std::string copy = copy_name ($3);
 			  error (_("No type \"%s\" within class "
 				   "or namespace \"%s\"."),
-				 copy.c_str (), TYPE_SAFE_NAME ($1.type));
+				 copy.c_str (), $1.type->safe_name ());
 			}
 	;
 
@@ -1201,9 +1203,11 @@ variable:	name_not_typename
 				= lookup_minimal_symbol (current_program_space, arg.c_str ());
 			      if (msymbol.minsym == NULL)
 				{
-				  if (!have_full_symbols (current_program_space)
-				      && !have_partial_symbols (current_program_space))
-				    error (_("No symbol table is loaded.  Use the \"file\" command."));
+				  if (!current_program_space->has_full_symbols ()
+				      && !current_program_space->has_partial_symbols ())
+				    error (_("No symbol table is loaded.  Use the \"%ps\" command."),
+					   styled_string (command_style.style (),
+							  "file"));
 				  else
 				    error (_("No symbol \"%s\" in current context."),
 					   arg.c_str ());
@@ -3174,7 +3178,7 @@ classify_name (struct parser_state *par_state, const struct block *block,
 	      symtab != nullptr)
 	    {
 	      yylval.bval
-		= symtab->compunit ()->blockvector ()->static_block ();
+		= symtab->compunit ().blockvector ()->static_block ();
 
 	      return FILENAME;
 	    }
@@ -3341,7 +3345,7 @@ handle_qualified_field_name (qualified_name_token token)
   type = check_typedef (type);
   if (!type_aggregate_p (type))
     error (_("`%s' is not defined as an aggregate type."),
-	   TYPE_SAFE_NAME (type));
+	   type->safe_name ());
   if (token.name[0] == '~')
     destructor_name_p (token.name, type);
   pstate->push_new<scope_operation> (type, token.name);
@@ -3574,7 +3578,7 @@ c_print_token (FILE *file, int type, YYSTYPE value)
     {
     case INT:
       parser_fprintf (file, "typed_val_int<%s, %s>",
-		      TYPE_SAFE_NAME (value.typed_val_int.type),
+		      value.typed_val_int.type->safe_name (),
 		      pulongest (value.typed_val_int.val));
       break;
 
@@ -3592,7 +3596,7 @@ c_print_token (FILE *file, int type, YYSTYPE value)
 
     case TYPENAME:
       parser_fprintf (file, "tsym<type=%s, name=%s>",
-		      TYPE_SAFE_NAME (value.tsym.type),
+		      value.tsym.type->safe_name (),
 		      copy_name (value.tsym.stoken).c_str ());
       break;
 

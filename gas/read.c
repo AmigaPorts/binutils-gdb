@@ -304,6 +304,8 @@ read_begin (void)
 void
 read_end (void)
 {
+  if (!ENABLE_LEAK_CHECK)
+    return;
   stabs_end ();
   poend ();
   _obstack_free (&cond_obstack, NULL);
@@ -624,7 +626,8 @@ pobegin (void)
 static void
 poend (void)
 {
-  htab_delete (po_hash);
+  if (ENABLE_LEAK_CHECK)
+    htab_delete (po_hash);
 }
 
 #define HANDLE_CONDITIONAL_ASSEMBLY(num_read)				\
@@ -2049,16 +2052,18 @@ s_file (int ignore ATTRIBUTE_UNUSED)
       demand_empty_rest_of_line ();
       s_file_string (s);
     }
+  else
+    ignore_rest_of_line ();
 }
 
 static bool
 get_linefile_number (int *flag)
 {
-  expressionS exp;
+  offsetT val;
 
   SKIP_WHITESPACE ();
 
-  if (*input_line_pointer < '0' || *input_line_pointer > '9')
+  if (is_end_of_stmt (*input_line_pointer))
     return false;
 
   /* Don't mistakenly interpret octal numbers as line numbers.  */
@@ -2069,16 +2074,17 @@ get_linefile_number (int *flag)
       return true;
     }
 
-  expression_and_evaluate (&exp);
-  if (exp.X_op != O_constant)
+  val = get_single_number ();
+  /* Zero was handled above; getting back zero indicates an error.  */
+  if (val == 0)
     return false;
 
 #if defined (BFD64) || LONG_MAX > INT_MAX
-  if (exp.X_add_number < INT_MIN || exp.X_add_number > INT_MAX)
+  if (val < INT_MIN || val > INT_MAX)
     return false;
 #endif
 
-  *flag = exp.X_add_number;
+  *flag = val;
 
   return true;
 }
@@ -2102,90 +2108,94 @@ s_linefile (int ignore ATTRIBUTE_UNUSED)
     }
 
   if (linenum < 0)
-    /* Some of the back ends can't deal with non-positive line numbers.
-       Besides, it's silly.  GCC however will generate a line number of
-       zero when it is pre-processing builtins for assembler-with-cpp files:
-
-	  # 0 "<built-in>"
-
-       We do not want to barf on this, especially since such files are used
-       in the GCC and GDB testsuites.  So we check for negative line numbers
-       rather than non-positive line numbers.  */
-    as_warn (_("line numbers must be positive; line number %d rejected"),
-	     linenum);
-  else
     {
+      /* Some of the back ends can't deal with non-positive line numbers.
+	 Besides, it's silly.  GCC however will generate a line number of
+	 zero when it is pre-processing builtins for assembler-with-cpp files:
+
+	 # 0 "<built-in>"
+
+	 We do not want to barf on this, especially since such files are used
+	 in the GCC and GDB testsuites.  So we check for negative line numbers
+	 rather than non-positive line numbers.  */
+      as_warn (_("line numbers must be positive; line number %d rejected"),
+	       linenum);
+      ignore_rest_of_line ();
+      return;
+    }
+
+  SKIP_WHITESPACE ();
+
+  if (*input_line_pointer == '"')
+    {
+      int this_flag;
       int length = 0;
-
-      SKIP_WHITESPACE ();
-
-      if (*input_line_pointer == '"')
-	file = demand_copy_string (&length);
-      else if (*input_line_pointer == '.')
+      file = demand_copy_string (&length);
+      if (file == NULL)
 	{
-	  /* buffer_and_nest() may insert this form.  */
-	  ++input_line_pointer;
-	  flags = 1 << 3;
-	}
-
-      if (file)
-	{
-	  int this_flag;
-
-	  while (get_linefile_number (&this_flag))
-	    switch (this_flag)
-	      {
-		/* From GCC's cpp documentation:
-		   1: start of a new file.
-		   2: returning to a file after having included another file.
-		   3: following text comes from a system header file.
-		   4: following text should be treated as extern "C".
-
-		   4 is nonsensical for the assembler; 3, we don't care about,
-		   so we ignore it just in case a system header file is
-		   included while preprocessing assembly.  So 1 and 2 are all
-		   we care about, and they are mutually incompatible.
-		   new_logical_line_flags() demands this.  */
-	      case 1:
-	      case 2:
-		if (flags && flags != (1 << this_flag))
-		  as_warn (_("incompatible flag %i in line directive"),
-			   this_flag);
-		else
-		  flags |= 1 << this_flag;
-		break;
-
-	      case 3:
-	      case 4:
-		/* We ignore these.  */
-		break;
-
-	      default:
-		as_warn (_("unsupported flag %i in line directive"),
-			 this_flag);
-		break;
-	      }
-
-	  if (!is_end_of_stmt (*input_line_pointer))
-	    file = NULL;
-        }
-
-      if (file || flags)
-	{
-	  demand_empty_rest_of_line ();
-
-	  /* read_a_source_file() will bump the line number only if the line
-	     is terminated by '\n'.  */
-	  if (input_line_pointer[-1] == '\n')
-	    linenum--;
-
-	  new_logical_line_flags (file, linenum, flags);
-#ifdef LISTING
-	  if (listing)
-	    listing_source_line (linenum);
-#endif
+	  ignore_rest_of_line ();
 	  return;
 	}
+
+      while (get_linefile_number (&this_flag))
+	switch (this_flag)
+	  {
+	    /* From GCC's cpp documentation:
+	       1: start of a new file.
+	       2: returning to a file after having included another file.
+	       3: following text comes from a system header file.
+	       4: following text should be treated as extern "C".
+
+	       4 is nonsensical for the assembler; 3, we don't care about,
+	       so we ignore it just in case a system header file is
+	       included while preprocessing assembly.  So 1 and 2 are all
+	       we care about, and they are mutually incompatible.
+	       new_logical_line_flags() demands this.  */
+	  case 1:
+	  case 2:
+	    if (flags && flags != (1 << this_flag))
+	      as_warn (_("incompatible flag %i in line directive"),
+		       this_flag);
+	    else
+	      flags |= 1 << this_flag;
+	    break;
+
+	  case 3:
+	  case 4:
+	    /* We ignore these.  */
+	    break;
+
+	  default:
+	    as_warn (_("unsupported flag %i in line directive"),
+		     this_flag);
+	    break;
+	  }
+
+      if (!is_end_of_stmt (*input_line_pointer))
+	file = NULL;
+    }
+  else if (*input_line_pointer == '.')
+    {
+      /* buffer_and_nest() may insert this form.  */
+      ++input_line_pointer;
+      flags = 1 << 3;
+    }
+
+  if (file || flags)
+    {
+      demand_empty_rest_of_line ();
+
+      /* read_a_source_file() will bump the line number only if the line
+	 is terminated by '\n'.  */
+      if (input_line_pointer[-1] == '\n')
+	linenum--;
+
+      new_logical_line_flags (file, linenum, flags);
+#ifdef LISTING
+      if (listing)
+	listing_source_line (linenum);
+#endif
+      return;
     }
   ignore_rest_of_line ();
 }
@@ -2244,7 +2254,10 @@ s_errwarn (int err)
 
       msg = demand_copy_C_string (&len);
       if (msg == NULL)
-	return;
+	{
+	  ignore_rest_of_line ();
+	  return;
+	}
     }
 
   if (err)
@@ -3138,8 +3151,12 @@ s_print (int ignore ATTRIBUTE_UNUSED)
   int len;
 
   s = demand_copy_C_string (&len);
-  if (s != NULL)
-    printf ("%s\n", s);
+  if (s == NULL)
+    {
+      ignore_rest_of_line ();
+      return;
+    }
+  printf ("%s\n", s);
   demand_empty_rest_of_line ();
 }
 
@@ -3207,12 +3224,12 @@ do_repeat (size_t count, const char *start, const char *end,
 {
   sb one;
   sb many;
+  size_t total, limit;
+  unsigned int line;
+  const char *file = as_where_top (&line);
 
-  if (count > 0x7fffffff)
-    {
-      as_bad (_("excessive count %zu for %s - ignored"), count, start);
-      count = 0;
-    }
+  demand_empty_rest_of_line ();
+  --input_line_pointer;
 
   sb_new (&one);
   if (!buffer_and_nest (start, end, &one, get_non_macro_line_sb))
@@ -3223,6 +3240,14 @@ do_repeat (size_t count, const char *start, const char *end,
     }
 
   sb_terminate (&one);
+
+  limit = (size_t) LONG_MAX < 0xffffffff ? (size_t) LONG_MAX : 0xffffffff;
+  if (_bfd_mul_overflow (count, one.len, &total) || total > limit)
+    {
+      as_bad_where (file, line,
+		    _("excessive count %zu for %s - ignored"), count, start);
+      count = 1;
+    }
 
   if (expander != NULL && !*expander && strstr (one.ptr, "\\+") != NULL)
     {
@@ -3575,7 +3600,7 @@ s_space (int mult)
 	    }
 	  if ((unsigned int) mult <= 1)
 	    total = repeat;
-	  else if (gas_mul_overflow (repeat, mult, &total)
+	  else if (_bfd_mul_overflow (repeat, mult, &total)
 		   || (offsetT) total < 0)
 	    {
 	      as_warn (_(".space repeat count overflow, ignored"));
@@ -3872,6 +3897,7 @@ s_float_space (int float_type)
   char temp[MAXIMUM_NUMBER_OF_CHARS_FOR_FLOAT];
   char *stop = NULL;
   char stopc = 0;
+  char *p;
 
 #ifdef md_cons_align
   md_cons_align (1);
@@ -3905,13 +3931,11 @@ s_float_space (int float_type)
       return;
     }
 
-  while (--count >= 0)
-    {
-      char *p;
-
-      p = frag_more (flen);
-      memcpy (p, temp, flen);
-    }
+  if (count == 1)
+    p = frag_more (flen);
+  else
+    p = frag_var (rs_fill, flen, flen, 0, NULL, count, NULL);
+  memcpy (p, temp, flen);
 
   demand_empty_rest_of_line ();
 
@@ -4099,8 +4123,10 @@ demand_empty_rest_of_line (void)
 /* Silently advance to the end of a statement.  Use this after already having
    issued an error about something bad.  Like demand_empty_rest_of_line,
    this function may leave input_line_pointer one after buffer_limit;
-   Don't call it from within expression parsing code in an attempt to
-   silence further errors.  */
+   Don't call it twice, and don't call both ignore_rest_of_line and
+   demand_empty_rest_of_line as that will consume two lines of input.
+   This rule leads to:  Don't call it from within expression parsing
+   code in an attempt to silence further errors.  */
 
 void
 ignore_rest_of_line (void)
@@ -5180,12 +5206,11 @@ float_cons (/* Clobbers input_line-pointer, checks end-of-line.  */
 		count = count_exp.X_add_number;
 	    }
 #endif
-
-	  while (--count >= 0)
-	    {
-	      p = frag_more (length);
-	      memcpy (p, temp, length);
-	    }
+	  if (count == 1)
+	    p = frag_more (length);
+	  else
+	    p = frag_var (rs_fill, length, length, 0, NULL, count, NULL);
+	  memcpy (p, temp, length);
 	}
       SKIP_WHITESPACE ();
     }
@@ -6115,8 +6140,14 @@ stringer (int bits_appendzero)
 	  break;
 	case '<':
 	  input_line_pointer++;
-	  c = get_single_number ();
-	  stringer_append_char (c, bitsize);
+	  offsetT n = get_single_number ();
+	  if (n != (unsigned char) n)
+	    {
+	      as_bad (_("<nn> out of range"));
+	      ignore_rest_of_line ();
+	      return;
+	    }
+	  stringer_append_char (n, bitsize);
 	  if (*input_line_pointer != '>')
 	    {
 	      as_bad (_("expected <nn>"));
@@ -6339,8 +6370,7 @@ demand_copy_C_string (int *len_pointer)
 	{
 	  if (s[len - 1] == 0)
 	    {
-	      s = 0;
-	      *len_pointer = 0;
+	      s = NULL;
 	      as_bad (_("this string may not contain \'\\0\'"));
 	      break;
 	    }
@@ -6388,7 +6418,6 @@ demand_copy_string (int *lenP)
     {
       as_bad (_("missing string"));
       retval = NULL;
-      ignore_rest_of_line ();
     }
   *lenP = len;
   return retval;
@@ -6483,7 +6512,10 @@ s_incbin (int x ATTRIBUTE_UNUSED)
   SKIP_WHITESPACE ();
   filename = demand_copy_string (& len);
   if (filename == NULL)
-    return;
+    {
+      ignore_rest_of_line ();
+      return;
+    }
 
   SKIP_WHITESPACE ();
 
@@ -6583,8 +6615,8 @@ s_include (int arg ATTRIBUTE_UNUSED)
       filename = demand_copy_string (&i);
       if (filename == NULL)
 	{
-	  /* demand_copy_string has already printed an error and
-	     called ignore_rest_of_line.  */
+	  /* demand_copy_string has already printed an error.  */
+	  ignore_rest_of_line ();
 	  return;
 	}
     }

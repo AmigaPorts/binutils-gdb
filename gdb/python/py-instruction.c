@@ -29,9 +29,10 @@ PyTypeObject py_insn_type = {
 
 /* Python instruction object.  */
 
-struct py_insn_obj {
-  PyObject_HEAD
-};
+struct py_insn_obj: public PyObject
+{};
+
+static_assert (gdb::is_python_allocatable_v<py_insn_obj>);
 
 /* Getter function for gdb.Instruction attributes.  */
 

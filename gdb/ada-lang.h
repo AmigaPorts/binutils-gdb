@@ -172,14 +172,6 @@ extern void ada_value_print (struct value *, struct ui_file *,
 
 				/* Defined in ada-lang.c */
 
-extern void ada_emit_char (int, struct type *, struct ui_file *, int, int);
-
-extern void ada_printchar (int, struct type *, struct ui_file *);
-
-extern void ada_printstr (struct ui_file *, struct type *, const gdb_byte *,
-			  unsigned int, const char *, int,
-			  const struct value_print_options *);
-
 struct value *ada_convert_actual (struct value *actual,
 				  struct type *formal_type0);
 
@@ -198,9 +190,9 @@ extern struct value *ada_coerce_to_simple_array_ptr (struct value *);
 
 struct value *ada_coerce_to_simple_array (struct value *);
 
-extern int ada_is_simple_array_type (struct type *);
+extern bool ada_is_simple_array_type (struct type *);
 
-extern int ada_is_array_descriptor_type (struct type *);
+extern bool ada_is_array_descriptor_type (struct type *);
 
 extern LONGEST ada_discrete_type_low_bound (struct type *);
 
@@ -238,7 +230,7 @@ extern block_symbol ada_lookup_encoded_symbol
 
 extern bound_minimal_symbol ada_lookup_simple_minsym (const char *, objfile *);
 
-extern int ada_scan_number (const char *, int, LONGEST *, int *);
+extern bool ada_scan_number (const char *, int, LONGEST *, int *);
 
 extern struct value *ada_value_primitive_field (struct value *arg1,
 						int offset,
@@ -247,9 +239,11 @@ extern struct value *ada_value_primitive_field (struct value *arg1,
 
 extern struct type *ada_parent_type (struct type *);
 
-extern int ada_is_ignored_field (struct type *, int);
+extern bool ada_is_ignored_field (struct type *, int);
 
-extern int ada_is_constrained_packed_array_type (struct type *);
+/* True iff TYPE represents a standard GNAT constrained
+   packed-array type.  */
+extern bool ada_is_constrained_packed_array_type (struct type *type);
 
 extern struct value *ada_value_primitive_packed_val (struct value *,
 						     const gdb_byte *,
@@ -262,32 +256,32 @@ extern bool ada_is_character_type (struct type *);
 
 extern bool ada_is_string_type (struct type *);
 
-extern int ada_is_tagged_type (struct type *, int);
+extern bool ada_is_tagged_type (struct type *, bool);
 
-extern int ada_is_tag_type (struct type *);
+extern bool ada_is_tag_type (struct type *);
 
 extern gdb::unique_xmalloc_ptr<char> ada_tag_name (struct value *);
 
 extern struct value *ada_tag_value_at_base_address (struct value *obj);
 
-extern int ada_is_parent_field (struct type *, int);
+extern bool ada_is_parent_field (struct type *, int);
 
-extern int ada_is_wrapper_field (struct type *, int);
+extern bool ada_is_wrapper_field (struct type *, int);
 
-extern int ada_is_variant_part (struct type *, int);
+extern bool ada_is_variant_part (struct type *, int);
 
 extern struct type *ada_variant_discrim_type (struct type *, struct type *);
 
 extern const char *ada_variant_discrim_name (struct type *);
 
-extern int ada_is_aligner_type (struct type *);
+extern bool ada_is_aligner_type (struct type *);
 
 extern struct type *ada_aligned_type (struct type *);
 
 extern const gdb_byte *ada_aligned_value_addr (struct type *,
 					       const gdb_byte *);
 
-extern int ada_is_system_address_type (struct type *);
+extern bool ada_is_system_address_type (struct type *);
 
 extern int ada_which_variant_applies (struct type *, struct value *);
 
@@ -312,7 +306,7 @@ extern struct type *ada_find_parallel_type (struct type *,
 
 extern bool get_int_var_value (const char *, LONGEST &value);
 
-extern int ada_prefer_type (struct type *, struct type *);
+extern bool ada_prefer_type (struct type *, struct type *);
 
 extern struct type *ada_get_base_type (struct type *);
 
@@ -335,7 +329,7 @@ extern struct value *ada_value_ind (struct value *);
 
 extern void ada_print_scalar (struct type *, LONGEST, struct ui_file *);
 
-extern int ada_is_range_type_name (const char *);
+extern bool ada_is_range_type_name (const char *);
 
 extern enum ada_renaming_category ada_parse_renaming (struct symbol *,
 						      const char **,
@@ -372,7 +366,7 @@ extern std::vector<ada_exc_info> ada_exceptions_list (const char *regexp);
 
 /* Tasking-related: ada-tasks.c */
 
-extern int valid_task_id (int);
+extern bool valid_task_id (int);
 
 extern struct ada_task_info *ada_get_task_info_from_ptid (ptid_t ptid);
 

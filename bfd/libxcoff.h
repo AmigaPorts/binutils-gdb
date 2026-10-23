@@ -217,22 +217,19 @@ struct xcoff_backend_data_rec
 #define bfd_xcoff_text_align_power(a) ((xcoff_data (a)->text_align_power))
 #define bfd_xcoff_data_align_power(a) ((xcoff_data (a)->data_align_power))
 
-/* xcoff*_ppc_relocate_section macros  */
-#define XCOFF_MAX_CALCULATE_RELOCATION (0x32)
-#define XCOFF_MAX_COMPLAIN_OVERFLOW (4)
 /* N_ONES produces N one bits, without overflowing machine arithmetic.  */
 #ifdef N_ONES
 #undef N_ONES
 #endif
 #define N_ONES(n) (((((bfd_vma) 1 << ((n) - 1)) - 1) << 1) | 1)
 
-typedef bool xcoff_reloc_function (bfd *, asection *, bfd *,
-				   struct internal_reloc *,
-				   struct internal_syment *,
-				   struct reloc_howto_struct *,
-				   bfd_vma, bfd_vma,
-				   bfd_vma *, bfd_byte *,
-				   struct bfd_link_info *);
+typedef bfd_reloc_status_type xcoff_reloc_function (bfd *, asection *, bfd *,
+						    struct internal_reloc *,
+						    struct internal_syment *,
+						    struct reloc_howto_struct *,
+						    bfd_vma, bfd_vma,
+						    bfd_vma *, bfd_byte *,
+						    struct bfd_link_info *);
 
 typedef bool xcoff_complain_function (bfd *, bfd_vma, bfd_vma,
 					     struct reloc_howto_struct *);
@@ -318,4 +315,11 @@ extern enum xcoff_stub_type bfd_xcoff_type_of_stub
 extern struct xcoff_stub_hash_entry *bfd_xcoff_get_stub_entry
   (asection *, struct xcoff_link_hash_entry *, struct bfd_link_info *);
 
+extern bool _bfd_xcoff_bfd_free_cached_info (bfd *) ATTRIBUTE_HIDDEN;
+
+extern bool _bfd_xcoff_relocate_section
+  (bfd *, struct bfd_link_info *, bfd *, asection *, bfd_byte *,
+   struct internal_reloc *, struct internal_syment *, asection **,
+   bool, size_t, const struct reloc_howto_struct *,
+   xcoff_reloc_function *const *) ATTRIBUTE_HIDDEN;
 #endif /* LIBXCOFF_H */

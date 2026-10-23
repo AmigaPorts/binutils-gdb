@@ -162,12 +162,7 @@ static const registry<inferior>::key<ppc_inferior_data> ppc_inferior_data_key;
 ppc_inferior_data *
 get_ppc_per_inferior (inferior *inf)
 {
-  ppc_inferior_data *per_inf = ppc_inferior_data_key.get (inf);
-
-  if (per_inf == nullptr)
-    per_inf = ppc_inferior_data_key.emplace (inf);
-
-  return per_inf;
+  return &ppc_inferior_data_key.try_emplace (inf);
 }
 
 /* To be used by skip_prologue.  */
@@ -807,7 +802,7 @@ rs6000_in_function_epilogue_frame_p (const frame_info_ptr &curfrm,
 
 /* Implement the stack_frame_destroyed_p gdbarch method.  */
 
-static int
+static bool
 rs6000_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   return rs6000_in_function_epilogue_frame_p (get_current_frame (),
@@ -2178,7 +2173,7 @@ skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc, CORE_ADDR lim_pc,
 
 	  tmp = find_pc_misc_function (pc);
 	  if (tmp >= 0
-	      && strcmp (misc_function_vector[tmp].name, main_name ()) == 0)
+	      && streq (misc_function_vector[tmp].name, main_name ()))
 	    return pc + 8;
 	}
     }
@@ -2255,10 +2250,10 @@ rs6000_skip_main_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       /* We check for ___eabi (three leading underscores) in addition
 	 to __eabi in case the GCC option "-fleading-underscore" was
 	 used to compile the program.  */
-      if (s.minsym != NULL
-	  && s.minsym->linkage_name () != NULL
-	  && (strcmp (s.minsym->linkage_name (), "__eabi") == 0
-	      || strcmp (s.minsym->linkage_name (), "___eabi") == 0))
+      if (s.minsym != nullptr
+	  && s.minsym->linkage_name () != nullptr
+	  && (streq (s.minsym->linkage_name (), "__eabi")
+	      || streq (s.minsym->linkage_name (), "___eabi")))
 	pc += 4;
     }
   return pc;
@@ -2294,11 +2289,11 @@ rs6000_frame_align (struct gdbarch *gdbarch, CORE_ADDR addr)
    gdbarch_skip_trampoline_code hooks in handle_inferior_event() to skip past
    @FIX code.  */
 
-static int
+static bool
 rs6000_in_solib_return_trampoline (struct gdbarch *gdbarch,
 				   CORE_ADDR pc, const char *name)
 {
-  return name && startswith (name, "@FIX");
+  return name != nullptr && startswith (name, "@FIX");
 }
 
 /* Skip code that the user doesn't want to see when stepping:
@@ -2649,14 +2644,14 @@ rs6000_pseudo_register_type (struct gdbarch *gdbarch, int regnum)
    since the raw vrX registers will already show in these cases.  For
    other pseudo-registers we use the default membership function.  */
 
-static int
+static bool
 rs6000_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 				   const struct reggroup *group)
 {
   ppc_gdbarch_tdep *tdep = gdbarch_tdep<ppc_gdbarch_tdep> (gdbarch);
 
   if (IS_V_ALIAS_PSEUDOREG (tdep, regnum))
-    return 0;
+    return false;
   else
     return default_register_reggroup_p (gdbarch, regnum, group);
 }
@@ -2664,7 +2659,7 @@ rs6000_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 /* The register format for RS/6000 floating point registers is always
    double, we need a conversion if the memory format is float.  */
 
-static int
+static bool
 rs6000_convert_register_p (struct gdbarch *gdbarch, int regnum,
 			   struct type *type)
 {
@@ -2696,12 +2691,12 @@ ieee_128_float_regnum_adjust (struct gdbarch *gdbarch, struct type *type,
   return regnum;
 }
 
-static int
+static bool
 rs6000_register_to_value (const frame_info_ptr &frame,
 			  int regnum,
 			  struct type *type,
 			  gdb_byte *to,
-			  int *optimizedp, int *unavailablep)
+			  bool *optimizedp, bool *unavailablep)
 {
   struct gdbarch *gdbarch = get_frame_arch (frame);
   gdb_byte from[PPC_MAX_REGISTER_SIZE];
@@ -2717,12 +2712,12 @@ rs6000_register_to_value (const frame_info_ptr &frame,
   frame_info_ptr next_frame = get_next_frame_sentinel_okay (frame);
   if (!get_frame_register_bytes (next_frame, regnum, 0, from_view, optimizedp,
 				 unavailablep))
-    return 0;
+    return false;
 
   target_float_convert (from, builtin_type (gdbarch)->builtin_double,
 			to, type);
-  *optimizedp = *unavailablep = 0;
-  return 1;
+  *optimizedp = *unavailablep = false;
+  return true;
 }
 
 static void
@@ -3305,7 +3300,7 @@ efp_ax_pseudo_register_collect (struct gdbarch *gdbarch,
   ax_reg_mask (ax, vr0 + reg_index);
 }
 
-static int
+static void
 rs6000_ax_pseudo_register_collect (struct gdbarch *gdbarch,
 				   struct agent_expr *ax, int reg_nr)
 {
@@ -3336,10 +3331,9 @@ rs6000_ax_pseudo_register_collect (struct gdbarch *gdbarch,
       efp_ax_pseudo_register_collect (gdbarch, ax, reg_nr);
     }
   else
-    internal_error (_("rs6000_pseudo_register_collect: "
-		    "called on unexpected register '%s' (%d)"),
-		    gdbarch_register_name (gdbarch, reg_nr), reg_nr);
-  return 0;
+    gdb_assert_not_reached ("rs6000_pseudo_register_collect: "
+			    "called on unexpected register '%s' (%d)",
+			    gdbarch_register_name (gdbarch, reg_nr), reg_nr);
 }
 
 
@@ -4104,8 +4098,7 @@ bfd_uses_spe_extensions (bfd *abfd)
       ptr += 12;
 
       /* The name must be "APUinfo\0".  */
-      if (name_len != 8
-	  && strcmp ((const char *) ptr, "APUinfo") != 0)
+      if (name_len != 8 && !streq ((const char *) ptr, "APUinfo"))
 	break;
       ptr += name_len;
 
@@ -7145,8 +7138,6 @@ UNKNOWN_PREFIX_OP:
   if (record_full_arch_list_add_reg (regcache, PPC_PC_REGNUM))
     return -1;
 
-  if (record_full_arch_list_add_end ())
-    return -1;
   return 0;
 }
 
@@ -7192,8 +7183,9 @@ ppc_process_record (struct gdbarch *gdbarch, struct regcache *regcache,
 
       if (tdep->ppc_syscall_record != NULL)
 	{
-	  if (tdep->ppc_syscall_record (regcache) != 0)
-	    return -1;
+	  int res = tdep->ppc_syscall_record (regcache);
+	  if (res != 0)
+	    return res;
 	}
       else
 	{
@@ -7452,8 +7444,6 @@ UNKNOWN_OP:
     }
 
   if (record_full_arch_list_add_reg (regcache, PPC_PC_REGNUM))
-    return -1;
-  if (record_full_arch_list_add_end ())
     return -1;
   return 0;
 }
@@ -8347,7 +8337,7 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 
   set_gdbarch_gen_return_address (gdbarch, rs6000_gen_return_address);
 
-  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, 1);
+  set_gdbarch_have_nonsteppable_watchpoint (gdbarch, true);
 
   set_gdbarch_num_regs (gdbarch, PPC_NUM_REGS);
 
@@ -8376,7 +8366,7 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_float_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);
   set_gdbarch_long_double_bit (gdbarch, 16 * TARGET_CHAR_BIT);
-  set_gdbarch_char_signed (gdbarch, 0);
+  set_gdbarch_char_signed (gdbarch, false);
 
   set_gdbarch_frame_align (gdbarch, rs6000_frame_align);
   if (wordsize == 8)
@@ -8407,10 +8397,6 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
 				       rs6000_breakpoint::bp_from_kind);
   set_gdbarch_program_breakpoint_here_p (gdbarch,
 					 rs6000_program_breakpoint_here_p);
-
-  /* The value of symbols of type N_SO and N_FUN maybe null when
-     it shouldn't be.  */
-  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
 
   /* Handles single stepping of atomic sequences.  */
   set_gdbarch_get_next_pcs (gdbarch, ppc_deal_with_atomic_sequence);
@@ -8452,22 +8438,9 @@ rs6000_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   info.tdesc_data = tdesc_data.get ();
   gdbarch_init_osabi (info, gdbarch);
 
-  switch (info.osabi)
-    {
-    case GDB_OSABI_LINUX:
-    case GDB_OSABI_NETBSD:
-    case GDB_OSABI_UNKNOWN:
-      frame_unwind_append_unwinder (gdbarch, &rs6000_epilogue_frame_unwind);
-      frame_unwind_append_unwinder (gdbarch, &rs6000_frame_unwind);
-      frame_base_append_sniffer (gdbarch, rs6000_frame_base_sniffer);
-      break;
-    default:
-      set_gdbarch_believe_pcc_promotion (gdbarch, 1);
-
-      frame_unwind_append_unwinder (gdbarch, &rs6000_epilogue_frame_unwind);
-      frame_unwind_append_unwinder (gdbarch, &rs6000_frame_unwind);
-      frame_base_append_sniffer (gdbarch, rs6000_frame_base_sniffer);
-    }
+  frame_unwind_append_unwinder (gdbarch, &rs6000_epilogue_frame_unwind);
+  frame_unwind_append_unwinder (gdbarch, &rs6000_frame_unwind);
+  frame_base_append_sniffer (gdbarch, rs6000_frame_base_sniffer);
 
   set_tdesc_pseudo_register_type (gdbarch, rs6000_pseudo_register_type);
   set_tdesc_pseudo_register_reggroup_p (gdbarch,
@@ -8571,8 +8544,7 @@ powerpc_set_vector_abi (const char *args, int from_tty,
   for (vector_abi = POWERPC_VEC_AUTO;
        vector_abi != POWERPC_VEC_LAST;
        vector_abi++)
-    if (strcmp (powerpc_vector_abi_string,
-		powerpc_vector_strings[vector_abi]) == 0)
+    if (streq (powerpc_vector_abi_string, powerpc_vector_strings[vector_abi]))
       {
 	powerpc_vector_abi_global = (enum powerpc_vector_abi) vector_abi;
 	break;

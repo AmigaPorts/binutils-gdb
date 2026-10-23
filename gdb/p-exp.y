@@ -222,7 +222,7 @@ exp	:	exp '^'   %prec UNARY
 exp	:	'@' exp    %prec UNARY
 			{ pstate->wrap<unop_addr_operation> ();
 			  if (current_type)
-			    current_type = TYPE_POINTER_TYPE (current_type); }
+			    current_type = current_type->pointer_type; }
 	;
 
 exp	:	'-' exp    %prec UNARY
@@ -615,7 +615,7 @@ block	:	BLOCKNAME
 			      struct symtab *tem =
 				  lookup_symtab (current_program_space, copy.c_str ());
 			      if (tem)
-				$$ = (tem->compunit ()->blockvector ()
+				$$ = (tem->compunit ().blockvector ()
 				      ->static_block ());
 			      else
 				error (_("No file or function \"%s\"."),
@@ -723,8 +723,8 @@ variable:	name_not_typename
 			      if (msymbol.minsym != NULL)
 				pstate->push_new<var_msym_value_operation>
 				  (msymbol);
-			      else if (!have_full_symbols (current_program_space)
-				       && !have_partial_symbols (current_program_space))
+			      else if (!current_program_space->has_full_symbols ()
+				       && !current_program_space->has_partial_symbols ())
 				error (_("No symbol table is loaded.  "
 				       "Use the \"file\" command."));
 			      else
@@ -1374,29 +1374,29 @@ yylex (void)
   switch (namelen)
     {
     case 6:
-      if (strcmp (uptokstart, "OBJECT") == 0)
+      if (streq (uptokstart, "OBJECT"))
 	{
 	  free (uptokstart);
 	  return CLASS;
 	}
-      if (strcmp (uptokstart, "RECORD") == 0)
+      if (streq (uptokstart, "RECORD"))
 	{
 	  free (uptokstart);
 	  return STRUCT;
 	}
-      if (strcmp (uptokstart, "SIZEOF") == 0)
+      if (streq (uptokstart, "SIZEOF"))
 	{
 	  free (uptokstart);
 	  return SIZEOF;
 	}
       break;
     case 5:
-      if (strcmp (uptokstart, "CLASS") == 0)
+      if (streq (uptokstart, "CLASS"))
 	{
 	  free (uptokstart);
 	  return CLASS;
 	}
-      if (strcmp (uptokstart, "FALSE") == 0)
+      if (streq (uptokstart, "FALSE"))
 	{
 	  yylval.lval = 0;
 	  free (uptokstart);
@@ -1404,13 +1404,13 @@ yylex (void)
 	}
       break;
     case 4:
-      if (strcmp (uptokstart, "TRUE") == 0)
+      if (streq (uptokstart, "TRUE"))
 	{
 	  yylval.lval = 1;
 	  free (uptokstart);
 	  return TRUEKEYWORD;
 	}
-      if (strcmp (uptokstart, "SELF") == 0)
+      if (streq (uptokstart, "SELF"))
 	{
 	  /* Here we search for 'this' like
 	     inserted in FPC stabs debug info.  */

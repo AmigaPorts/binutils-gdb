@@ -142,12 +142,10 @@ fbsd_nat_target::pid_to_exec_file (int pid)
 }
 
 /* Iterate over all the memory regions in the current inferior,
-   calling FUNC for each memory region.  DATA is passed as the last
-   argument to FUNC.  */
+   calling FUNC for each memory region.  */
 
-int
-fbsd_nat_target::find_memory_regions (find_memory_region_ftype func,
-				      void *data)
+bool
+fbsd_nat_target::find_memory_regions (find_memory_region_ftype func)
 {
   pid_t pid = inferior_ptid.pid ();
   struct kinfo_vmentry *kve;
@@ -188,9 +186,9 @@ fbsd_nat_target::find_memory_regions (find_memory_region_ftype func,
 	 Pass MODIFIED as true, we do not know the real modification state.  */
       func (kve->kve_start, size, kve->kve_protection & KVME_PROT_READ,
 	    kve->kve_protection & KVME_PROT_WRITE,
-	    kve->kve_protection & KVME_PROT_EXEC, true, false, data);
+	    kve->kve_protection & KVME_PROT_EXEC, true, false, false);
     }
-  return 0;
+  return true;
 }
 
 /* Fetch the command line for a running process.  */
@@ -897,7 +895,7 @@ fbsd_nat_target::thread_name (struct thread_info *thr)
     return nullptr;
   if (ptrace (PT_LWPINFO, lwp, (caddr_t) &pl, sizeof pl) == -1)
     return nullptr;
-  if (strcmp (kp.ki_comm, pl.pl_tdname) == 0)
+  if (streq (kp.ki_comm, pl.pl_tdname))
     return NULL;
   xsnprintf (buf, sizeof buf, "%s", pl.pl_tdname);
   return buf;
@@ -1006,9 +1004,9 @@ fbsd_nat_target::update_thread_list ()
 #ifdef PT_LWP_EVENTS
   /* With support for thread events, threads are added/deleted from the
      list as events are reported, so just try deleting exited threads.  */
-  delete_exited_threads ();
+  delete_exited_threads (this);
 #else
-  prune_threads ();
+  prune_threads (this);
 
   fbsd_add_threads (this, inferior_ptid.pid ());
 #endif

@@ -97,7 +97,7 @@ i386_darwin_sigcontext_addr (const frame_info_ptr &this_frame)
    Without this function, the frame is recognized as a normal frame which is
    not expected.  */
 
-int
+bool
 darwin_dwarf_signal_frame_p (struct gdbarch *gdbarch,
 			     const frame_info_ptr &this_frame)
 {
@@ -277,7 +277,7 @@ i386_darwin_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 static enum gdb_osabi
 i386_mach_o_osabi_sniffer (bfd *abfd)
 {
-  if (!bfd_check_format (abfd, bfd_object))
+  if (!gdb_bfd_check_format (abfd, bfd_object))
     return GDB_OSABI_UNKNOWN;
 
   if (bfd_get_arch (abfd) == bfd_arch_i386)

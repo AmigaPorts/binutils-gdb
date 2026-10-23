@@ -27,12 +27,12 @@ require {!is_remote host}
 if { [catch {file copy -force ${srcdir}/${subdir}/${srcfile} \
 			      [standard_output_file tmp-${srcfile}]}] != 0 } {
     error "Could not create temporary file"
-    return -1
+    return
 }
 
 # Build the test executable using an absolute path.
 if  { [gdb_compile [standard_output_file tmp-${srcfile}] "${binfile}" executable {debug}] != "" } {
-    return -1
+    return
 }
 
 # Unlike most GDB tests, we do not use gdb_reinitialize_dir in this script.
@@ -48,7 +48,7 @@ set line [gdb_get_line_number "set breakpoint 1 here"]
 clean_restart $testfile
 
 set msg "set breakpoint by full path before loading symbols - built absolute"
-if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} {no-message}] != 0 } {
+if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} -no-message] != 0 } {
     pass $msg
 } else {
     fail $msg
@@ -58,7 +58,7 @@ gdb_test "break -q main" \
 	 "Breakpoint.*at.*line.*" "set breakpoint at main - built absolute"
 
 set msg "set breakpoint by full path after loading symbols - built absolute"
-if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} {no-message}] != 0 } {
+if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} -no-message] != 0 } {
     pass $msg
 } else {
     fail $msg
@@ -67,13 +67,13 @@ if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} {no-message}]
 # Build the test executable using a relative path.
 if  { [gdb_compile [relative_filename [pwd] [build_standard_output_file tmp-${srcfile}]] \
 	   "${binfile}" executable {debug}] != "" } {
-    return -1
+    return
 }
 
 clean_restart $testfile
 
 set msg "set breakpoint by full path before loading symbols - built relative"
-if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} {no-message}] != 0 } {
+if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} -no-message] != 0 } {
     pass $msg
 } else {
     fail $msg
@@ -83,7 +83,7 @@ gdb_test "break -q main" \
 	 "Breakpoint.*at.*line.*" "set breakpoint at main - built relative"
 
 set msg "set breakpoint by full path after loading symbols - built relative"
-if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} {no-message}] != 0 } {
+if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} -no-message] != 0 } {
     pass $msg
 } else {
     fail $msg
@@ -95,14 +95,14 @@ if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} {no-message}]
 with_cwd [standard_output_file {}] {
     if  { [gdb_compile [standard_output_file tmp-${srcfile}] "${testfile}" \
 	       executable {debug}] != "" } {
-	return -1
+	return
     }
 }
 
 clean_restart $testfile
 
 set msg "set breakpoint by full path before loading symbols - built other"
-if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} {no-message}] != 0 } {
+if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} -no-message] != 0 } {
     pass $msg
 } else {
     fail $msg
@@ -112,7 +112,7 @@ gdb_test "break -q main" \
 	 "Breakpoint.*at.*line.*" "set breakpoint at main - built other"
 
 set msg "set breakpoint by full path after loading symbols - built other"
-if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} {no-message}] != 0 } {
+if { [gdb_breakpoint [standard_output_file tmp-${srcfile}]:${line} -no-message] != 0 } {
     pass $msg
 } else {
     fail $msg

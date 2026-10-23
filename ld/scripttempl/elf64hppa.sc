@@ -106,14 +106,25 @@ test -n "$CREATE_SHLIB$CREATE_PIE" && test -n "$SHLIB_DATA_ADDR" && COMMONPAGESI
 test -z "$CREATE_SHLIB$CREATE_PIE" && test -n "$DATA_ADDR" && COMMONPAGESIZE=""
 test -n "$RELRO_NOW" && unset SEPARATE_GOTPLT
 test -z "$ATTRS_SECTIONS" && ATTRS_SECTIONS=".gnu.attributes 0 : { KEEP (*(.gnu.attributes)) }"
-DATA_SEGMENT_ALIGN="ALIGN(${SEGMENT_SIZE}) + (. & (${MAXPAGESIZE} - 1))"
-DATA_SEGMENT_RELRO_END=""
-DATA_SEGMENT_END=""
-if test -n "${COMMONPAGESIZE}"; then
-  DATA_SEGMENT_ALIGN="ALIGN (${SEGMENT_SIZE}) - ((${MAXPAGESIZE} - .) & (${MAXPAGESIZE} - 1)); . = DATA_SEGMENT_ALIGN (${MAXPAGESIZE}, ${COMMONPAGESIZE})"
-  DATA_SEGMENT_END=". = DATA_SEGMENT_END (.);"
-  DATA_SEGMENT_RELRO_END=". = DATA_SEGMENT_RELRO_END (${SEPARATE_GOTPLT-0}, .);"
+
+if test -z "$DATA_SEGMENT_ALIGN"; then
+  test -n "$CREATE_SHLIB$CREATE_PIE" && test -n "$SHLIB_DATA_ADDR" && COMMONPAGESIZE=""
+  test -z "$CREATE_SHLIB$CREATE_PIE" && test -n "$DATA_ADDR" && COMMONPAGESIZE=""
+  DATA_SEGMENT_ALIGN="ALIGN(${SEGMENT_SIZE}) + (. & (${MAXPAGESIZE} - 1))"
+  DATA_SEGMENT_RELRO_END=""
+  DATA_SEGMENT_END=""
+  if test -n "${COMMONPAGESIZE}"; then
+    if test "${SEGMENT_SIZE}" != "${MAXPAGESIZE}"; then
+      DATA_SEGMENT_ALIGN="ALIGN (${SEGMENT_SIZE}) - ((${MAXPAGESIZE} - .) & (${MAXPAGESIZE} - 1)); \
+      . = DATA_SEGMENT_ALIGN (${MAXPAGESIZE}, ${COMMONPAGESIZE})"
+    else
+      DATA_SEGMENT_ALIGN="DATA_SEGMENT_ALIGN (${MAXPAGESIZE}, ${COMMONPAGESIZE})"
+    fi
+    DATA_SEGMENT_END=". = DATA_SEGMENT_END (.);"
+    DATA_SEGMENT_RELRO_END=". = DATA_SEGMENT_RELRO_END (${SEPARATE_GOTPLT-0}, .);"
+  fi
 fi
+
 if test -z "${INITIAL_READONLY_SECTIONS}${CREATE_SHLIB}"; then
   INITIAL_READONLY_SECTIONS=".interp       ${RELOCATING-0} : { *(.interp) }"
 fi
@@ -428,6 +439,15 @@ cat <<EOF
   ${CREATE_SHLIB+${RELOCATING+. = ${SHLIB_DATA_ADDR-${DATA_SEGMENT_ALIGN}};}}
   ${CREATE_PIE+${RELOCATING+. = ${SHLIB_DATA_ADDR-${DATA_SEGMENT_ALIGN}};}}
 
+  /* Put .data at start of segment.  */
+  .data         ${RELOCATING-0} :
+  {
+    ${RELOCATING+${DATA_START_SYMBOLS}}
+    *(.data${RELOCATING+ .data.* .gnu.linkonce.d.*})
+    ${CONSTRUCTING+SORT(CONSTRUCTORS)}
+  }
+  .data1        ${RELOCATING-0} : { *(.data1) }
+
   /* Exception handling  */
   .eh_frame     ${RELOCATING-0} : ONLY_IF_RW { KEEP (*(.eh_frame)) }
   .gcc_except_table ${RELOCATING-0} : ONLY_IF_RW { *(.gcc_except_table${RELOCATING+ .gcc_except_table.*}) }
@@ -459,13 +479,6 @@ cat <<EOF
 
   ${DATA_PLT+${PLT_BEFORE_GOT-${PLT}}}
 
-  .data         ${RELOCATING-0} :
-  {
-    ${RELOCATING+${DATA_START_SYMBOLS}}
-    *(.data${RELOCATING+ .data.* .gnu.linkonce.d.*})
-    ${CONSTRUCTING+SORT(CONSTRUCTORS)}
-  }
-  .data1        ${RELOCATING-0} : { *(.data1) }
   ${WRITABLE_RODATA+${RODATA}}
   ${OTHER_READWRITE_SECTIONS}
   ${SMALL_DATA_CTOR+${RELOCATING+${CTOR}}}

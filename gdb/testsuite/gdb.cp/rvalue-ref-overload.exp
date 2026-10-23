@@ -26,14 +26,14 @@ standard_testfile .cc
 
 if {[prepare_for_testing $testfile.exp $testfile $srcfile \
     {debug c++ additional_flags="-std=gnu++11"}]} {
-    return -1
+    return
 }
 
 # Set it up at a breakpoint so we can play with the variable values.
 
 if {![runto 'marker1']} {
     untested "couldn't run to marker1"
-    return -1
+    return
 }
 
 # Prevent symbol on address 0x0 being printed.
@@ -64,7 +64,6 @@ gdb_test "print f (i)" "1" "lvalue reference overload"
 
 gdb_test "print f (ci)" "2" "lvalue reference to const overload"
 
-setup_kfail "c++/15372" "*-*-*"
 gdb_test "print f (3)" "3" "rvalue reference overload"
 
 gdb_test "print g (i)" \

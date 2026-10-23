@@ -94,7 +94,7 @@ invoke_match_method (PyObject *matcher, PyObject *py_obj_type,
   if (enabled == 0)
     {
       /* Return 'None' if the matcher is not enabled.  */
-      Py_RETURN_NONE;
+      return py_none ().release ();
     }
 
   gdbpy_ref<> match_method (PyObject_GetAttrString (matcher,
@@ -123,7 +123,7 @@ gdbpy_get_matching_xmethod_workers
 
   gdbpy_enter enter_py;
 
-  gdbpy_ref<> py_type (type_to_type_object (obj_type));
+  gdbpy_ref<> py_type = type_to_type_object (obj_type);
   if (py_type == NULL)
     {
       gdbpy_print_stack ();
@@ -444,7 +444,7 @@ python_xmethod_worker::do_get_result_type (value *obj,
       if (!types_equal (obj_type, this_type))
 	obj = value_cast (this_type, obj);
     }
-  gdbpy_ref<> py_value_obj (value_to_value_object (obj));
+  gdbpy_ref<> py_value_obj = value_to_value_object (obj);
   if (py_value_obj == NULL)
     {
       gdbpy_print_stack ();
@@ -458,20 +458,29 @@ python_xmethod_worker::do_get_result_type (value *obj,
       return EXT_LANG_RC_ERROR;
     }
 
-  /* PyTuple_SET_ITEM steals the reference of the element, hence the
+  /* PyTuple_SetItem steals the reference of the element, hence the
      release.  */
-  PyTuple_SET_ITEM (py_arg_tuple.get (), 0, py_value_obj.release ());
+  if (PyTuple_SetItem (py_arg_tuple.get (), 0, py_value_obj.release ()) < 0)
+    {
+      gdbpy_print_stack ();
+      return EXT_LANG_RC_ERROR;
+    }
 
   for (i = 0; i < args.size (); i++)
     {
-      PyObject *py_value_arg = value_to_value_object (args[i]);
+      gdbpy_ref<> py_value_arg = value_to_value_object (args[i]);
 
-      if (py_value_arg == NULL)
+      if (py_value_arg == nullptr)
 	{
 	  gdbpy_print_stack ();
 	  return EXT_LANG_RC_ERROR;
 	}
-      PyTuple_SET_ITEM (py_arg_tuple.get (), i + 1, py_value_arg);
+      if (PyTuple_SetItem (py_arg_tuple.get (), i + 1,
+			   py_value_arg.release ()) < 0)
+	{
+	  gdbpy_print_stack ();
+	  return EXT_LANG_RC_ERROR;
+	}
     }
 
   gdbpy_ref<> py_result_type
@@ -529,7 +538,7 @@ python_xmethod_worker::invoke (struct value *obj,
       if (!types_equal (obj_type, this_type))
 	obj = value_cast (this_type, obj);
     }
-  gdbpy_ref<> py_value_obj (value_to_value_object (obj));
+  gdbpy_ref<> py_value_obj = value_to_value_object (obj);
   if (py_value_obj == NULL)
     {
       gdbpy_print_stack ();
@@ -543,21 +552,24 @@ python_xmethod_worker::invoke (struct value *obj,
       error (_("Error while executing Python code."));
     }
 
-  /* PyTuple_SET_ITEM steals the reference of the element, hence the
+  /* PyTuple_SetItem steals the reference of the element, hence the
      release.  */
-  PyTuple_SET_ITEM (py_arg_tuple.get (), 0, py_value_obj.release ());
+  if (PyTuple_SetItem (py_arg_tuple.get (), 0, py_value_obj.release ()) < 0)
+    return nullptr;
 
   for (i = 0; i < args.size (); i++)
     {
-      PyObject *py_value_arg = value_to_value_object (args[i]);
+      gdbpy_ref<> py_value_arg = value_to_value_object (args[i]);
 
-      if (py_value_arg == NULL)
+      if (py_value_arg == nullptr)
 	{
 	  gdbpy_print_stack ();
 	  error (_("Error while executing Python code."));
 	}
 
-      PyTuple_SET_ITEM (py_arg_tuple.get (), i + 1, py_value_arg);
+      if (PyTuple_SetItem (py_arg_tuple.get (), i + 1,
+			   py_value_arg.release ()) < 0)
+	return nullptr;
     }
 
   gdbpy_ref<> py_result (PyObject_CallObject (m_py_worker,

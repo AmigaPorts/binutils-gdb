@@ -452,7 +452,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
   const bfd_target *fail_targ;
   int match_count, best_count, best_match;
   int ar_match_index;
-  unsigned int initial_section_id = _bfd_section_id;
+  unsigned int initial_section_id;
   struct bfd_preserve preserve, preserve_match;
   bfd_cleanup cleanup = NULL;
   struct per_xvec_messages messages = { abfd, PER_XVEC_NO_TARGET, NULL, NULL };
@@ -492,6 +492,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       free (matching_vector);
       return false;
     }
+  initial_section_id = _bfd_section_id;
 
   /* Presume the answer is yes.  */
   abfd->format = format;
@@ -550,13 +551,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
 	      /* An archive with object files matching the archive
 		 target is OK.  Other archives should be further
 		 tested.  */
-	      || (bfd_has_map (abfd)
-		  && bfd_get_error () != bfd_error_wrong_object_format)
-	      /* Empty archives can match the current target.
-		 Attempting to read the armap will result in a file
-		 truncated error.  */
-	      || (!bfd_has_map (abfd)
-		  && bfd_get_error () == bfd_error_file_truncated))
+	      || bfd_get_error () != bfd_error_wrong_object_format)
 	    goto ok_ret;
 	}
       else
@@ -628,8 +623,7 @@ bfd_check_format_matches (bfd *abfd, bfd_format format, char ***matching)
       if (cleanup)
 	{
 	  if (abfd->format != bfd_archive
-	      || (bfd_has_map (abfd)
-		  && bfd_get_error () != bfd_error_wrong_object_format))
+	      || bfd_get_error () != bfd_error_wrong_object_format)
 	    {
 	      /* If this is the default target, accept it, even if
 		 other targets might match.  People who want those

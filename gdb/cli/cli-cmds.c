@@ -30,6 +30,7 @@
 #include "value.h"
 #include "language.h"
 #include "filenames.h"
+#include "filesystem.h"
 #include "objfiles.h"
 #include "source.h"
 #include "disasm.h"
@@ -51,6 +52,8 @@
 #include "cli/cli-style.h"
 #include "cli/cli-utils.h"
 #include "terminal.h"
+#include "cli/cli-style.h"
+#include "cli-out.h"
 
 #include "extension.h"
 #include "gdbsupport/pathstuff.h"
@@ -243,7 +246,8 @@ with_command_1 (const char *set_cmd_prefix,
   gdb_assert (set_cmd != nullptr);
 
   if (!set_cmd->var.has_value ())
-    error (_("Cannot use this setting with the \"with\" command"));
+    error (_("Cannot use this setting with the \"%ps\" command"),
+	   styled_string (command_style.style (), "with"));
 
   std::string temp_value
     = (delim == nullptr ? args : std::string (args, delim - args));
@@ -487,15 +491,17 @@ static void
 pwd_command (const char *args, int from_tty)
 {
   if (args)
-    error (_("The \"pwd\" command does not take an argument: %s"), args);
+    error (_("The \"%ps\" command does not take an argument: %s"),
+	   styled_string (command_style.style (), "pwd"),
+	   args);
 
-  gdb::unique_xmalloc_ptr<char> cwd (getcwd (NULL, 0));
+  gdb::unique_xmalloc_ptr<char> cwd (gdb_getcwd (NULL, 0));
 
   if (cwd == NULL)
     error (_("Error finding name of working directory: %s"),
 	   safe_strerror (errno));
 
-  if (strcmp (cwd.get (), current_directory) != 0)
+  if (!streq (cwd.get (), current_directory))
     gdb_printf (_("Working directory %ps\n (canonically %ps).\n"),
 		styled_string (file_name_style.style (),
 			       current_directory),
@@ -529,7 +535,7 @@ cd_command (const char *dir, int from_tty)
   /* There's too much mess with DOSish names like "d:", "d:.",
      "d:./foo" etc.  Instead of having lots of special #ifdef'ed code,
      simply get the canonicalized name of the current directory.  */
-  gdb::unique_xmalloc_ptr<char> cwd (getcwd (NULL, 0));
+  gdb::unique_xmalloc_ptr<char> cwd (gdb_getcwd (NULL, 0));
   dir = cwd.get ();
 #endif
 
@@ -716,7 +722,8 @@ source_script_with_search (const char *file, int from_tty, int search_path)
 {
 
   if (file == NULL || *file == 0)
-    error (_("source command requires file name of file to source."));
+    error (_("\"%ps\" command requires file name of file to source."),
+	   styled_string (command_style.style (), "source"));
 
   std::optional<open_script> opened = find_and_open_script (file, search_path);
   if (!opened)
@@ -1038,7 +1045,7 @@ edit_command (const char *arg, int from_tty)
 	    error (_("No source file for address %s."),
 		   paddress (get_current_arch (), sal.pc));
 
-	  gdbarch = sal.symtab->compunit ()->objfile ()->arch ();
+	  gdbarch = sal.symtab->compunit ().objfile ()->arch ();
 	  sym = find_symbol_for_pc (sal.pc);
 	  if (sym)
 	    gdb_printf ("%ps is in %ps (%ps:%ps).\n",
@@ -1269,12 +1276,14 @@ list_command (const char *arg, int from_tty)
 	  set_default_source_symtab_and_line ();
 	  const symtab_and_line cursal
 	    = get_current_source_symtab_and_line (current_program_space);
-	  if (last_symtab_line (cursal.symtab) >= cursal.line)
+	  if (std::optional<int> lineno = last_symtab_line (cursal.symtab);
+	      lineno.has_value () && lineno.value () >= cursal.line)
 	    print_source_lines (cursal.symtab,
 				source_lines_range (cursal.line), 0);
 	  else
-	    error (_("End of the file was already reached, use \"list .\" to"
-		     " list the current location again"));
+	    error (_("End of the file was already reached, use \"%ps\" to"
+		     " list the current location again"),
+		   styled_string (command_style.style (), "list ."));
 	}
 
       /* "l -" lists previous ten lines, the ones before the ten just
@@ -1302,7 +1311,7 @@ list_command (const char *arg, int from_tty)
 	    {
 	      /* Find the current line by getting the PC of the currently
 		 selected frame, and finding the line associated to it.  */
-	      frame_info_ptr frame = get_selected_frame (nullptr);
+	      frame_info_ptr frame = get_selected_frame ();
 	      CORE_ADDR curr_pc = get_frame_pc (frame);
 	      cursal = find_sal_for_pc (curr_pc, 0);
 
@@ -1349,9 +1358,10 @@ list_command (const char *arg, int from_tty)
      and clear NO_END; however, if one of the arguments is blank,
      set DUMMY_BEG or DUMMY_END to record that fact.  */
 
-  if (!have_full_symbols (current_program_space)
-      && !have_partial_symbols (current_program_space))
-    error (_("No symbol table is loaded.  Use the \"file\" command."));
+  if (!current_program_space->has_full_symbols ()
+      && !current_program_space->has_partial_symbols ())
+    error (_("No symbol table is loaded.  Use the \"%ps\" command."),
+	   styled_string (command_style.style (), "file"));
 
   std::vector<symtab_and_line> sals;
   symtab_and_line sal, sal_end;
@@ -1497,7 +1507,7 @@ list_command (const char *arg, int from_tty)
 	error (_("No source file for address %s."),
 	       paddress (get_current_arch (), sal.pc));
 
-      struct gdbarch *gdbarch = sal.symtab->compunit ()->objfile ()->arch ();
+      struct gdbarch *gdbarch = sal.symtab->compunit ().objfile ()->arch ();
       struct symbol *sym = find_symbol_for_pc (sal.pc);
       if (sym != nullptr)
 	gdb_printf ("%ps is in %s (%ps:%ps).\n",
@@ -1532,7 +1542,8 @@ list_command (const char *arg, int from_tty)
     set_repeat_arguments ("");
 
   if (dummy_beg && sal_end.symtab == nullptr)
-    error (_("No default source file yet.  Do \"help list\"."));
+    error (_("No default source file yet.  Do \"%ps\"."),
+	   styled_string (command_style.style (), "help list"));
   if (dummy_beg)
     {
       source_lines_range range (sal_end.line + 1,
@@ -1540,7 +1551,8 @@ list_command (const char *arg, int from_tty)
       print_source_lines (sal_end.symtab, range, 0);
     }
   else if (sal.symtab == nullptr)
-    error (_("No default source file yet.  Do \"help list\"."));
+    error (_("No default source file yet.  Do \"%ps\"."),
+	   styled_string (command_style.style (), "help list"));
   else if (no_end)
     {
       for (const symtab_and_line &s : sals)
@@ -1805,6 +1817,57 @@ make_command (const char *arg, int from_tty)
     }
 }
 
+/* Print the definition of user command C to STREAM.  Or, if C is a
+   prefix command, show the definitions of all user commands under C
+   (recursively).  PREFIX and NAME combined are the name of the
+   current command.  DEF is true if the output should be written as a
+   source-able script.  */
+static void
+show_user_1 (struct cmd_list_element *c, const char *prefix, const char *name,
+	     struct ui_file *stream, struct ui_out *uiout, bool def)
+{
+  if (cli_user_command_p (c))
+    {
+      struct command_line *cmdlines = c->user_commands.get ();
+
+      if (def)
+	gdb_printf (stream, "define%s %s%s\n",
+		    c->is_prefix () ? "-prefix" : "",
+		    prefix, name);
+      else
+	{
+	  gdb_printf (stream, "User %scommand \"",
+		      c->is_prefix () ? "prefix" : "");
+	  fprintf_styled (stream, title_style.style (), "%s%s",
+			  prefix, name);
+	  gdb_printf (stream, "\":\n");
+	}
+      if (cmdlines)
+	{
+	  print_command_lines (uiout, cmdlines, 1);
+	  if (!def)
+	    gdb_puts ("\n", stream);
+	}
+      if (def)
+	{
+	  gdb_puts ("end\n", stream);
+
+	  if (!c->is_prefix () && !streq (c->doc, "User-defined."))
+	    gdb_printf (stream, "document %s%s\n%s\nend\n",
+			prefix, name, c->doc);
+	}
+    }
+
+  if (c->is_prefix ())
+    {
+      const std::string prefixname = c->prefixname ();
+
+      for (c = *c->subcommands; c != NULL; c = c->next)
+	if (c->theclass == class_user || c->is_prefix ())
+	  show_user_1 (c, prefixname.c_str (), c->name, stream, uiout, def);
+    }
+}
+
 static void
 show_user (const char *args, int from_tty)
 {
@@ -1817,15 +1880,38 @@ show_user (const char *args, int from_tty)
       c = lookup_cmd (&comname, cmdlist, "", NULL, 0, 1);
       if (!cli_user_command_p (c))
 	error (_("Not a user command."));
-      show_user_1 (c, "", args, gdb_stdout);
+      show_user_1 (c, "", args, gdb_stdout, current_uiout, false);
     }
   else
     {
       for (c = cmdlist; c; c = c->next)
 	{
 	  if (cli_user_command_p (c) || c->is_prefix ())
-	    show_user_1 (c, "", c->name, gdb_stdout);
+	    show_user_1 (c, "", c->name, gdb_stdout, current_uiout, false);
 	}
+    }
+}
+
+/* The "save user" command.  */
+
+static void
+save_user_command (const char *filename, int from_tty)
+{
+  if (filename == nullptr || *filename == '\0')
+    error (_("Argument required (file name in which to save)"));
+
+  std::string expanded_filename = gdb_tilde_expand (filename);
+  stdio_file fp;
+  if (!fp.open (expanded_filename.c_str (), "w"))
+    error (_("Unable to open file '%ps' for saving (%s)"),
+	   styled_string (file_name_style.style (), expanded_filename.c_str ()),
+	   safe_strerror (errno));
+
+  cli_ui_out uiout (&fp);
+  for (struct cmd_list_element *c = cmdlist; c != nullptr; c = c->next)
+    {
+      if (cli_user_command_p (c) || c->is_prefix ())
+	show_user_1 (c, "", c->name, &fp, &uiout, true);
     }
 }
 
@@ -2025,7 +2111,8 @@ validate_aliased_command (const char *command)
     = lookup_cmd_1 (& command, cmdlist, NULL, &default_args, 1);
 
   if (c == NULL || c == (struct cmd_list_element *) -1)
-    error (_("Invalid command to alias to: %s"), command);
+    error (_("Invalid command to alias to: %ps"),
+	   styled_string (command_style.style (), command));
 
   if (!default_args.empty ())
     error (_("Cannot define an alias of an alias that has default args"));
@@ -2117,14 +2204,14 @@ alias_command (const char *args, int from_tty)
 
 	if (alias_cmd != nullptr
 	    && alias_cmd->prefix == prefix_cmd
-	    && strcmp (alias_name, alias_cmd->name) == 0)
+	    && streq (alias_name, alias_cmd->name))
 	  error (_("Alias already exists: %s"), alias);
 
 	/* Check ALIAS differs from the found CMD.  */
 
-	if (cmd->prefix == prefix_cmd
-	    && strcmp (alias_name, cmd->name) == 0)
-	  error (_("Alias %s is the name of an existing command"), alias);
+	if (cmd->prefix == prefix_cmd && streq (alias_name, cmd->name))
+	  error (_("Alias \"%ps\" is the name of an existing command"),
+		 styled_string (command_style.style (), alias));
       }
   }
 
@@ -2243,8 +2330,8 @@ ambiguous_line_spec (gdb::array_view<const symtab_and_line> sals,
 static int
 cmp_symtabs (const symtab_and_line &sala, const symtab_and_line &salb)
 {
-  const char *dira = sala.symtab->compunit ()->dirname ();
-  const char *dirb = salb.symtab->compunit ()->dirname ();
+  const char *dira = sala.symtab->compunit ().dirname ();
+  const char *dirb = salb.symtab->compunit ().dirname ();
   int r;
 
   if (dira == NULL)
@@ -2667,15 +2754,15 @@ INIT_GDB_FILE (cli_cmds)
   add_cmd ("essential", class_essential, _("\
 GDB essential commands.\n\
 Welcome to GDB!  This help text aims to provide a quickstart explanation\n\
-that will allow you to start using GDB.  Feel free to use \"help <cmd>\"\n\
-to get further explanations for any command <cmd>, and check the online\n\
+that will allow you to start using GDB.  Feel free to use \"help CMD\"\n\
+to get further explanations for any command CMD, and check the online\n\
 documentation for in-depth explanations.\n\
 Here are some common GDB behaviors that you can expect, which are\n\
 not tied to any specific command but rather GDB functionality itself:\n\
 \n\
 EXPR is any arbitrary expression valid for the current programming language.\n\
-Pressing <return> with an empty prompt executes the last command again.\n\
-You can use <tab> to complete commands and symbols.  Pressing it twice lists\n\
+Pressing <RET> with an empty prompt executes the last command again.\n\
+You can use <TAB> to complete commands and symbols.  Pressing it twice lists\n\
 all possible completions if more than one is available."),
 	   &cmdlist);
   add_cmd ("internals", class_maintenance, _("\
@@ -2996,6 +3083,13 @@ Search for commands matching a REGEXP.\n\
 Usage: apropos [-v] REGEXP\n\
 Flag -v indicates to produce a verbose output, showing full documentation\n\
 of the matching commands."));
+
+  c = add_cmd ("user", no_class, save_user_command, _("\
+Save current user-defined commands as a script.\n\
+Usage: save user FILE\n\
+Use the 'source' command in another debug session to restore them."),
+	       &save_cmdlist);
+  set_cmd_completer (c, deprecated_filename_completer);
 
   add_setshow_uinteger_cmd ("max-user-call-depth", no_class,
 			   &max_user_call_depth, _("\

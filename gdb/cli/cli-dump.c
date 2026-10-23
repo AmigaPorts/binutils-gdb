@@ -31,6 +31,7 @@
 #include "gdbsupport/byte-vector.h"
 #include "gdbarch.h"
 #include "inferior.h"
+#include "cli/cli-style.h"
 
 static gdb::unique_xmalloc_ptr<char>
 scan_expression (const char **cmd, const char *def)
@@ -84,11 +85,13 @@ bfd_openr_or_error (const char *filename, const char *target)
 {
   gdb_bfd_ref_ptr ibfd (gdb_bfd_openr (filename, target));
   if (ibfd == NULL)
-    error (_("Failed to open %s: %s."), filename,
+    error (_("Failed to open %ps: %s."),
+	   styled_string (file_name_style.style (), filename),
 	   bfd_errmsg (bfd_get_error ()));
 
-  if (!bfd_check_format (ibfd.get (), bfd_object))
-    error (_("'%s' is not a recognized file format."), filename);
+  if (!gdb_bfd_check_format (ibfd.get (), bfd_object))
+    error (_("'%ps' is not a recognized file format."),
+	   styled_string (file_name_style.style (), filename));
 
   return ibfd;
 }
@@ -102,7 +105,8 @@ bfd_openw_or_error (const char *filename, const char *target, const char *mode)
     {
       obfd = gdb_bfd_openw (filename, target);
       if (obfd == NULL)
-	error (_("Failed to open %s: %s."), filename,
+	error (_("Failed to open %ps: %s."),
+	       styled_string (file_name_style.style (), filename),
 	       bfd_errmsg (bfd_get_error ()));
       if (!bfd_set_format (obfd.get (), bfd_object))
 	error (_("bfd_openw_or_error: %s."), bfd_errmsg (bfd_get_error ()));
@@ -193,7 +197,7 @@ dump_memory_to_file (const char *cmd, const char *mode, const char *file_format)
   read_memory (lo, buf.data (), count);
 
   /* Have everything.  Open/write the data.  */
-  if (file_format == NULL || strcmp (file_format, "binary") == 0)
+  if (file_format == NULL || streq (file_format, "binary"))
     dump_binary_file (filename.get (), mode, buf.data (), count);
   else
     dump_bfd_file (filename.get (), mode, file_format, lo, buf.data (), count);
@@ -221,7 +225,7 @@ dump_value_to_file (const char *cmd, const char *mode, const char *file_format)
     error (_("Invalid expression."));
 
   /* Have everything.  Open/write the data.  */
-  if (file_format == NULL || strcmp (file_format, "binary") == 0)
+  if (file_format == NULL || streq (file_format, "binary"))
     dump_binary_file (filename.get (), mode, val->contents ().data (),
 		      val->type ()->length ());
   else
@@ -414,7 +418,8 @@ restore_one_section (bfd *ibfd, asection *isec,
   /* Get the data.  */
   gdb::byte_vector buf (size);
   if (!bfd_get_section_contents (ibfd, isec, buf.data (), 0, size))
-    error (_("Failed to read bfd file %s: '%s'."), bfd_get_filename (ibfd),
+    error (_("Failed to read bfd file %ps: '%s'."),
+	   styled_string (file_name_style.style (), bfd_get_filename (ibfd)),
 	   bfd_errmsg (bfd_get_error ()));
 
   gdb_printf ("Restoring section %s (0x%lx to 0x%lx)",
@@ -449,7 +454,9 @@ restore_binary_file (const char *filename, CORE_ADDR load_offset,
   long len;
 
   if (file == NULL)
-    error (_("Failed to open %s: %s"), filename, safe_strerror (errno));
+    error (_("Failed to open %ps: %s"),
+	   styled_string (file_name_style.style (), filename),
+	   safe_strerror (errno));
 
   /* Get the file size for reading.  */
   if (fseek (file.get (), 0, SEEK_END) == 0)
@@ -462,8 +469,8 @@ restore_binary_file (const char *filename, CORE_ADDR load_offset,
     perror_with_name (filename);
 
   if (len <= load_start)
-    error (_("Start address is greater than length of binary file %s."),
-	   filename);
+    error (_("Start address is greater than length of binary file %ps."),
+	   styled_string (file_name_style.style (), filename));
 
   /* Chop off "len" if it exceeds the requested load_end addr.  */
   if (load_end != 0 && load_end < len)

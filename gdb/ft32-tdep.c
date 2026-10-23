@@ -61,7 +61,7 @@ struct ft32_frame_cache
   /* Saved SP in this frame */
   CORE_ADDR saved_sp;
   /* Has the new frame been LINKed.  */
-  bfd_boolean established;
+  bool established;
 };
 
 /* Implement the "frame_align" gdbarch method.  */
@@ -77,7 +77,7 @@ ft32_frame_align (struct gdbarch *gdbarch, CORE_ADDR sp)
 
 constexpr gdb_byte ft32_break_insn[] = { 0x02, 0x00, 0x34, 0x00 };
 
-typedef BP_MANIPULATION (ft32_break_insn) ft32_breakpoint;
+using ft32_breakpoint = BP_MANIPULATION (ft32_break_insn);
 
 /* FT32 register names.  */
 
@@ -206,7 +206,7 @@ ft32_analyze_prologue (CORE_ADDR start_addr, CORE_ADDR end_addr,
   if (start_addr >= end_addr)
     return end_addr;
 
-  cache->established = 0;
+  cache->established = false;
   for (next_addr = start_addr; next_addr < end_addr; next_addr += isize)
     {
       inst = ft32_fetch_instruction (next_addr, &isize, byte_order);
@@ -251,7 +251,7 @@ ft32_analyze_prologue (CORE_ADDR start_addr, CORE_ADDR end_addr,
       inst = ft32_fetch_instruction (next_addr, &isize, byte_order);
       if (FT32_IS_LINK (inst))
 	{
-	  cache->established = 1;
+	  cache->established = true;
 	  for (regnum = FT32_R0_REGNUM; regnum < FT32_PC_REGNUM; regnum++)
 	    {
 	      if (cache->saved_regs[regnum] != REG_UNAVAIL)
@@ -377,7 +377,7 @@ ft32_address_class_name_to_type_flags (struct gdbarch *gdbarch,
 				       const char* name,
 				       type_instance_flags *type_flags_ptr)
 {
-  if (strcmp (name, "flash") == 0)
+  if (streq (name, "flash"))
     {
       *type_flags_ptr = TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1;
       return true;

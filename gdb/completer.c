@@ -90,7 +90,7 @@ public:
   /* Return true of the name in this hash entry is STR.  */
   bool is_name_eq (const char *str) const
   {
-    return strcmp (m_name.get (), str) == 0;
+    return streq (m_name.get (), str);
   }
 
   /* Return the hash value based on the name of the entry.  */
@@ -2200,7 +2200,7 @@ signal_completer (struct cmd_list_element *ignore,
       signame = gdb_signal_to_name ((enum gdb_signal) signum);
 
       /* Ignore the unknown signal case.  */
-      if (!signame || strcmp (signame, "?") == 0)
+      if (!signame || streq (signame, "?"))
 	continue;
 
       if (strncasecmp (signame, word, len) == 0)
@@ -3034,7 +3034,7 @@ gdb_fnwidth (const char *string)
 #if defined (HANDLE_MULTIBYTE)
   mbstate_t ps;
   int left, w;
-  size_t clen;
+  size_t c_len;
   wchar_t wc;
 
   left = strlen (string) + 1;
@@ -3044,7 +3044,7 @@ gdb_fnwidth (const char *string)
   width = pos = 0;
   while (string[pos])
     {
-      if (CTRL_CHAR (string[pos]) || string[pos] == RUBOUT)
+      if (c_iscntrl (string[pos]))
 	{
 	  width += 2;
 	  pos++;
@@ -3052,18 +3052,18 @@ gdb_fnwidth (const char *string)
       else
 	{
 #if defined (HANDLE_MULTIBYTE)
-	  clen = mbrtowc (&wc, string + pos, left - pos, &ps);
-	  if (MB_INVALIDCH (clen))
+	  c_len = mbrtowc (&wc, string + pos, left - pos, &ps);
+	  if (MB_INVALIDCH (c_len))
 	    {
 	      width++;
 	      pos++;
 	      memset (&ps, 0, sizeof (mbstate_t));
 	    }
-	  else if (MB_NULLWCH (clen))
+	  else if (MB_NULLWCH (c_len))
 	    break;
 	  else
 	    {
-	      pos += clen;
+	      pos += c_len;
 	      w = wcwidth (wc);
 	      width += (w >= 0) ? w : 1;
 	    }
@@ -3118,20 +3118,10 @@ gdb_fnprint (const char *to_print, int prefix_bytes,
   s = to_print + prefix_bytes;
   while (*s)
     {
-      if (CTRL_CHAR (*s))
+      if (c_iscntrl (*s))
 	{
 	  displayer->putch (displayer, '^');
-	  displayer->putch (displayer, UNCTRL (*s));
-	  printed_len += 2;
-	  s++;
-#if defined (HANDLE_MULTIBYTE)
-	  memset (&ps, 0, sizeof (mbstate_t));
-#endif
-	}
-      else if (*s == RUBOUT)
-	{
-	  displayer->putch (displayer, '^');
-	  displayer->putch (displayer, '?');
+	  displayer->putch (displayer, c_unctrl (*s));
 	  printed_len += 2;
 	  s++;
 #if defined (HANDLE_MULTIBYTE)

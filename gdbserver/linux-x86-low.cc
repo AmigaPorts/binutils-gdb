@@ -1084,7 +1084,7 @@ x86_target::process_qsupported (gdb::array_view<const char * const> features)
 	       p != NULL;
 	       p = strtok_r (NULL, ",", &saveptr))
 	    {
-	      if (strcmp (p, "i386") == 0)
+	      if (streq (p, "i386"))
 		{
 		  use_xml = 1;
 		  break;
@@ -1663,7 +1663,7 @@ x86_target::get_min_fast_tracepoint_insn_len ()
 	     mention that something has gone awry.  */
 	  if (!warned_about_fast_tracepoints)
 	    {
-	      warning ("4-byte fast tracepoints not available; %s", errbuf);
+	      warning (_("4-byte fast tracepoints not available; %s"), errbuf);
 	      warned_about_fast_tracepoints = 1;
 	    }
 	  return 5;

@@ -23,52 +23,53 @@
 #include "source.h"
 #include "expanded-symbol.h"
 
-/* See readnow-symbols.h.  */
+/* See expanded-symbol.h.  */
 
-struct symtab *
-expanded_symbols_functions::find_last_source_symtab (struct objfile *objfile)
+symtab *
+expanded_symbols_functions::find_last_source_symtab (objfile *objfile)
 {
-  if (objfile->compunit_symtabs.empty ())
+  if (m_compunit_symtabs.empty ())
     return nullptr;
   else
-    return objfile->compunit_symtabs.back ().primary_filetab ();
+    return m_compunit_symtabs.back ()->primary_filetab ();
 }
 
-/* See readnow-symbols.h.  */
+/* See expanded-symbol.h.  */
 
 enum language
-expanded_symbols_functions::lookup_global_symbol_language (
-  struct objfile *objfile, const char *name, domain_search_flags domain,
-  bool *symbol_found_p)
+expanded_symbols_functions::lookup_global_symbol_language
+     (objfile *objfile, const char *name, domain_search_flags domain,
+      bool *symbol_found_p)
 {
   *symbol_found_p = false;
   return language_unknown;
 }
 
-/* See readnow-symbols.h.  */
+/* See expanded-symbol.h.  */
 
-bool
-expanded_symbols_functions::search (struct objfile *objfile,
-			   search_symtabs_file_matcher file_matcher,
-			   const lookup_name_info *lookup_name,
-			   search_symtabs_symbol_matcher symbol_matcher,
-			   search_symtabs_expansion_listener listener,
-			   block_search_flags search_flags,
-			   domain_search_flags domain,
-			   search_symtabs_lang_matcher lang_matcher)
+iteration_status
+expanded_symbols_functions::search
+     (objfile *objfile,
+      search_symtabs_file_matcher file_matcher,
+      const lookup_name_info *lookup_name,
+      search_symtabs_symbol_matcher symbol_matcher,
+      compunit_symtab_iteration_callback compunit_callback,
+      block_search_flags search_flags,
+      domain_search_flags domain,
+      search_symtabs_lang_matcher lang_matcher)
 {
   /* This invariant is documented in quick-functions.h.  */
   gdb_assert (lookup_name != nullptr || symbol_matcher == nullptr);
 
-  for (compunit_symtab &cu : objfile->compunits ())
+  for (compunit_symtab *cu : m_compunit_symtabs)
     {
-      if (lang_matcher != nullptr && !lang_matcher (cu.language ()))
+      if (lang_matcher != nullptr && !lang_matcher (cu->language ()))
 	continue;
 
       if (file_matcher != nullptr)
 	{
 	  bool matched = false;
-	  for (auto st : cu.filetabs ())
+	  for (auto st : cu->filetabs ())
 	    {
 	      if (file_matcher (st->filename (), false))
 		{
@@ -87,25 +88,27 @@ expanded_symbols_functions::search (struct objfile *objfile,
 	    continue;
 	}
 
-      /* Here we simply call the listener (if any) without bothering to
+      /* Here we simply call the callback (if any) without bothering to
 	 consult lookup_name and symbol_matcher (if any).  This should be
-	 okay since i) all symtabs are already expanded and ii) listeners
+	 okay since i) all symtabs are already expanded and ii) callbacks
 	 iterate over matching symbols themselves.  */
-      if (listener != nullptr && !listener (&cu))
-	return false;
+      if (compunit_callback != nullptr
+	  && compunit_callback (cu) == iteration_status::stop)
+	return iteration_status::stop;
     }
-  return true;
+
+  return iteration_status::keep_going;
 }
 
-/* See readnow-symbols.h.  */
+/* See expanded-symbol.h.  */
 
-struct symbol *
-expanded_symbols_functions::find_symbol_by_address (struct objfile *objfile,
-					   CORE_ADDR address)
+symbol *
+expanded_symbols_functions::find_symbol_by_address (objfile *objfile,
+						    CORE_ADDR address)
 {
-  for (compunit_symtab &symtab : objfile->compunits ())
+  for (compunit_symtab *symtab : m_compunit_symtabs)
     {
-      struct symbol *sym = symtab.symbol_at_address (address);
+      symbol *sym = symtab->symbol_at_address (address);
       if (sym != nullptr)
 	return sym;
     }

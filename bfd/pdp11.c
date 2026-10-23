@@ -1264,6 +1264,12 @@ NAME (aout, set_section_contents) (bfd *abfd,
 static bool
 aout_get_external_symbols (bfd *abfd)
 {
+  if (bfd_get_flavour (abfd) != bfd_target_aout_flavour)
+    {
+      bfd_set_error (bfd_error_invalid_operation);
+      return false;
+    }
+
   if (obj_aout_external_syms (abfd) == NULL)
     {
       bfd_size_type count;
@@ -1603,6 +1609,8 @@ NAME (aout, slurp_symbol_table) (bfd *abfd)
   struct external_nlist *old_external_syms;
   aout_symbol_type *cached;
   bfd_size_type cached_size;
+
+  BFD_ASSERT (bfd_get_flavour (abfd) == bfd_target_aout_flavour);
 
   /* If there's no work to be done, don't do any.  */
   if (obj_aout_symbols (abfd) != NULL)
@@ -2235,6 +2243,8 @@ NAME (aout, read_minisymbols) (bfd *abfd,
 			       void * *minisymsp,
 			       unsigned int *sizep)
 {
+  BFD_ASSERT (bfd_get_flavour (abfd) == bfd_target_aout_flavour);
+
   if (dynamic)
     /* We could handle the dynamic symbols here as well, but it's
        easier to hand them off.  */
@@ -2514,19 +2524,19 @@ NAME (aout, sizeof_headers) (bfd *abfd,
 bool
 NAME (aout, bfd_free_cached_info) (bfd *abfd)
 {
-  if ((bfd_get_format (abfd) == bfd_object
-       || bfd_get_format (abfd) == bfd_core)
+#define BFCI_FREE(x) do { free (x); x = NULL; } while (0)
+  if (bfd_get_format (abfd) == bfd_object
       && abfd->tdata.aout_data != NULL)
     {
-#define BFCI_FREE(x) do { free (x); x = NULL; } while (0)
       BFCI_FREE (adata (abfd).line_buf);
       BFCI_FREE (obj_aout_symbols (abfd));
       BFCI_FREE (obj_aout_external_syms (abfd));
       BFCI_FREE (obj_aout_external_strings (abfd));
-      for (asection *o = abfd->sections; o != NULL; o = o->next)
-	BFCI_FREE (o->relocation);
-#undef BFCI_FREE
     }
+
+  for (asection *o = abfd->sections; o != NULL; o = o->next)
+    BFCI_FREE (o->relocation);
+#undef BFCI_FREE
 
   return _bfd_generic_bfd_free_cached_info (abfd);
 }
@@ -2637,6 +2647,8 @@ NAME (aout, link_add_symbols) (bfd *abfd, struct bfd_link_info *info)
 static bool
 aout_link_add_object_symbols (bfd *abfd, struct bfd_link_info *info)
 {
+  BFD_ASSERT (bfd_get_flavour (abfd) == bfd_target_aout_flavour);
+
   if (! aout_get_external_symbols (abfd))
     return false;
   if (! aout_link_add_symbols (abfd, info))
@@ -2800,6 +2812,8 @@ aout_link_check_archive_element (bfd *abfd,
 {
   bfd *oldbfd;
   bool needed;
+
+  BFD_ASSERT (bfd_get_flavour (abfd) == bfd_target_aout_flavour);
 
   if (!aout_get_external_symbols (abfd))
     return false;
@@ -3698,6 +3712,7 @@ static bool
 aout_link_input_bfd (struct aout_final_link_info *flaginfo, bfd *input_bfd)
 {
   BFD_ASSERT (bfd_get_format (input_bfd) == bfd_object);
+  BFD_ASSERT (bfd_get_flavour (input_bfd) == bfd_target_aout_flavour);
 
   /* If this is a dynamic object, it may need special handling.  */
   if ((input_bfd->flags & DYNAMIC) != 0

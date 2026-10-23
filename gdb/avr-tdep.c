@@ -747,12 +747,13 @@ avr_scan_prologue (struct gdbarch *gdbarch, CORE_ADDR pc_beg, CORE_ADDR pc_end,
 
   gdb_assert (vpc < AVR_MAX_PROLOGUE_SIZE);
 
-  /* Handle static small stack allocation using rcall or push.  */
+  /* Handle static small stack allocation using
+     rcall or push.  codespell:ignore rcall */
   avr_gdbarch_tdep *tdep = gdbarch_tdep<avr_gdbarch_tdep> (gdbarch);
   while (scan_stage == 1 && vpc < len)
     {
       insn = extract_unsigned_integer (&prologue[vpc], 2, byte_order);
-      if (insn == 0xd000)	/* rcall .+0 */
+      if (insn == 0xd000)	/* rcall .+0.  codespell:ignore rcall.  */
 	{
 	  info->size += tdep->call_length;
 	  vpc += 2;
@@ -922,7 +923,7 @@ avr_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
 
 constexpr gdb_byte avr_break_insn [] = { 0x98, 0x95 };
 
-typedef BP_MANIPULATION (avr_break_insn) avr_breakpoint;
+using avr_breakpoint = BP_MANIPULATION (avr_break_insn);
 
 /* Determine, for architecture GDBARCH, how a return value of TYPE
    should be returned.  If it is supposed to be returned in registers,
@@ -1412,7 +1413,7 @@ avr_address_class_name_to_type_flags (struct gdbarch *gdbarch,
 				      const char* name,
 				      type_instance_flags *type_flags_ptr)
 {
-  if (strcmp (name, "flash") == 0)
+  if (streq (name, "flash"))
     {
       *type_flags_ptr = AVR_TYPE_INSTANCE_FLAG_ADDRESS_CLASS_FLASH;
       return true;
@@ -1487,7 +1488,6 @@ avr_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_addr_bit (gdbarch, 32);
 
   set_gdbarch_wchar_bit (gdbarch, 2 * TARGET_CHAR_BIT);
-  set_gdbarch_wchar_signed (gdbarch, 1);
 
   set_gdbarch_float_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_double_bit (gdbarch, 4 * TARGET_CHAR_BIT);

@@ -1,4 +1,4 @@
---  Copyright 2025 Free Software Foundation, Inc.
+--  Copyright 2025-2026 Free Software Foundation, Inc.
 --
 --  This program is free software; you can redistribute it and/or modify
 --  it under the terms of the GNU General Public License as published by
@@ -16,7 +16,7 @@
 with Pack; use Pack;
 
 procedure Prog is
-   π : Integer := 3;            --  The Indiana Approximation.
+   π : Float := 3.2;            --  The Indiana Approximation.
    φ : constant := 7;           --  Not even close.
 begin
    Do_Nothing (π'Address);      --  BREAK

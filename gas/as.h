@@ -119,14 +119,6 @@ void *mempcpy(void *, const void *, size_t);
 
 #define xfree free
 
-#if GCC_VERSION >= 7000
-#define gas_mul_overflow(a, b, res) __builtin_mul_overflow (a, b, res)
-#else
-/* Assumes unsigned values.  Careful!  Args evaluated multiple times.  */
-#define gas_mul_overflow(a, b, res) \
-  ((*res) = (a), (*res) *= (b), (b) != 0 && (*res) / (b) != (a))
-#endif
-
 #include "asintl.h"
 
 #define BAD_CASE(val)							    \
@@ -412,6 +404,16 @@ enum multibyte_input_handling
   multibyte_warn_syms
 };
 COMMON enum multibyte_input_handling multibyte_handling;
+
+/* Controls whether relocations referencing local symbols are converted
+   to use section symbols.  */
+enum reloc_section_sym_type
+{
+  reloc_section_sym_all = 0,
+  reloc_section_sym_internal,
+  reloc_section_sym_none
+};
+COMMON enum reloc_section_sym_type flag_reloc_section_sym;
 
 /* TRUE if we should produce a listing.  */
 extern int listing;
@@ -714,7 +716,5 @@ COMMON int flag_sectname_subst;
 #else
 #define SEC_OCTETS 0
 #endif
-
-#define POISON_BFD_BOOLEAN 1
 
 #endif /* GAS */

@@ -356,7 +356,7 @@ private:
 	struct type *range_type = check_typedef (type)->index_type ();
 	LONGEST lowerbound, upperbound;
 	if (!get_discrete_bounds (range_type, &lowerbound, &upperbound))
-	  error ("failed to get range bounds");
+	  error (_("failed to get range bounds"));
 
 	/* CALC is used to calculate the offsets for each element.  */
 	fortran_array_offset_calculator calc (type);
@@ -559,7 +559,7 @@ f_language::value_print_inner (struct value *val, struct ui_file *stream,
 		  field = value_of_variable (sym.symbol, sym.block);
 		}
 	      else
-		field = value_field (val, index);
+		field = val->field (index);
 
 	      if (printed_field > 0)
 		gdb_puts (", ", stream);
@@ -634,8 +634,9 @@ info_common_command_for_block (const struct block *block, const char *comname,
 
 	gdb_assert (sym->loc_class () == LOC_COMMON_BLOCK);
 
-	if (comname && (!sym->linkage_name ()
-			|| strcmp (comname, sym->linkage_name ()) != 0))
+	if (comname != nullptr
+	    && (sym->linkage_name () == nullptr
+		|| !streq (comname, sym->linkage_name ())))
 	  continue;
 
 	if (*any_printed)

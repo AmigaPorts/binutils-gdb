@@ -296,13 +296,7 @@ task_to_str (int taskno, const ada_task_info *task_info)
 static struct ada_tasks_pspace_data *
 get_ada_tasks_pspace_data (struct program_space *pspace)
 {
-  struct ada_tasks_pspace_data *data;
-
-  data = ada_tasks_pspace_data_handle.get (pspace);
-  if (data == NULL)
-    data = ada_tasks_pspace_data_handle.emplace (pspace);
-
-  return data;
+  return &ada_tasks_pspace_data_handle.try_emplace (pspace);
 }
 
 /* Return the ada-tasks module's data for the given inferior (INF).
@@ -320,13 +314,7 @@ get_ada_tasks_pspace_data (struct program_space *pspace)
 static struct ada_tasks_inferior_data *
 get_ada_tasks_inferior_data (struct inferior *inf)
 {
-  struct ada_tasks_inferior_data *data;
-
-  data = ada_tasks_inferior_data_handle.get (inf);
-  if (data == NULL)
-    data = ada_tasks_inferior_data_handle.emplace (inf);
-
-  return data;
+  return &ada_tasks_inferior_data_handle.try_emplace (inf);
 }
 
 /* Return the task number of the task whose thread is THREAD, or zero
@@ -366,9 +354,9 @@ get_task_number_from_id (CORE_ADDR task_id, struct inferior *inf)
   return 0;
 }
 
-/* Return non-zero if TASK_NUM is a valid task number.  */
+/* Return true if TASK_NUM is a valid task number.  */
 
-int
+bool
 valid_task_id (int task_num)
 {
   struct ada_tasks_inferior_data *data;
@@ -477,15 +465,15 @@ read_fat_string_value (char *dest, struct value *val, int max_len)
 
   /* Get the size of the task image by checking the value of the bounds.
      The lower bound is always 1, so we only need to read the upper bound.  */
-  bounds_val = value_ind (value_field (val, bounds_fieldno));
-  len = value_as_long (value_field (bounds_val, upper_bound_fieldno));
+  bounds_val = value_ind (val->field (bounds_fieldno));
+  len = value_as_long (bounds_val->field (upper_bound_fieldno));
 
   /* Make sure that we do not read more than max_len characters...  */
   if (len > max_len)
     len = max_len;
 
   /* Extract LEN characters from the fat string.  */
-  array_val = value_ind (value_field (val, array_fieldno));
+  array_val = value_ind (val->field (array_fieldno));
   read_memory (array_val->address (), (gdb_byte *) dest, len);
 
   /* Add the NUL character to close the string.  */
@@ -640,13 +628,11 @@ ptid_from_atcb_common (struct value *common_value)
   const struct ada_tasks_pspace_data *pspace_data
     = get_ada_tasks_pspace_data (current_program_space);
 
-  ll_value = value_field (common_value, pspace_data->atcb_fieldno.ll);
+  ll_value = common_value->field (pspace_data->atcb_fieldno.ll);
 
   if (pspace_data->atcb_fieldno.ll_lwp >= 0)
-    lwp = value_as_address (value_field (ll_value,
-					 pspace_data->atcb_fieldno.ll_lwp));
-  thread = value_as_long (value_field (ll_value,
-				       pspace_data->atcb_fieldno.ll_thread));
+    lwp = value_as_address (ll_value->field (pspace_data->atcb_fieldno.ll_lwp));
+  thread = value_as_long (ll_value->field (pspace_data->atcb_fieldno.ll_thread));
 
   ptid = target_get_ada_task_ptid (lwp, thread);
 
@@ -684,7 +670,7 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
 
   tcb_value = value_from_contents_and_address (pspace_data->atcb_type,
 					       NULL, task_id);
-  common_value = value_field (tcb_value, pspace_data->atcb_fieldno.common);
+  common_value = tcb_value->field (pspace_data->atcb_fieldno.common);
 
   /* Fill in the task_id.  */
 
@@ -709,8 +695,7 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
     {
       if (pspace_data->atcb_fieldno.image >= 0)
 	read_fat_string_value (task_info->name,
-			       value_field (common_value,
-					    pspace_data->atcb_fieldno.image),
+			       common_value->field (pspace_data->atcb_fieldno.image),
 			       sizeof (task_info->name) - 1);
       else
 	{
@@ -741,31 +726,26 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
   else
     {
       int len = value_as_long
-		  (value_field (common_value,
-				pspace_data->atcb_fieldno.image_len));
+	(common_value->field (pspace_data->atcb_fieldno.image_len));
 
       value_as_string (task_info->name,
-		       value_field (common_value,
-				    pspace_data->atcb_fieldno.image),
+		       common_value->field (pspace_data->atcb_fieldno.image),
 		       len);
     }
 
   /* Compute the task state and priority.  */
 
   task_info->state =
-    value_as_long (value_field (common_value,
-				pspace_data->atcb_fieldno.state));
+    value_as_long (common_value->field (pspace_data->atcb_fieldno.state));
   task_info->priority =
-    value_as_long (value_field (common_value,
-				pspace_data->atcb_fieldno.priority));
+    value_as_long (common_value->field (pspace_data->atcb_fieldno.priority));
 
   /* If the ATCB contains some information about the parent task,
      then compute it as well.  Otherwise, zero.  */
 
   if (pspace_data->atcb_fieldno.parent >= 0)
     task_info->parent =
-      value_as_address (value_field (common_value,
-				     pspace_data->atcb_fieldno.parent));
+      value_as_address (common_value->field (pspace_data->atcb_fieldno.parent));
 
   /* If the task is in an entry call waiting for another task,
      then determine which task it is.  */
@@ -778,10 +758,10 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
 	 entry of another task; then the Task_Id of the called task is
 	 in My_ATCB.Entry_Calls (My_ATCB.ATC_Nesting_Level).Called_Task.  */
       atc_nesting_level_value =
-	value_field (tcb_value, pspace_data->atcb_fieldno.atc_nesting_level);
+	tcb_value->field (pspace_data->atcb_fieldno.atc_nesting_level);
       entry_calls_value =
 	ada_coerce_to_simple_array_ptr
-	  (value_field (tcb_value, pspace_data->atcb_fieldno.entry_calls));
+	(tcb_value->field (pspace_data->atcb_fieldno.entry_calls));
       entry_calls_value_element =
 	value_subscript (entry_calls_value,
 			 value_as_long (atc_nesting_level_value));
@@ -789,8 +769,7 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
 	ada_get_field_index (entry_calls_value_element->type (),
 			     "called_task", 0);
       task_info->called_task =
-	value_as_address (value_field (entry_calls_value_element,
-				       called_task_fieldno));
+	value_as_address (entry_calls_value_element->field (called_task_fieldno));
     }
 
   /* If the ATCB contains some information about RV callers, then
@@ -801,8 +780,7 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
       /* Get the ID of the caller task from Common_ATCB.Call.all.Self.
 	 If Common_ATCB.Call is null, then there is no caller.  */
       const CORE_ADDR call =
-	value_as_address (value_field (common_value,
-				       pspace_data->atcb_fieldno.call));
+	value_as_address (common_value->field (pspace_data->atcb_fieldno.call));
       struct value *call_val;
 
       if (call != 0)
@@ -812,14 +790,13 @@ read_atcb (CORE_ADDR task_id, struct ada_task_info *task_info)
 					     NULL, call);
 	  task_info->caller_task =
 	    value_as_address
-	      (value_field (call_val, pspace_data->atcb_fieldno.call_self));
+	    (call_val->field (pspace_data->atcb_fieldno.call_self));
 	}
     }
 
   task_info->base_cpu
     = (pspace_data->cpu_id_offset
-      + value_as_long (value_field (common_value,
-				    pspace_data->atcb_fieldno.base_cpu)));
+       + value_as_long (common_value->field (pspace_data->atcb_fieldno.base_cpu)));
 
   /* And finally, compute the task ptid.  Note that there is not point
      in computing it if the task is no longer alive, in which case
@@ -899,10 +876,9 @@ read_known_tasks_list (struct ada_tasks_inferior_data *data)
       /* Read the chain.  */
       tcb_value = value_from_contents_and_address (pspace_data->atcb_type,
 						   NULL, task_id);
-      common_value = value_field (tcb_value, pspace_data->atcb_fieldno.common);
+      common_value = tcb_value->field (pspace_data->atcb_fieldno.common);
       task_id = value_as_address
-		  (value_field (common_value,
-				pspace_data->atcb_fieldno.activation_link));
+	(common_value->field (pspace_data->atcb_fieldno.activation_link));
     }
 
   return true;
@@ -1251,8 +1227,9 @@ info_task (struct ui_out *uiout, const char *taskno_str, struct inferior *inf)
     }
 
   if (taskno <= 0 || taskno > data->task_list.size ())
-    error (_("Task ID %d not known.  Use the \"info tasks\" command to\n"
-	     "see the IDs of currently known tasks"), taskno);
+    error (_("Task ID %d not known.  Use the \"%ps\" command to\n"
+	     "see the IDs of currently known tasks"),
+	   taskno, styled_string (command_style.style (), "info tasks"));
   task_info = &data->task_list[taskno - 1];
 
   /* Print the Ada task ID.  */
@@ -1372,8 +1349,9 @@ task_command_1 (const char *taskno_str, int from_tty, struct inferior *inf)
   struct ada_tasks_inferior_data *data = get_ada_tasks_inferior_data (inf);
 
   if (taskno <= 0 || taskno > data->task_list.size ())
-    error (_("Task ID %d not known.  Use the \"info tasks\" command to\n"
-	     "see the IDs of currently known tasks"), taskno);
+    error (_("Task ID %d not known.  Use the \"%ps\" command to\n"
+	     "see the IDs of currently known tasks"),
+	   taskno, styled_string (command_style.style (), "info tasks"));
   task_info = &data->task_list[taskno - 1];
 
   if (!ada_task_is_alive (task_info))
@@ -1404,11 +1382,11 @@ task_command_1 (const char *taskno_str, int from_tty, struct inferior *inf)
 	   task_to_str (taskno, task_info).c_str ());
 
   switch_to_thread (tp);
-  ada_find_printable_frame (get_selected_frame (NULL));
+  ada_find_printable_frame (get_selected_frame ());
   gdb_printf (_("[Switching to task %s]\n"),
 	      task_to_str (taskno, task_info).c_str ());
-  print_stack_frame (get_selected_frame (NULL),
-		     frame_relative_level (get_selected_frame (NULL)),
+  print_stack_frame (get_selected_frame (),
+		     frame_relative_level (get_selected_frame ()),
 		     SRC_AND_LOC, 1);
 }
 
@@ -1490,9 +1468,9 @@ ada_tasks_clear_pspace_data (program_space *pspace)
 /* Called when a new objfile was added.  */
 
 static void
-ada_tasks_new_objfile_observer (objfile *objfile)
+ada_tasks_new_objfile_observer (objfile &objfile)
 {
-  ada_tasks_clear_pspace_data (objfile->pspace ());
+  ada_tasks_clear_pspace_data (objfile.pspace ());
 }
 
 /* The qcs command line flags for the "task apply" commands.  Keep

@@ -110,6 +110,9 @@
    the CoreFoundation framework. */
 #undef HAVE_CFPREFERENCESCOPYAPPVALUE
 
+/* Define if cfsetispeed/cfsetospeed accept arbitrary baud rates. */
+#undef HAVE_CFSETSPEED_ARBITRARY
+
 /* Define to 1 if you have the `clearenv' function. */
 #undef HAVE_CLEARENV
 
@@ -262,8 +265,8 @@
 /* Define if your <locale.h> file defines LC_MESSAGES. */
 #undef HAVE_LC_MESSAGES
 
-/* Define if you have the babeltrace library. */
-#undef HAVE_LIBBABELTRACE
+/* Define to 1 if you have the `atomic' library (-latomic). */
+#undef HAVE_LIBATOMIC
 
 /* Define if libbacktrace is being used. */
 #undef HAVE_LIBBACKTRACE
@@ -513,6 +516,9 @@
 
 /* Define to 1 if `st_blocks' is a member of `struct stat'. */
 #undef HAVE_STRUCT_STAT_ST_BLOCKS
+
+/* Define to 1 if `c_ospeed' is a member of `struct termios'. */
+#undef HAVE_STRUCT_TERMIOS_C_OSPEED
 
 /* Define to 1 if `td_pcb' is a member of `struct thread'. */
 #undef HAVE_STRUCT_THREAD_TD_PCB

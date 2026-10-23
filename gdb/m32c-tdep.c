@@ -252,7 +252,7 @@ m32c_debug_info_reg_to_regnum (struct gdbarch *gdbarch, int reg_nr)
 }
 
 
-static int
+static bool
 m32c_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 			  const struct reggroup *group)
 {
@@ -261,22 +261,22 @@ m32c_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 
   /* The anonymous raw registers aren't in any groups.  */
   if (! reg->name)
-    return 0;
+    return false;
 
   if (group == all_reggroup)
-    return 1;
+    return true;
 
   if (group == general_reggroup
       && reg->general_p)
-    return 1;
+    return true;
 
   if (group == m32c_dma_reggroup
       && reg->dma_p)
-    return 1;
+    return true;
 
   if (group == system_reggroup
       && reg->system_p)
-    return 1;
+    return true;
 
   /* Since the m32c DWARF register numbers refer to cooked registers, not
      raw registers, and frame_pop depends on the save and restore groups
@@ -286,9 +286,9 @@ m32c_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
   if ((group == save_reggroup
        || group == restore_reggroup)
       && reg->save_restore_p)
-    return 1;
+    return true;
 
-  return 0;
+  return false;
 }
 
 
@@ -991,7 +991,7 @@ make_regs (struct gdbarch *arch)
 /* Breakpoints.  */
 constexpr gdb_byte m32c_break_insn[] = { 0x00 };	/* brk */
 
-typedef BP_MANIPULATION (m32c_break_insn) m32c_breakpoint;
+using m32c_breakpoint = BP_MANIPULATION (m32c_break_insn);
 
 
 /* Prologue analysis.  */
@@ -2327,8 +2327,7 @@ m32c_skip_trampoline_code (const frame_info_ptr &frame, CORE_ADDR stop_pc)
   if (find_pc_partial_function (stop_pc, &name, &start, &end))
     {
       /* Are we stopped at the beginning of the trampoline function?  */
-      if (strcmp (name, "m32c_jsri16") == 0
-	  && stop_pc == start)
+      if (streq (name, "m32c_jsri16") && stop_pc == start)
 	{
 	  /* Get the stack pointer.  The return address is at the top,
 	     and the target function's address is just below that.  We
@@ -2508,8 +2507,7 @@ m32c_m16c_pointer_to_address (struct gdbarch *gdbarch,
 	  const char *ptr_msym_name = ptr_msym.minsym->linkage_name ();
 	  int len = strlen (ptr_msym_name);
 
-	  if (len > 4
-	      && strcmp (ptr_msym_name + len - 4, ".plt") == 0)
+	  if (len > 4 && streq (ptr_msym_name + len - 4, ".plt"))
 	    {
 	      /* We have a .plt symbol; try to find the symbol for the
 		 corresponding function.
@@ -2647,7 +2645,7 @@ m32c_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
      In order to verify this, see the definition of
      TARGET_PTRMEMFUNC_VBIT_LOCATION in gcc/defaults.h along with the
      definition of FUNCTION_BOUNDARY in gcc/config/m32c/m32c.h.  */
-  set_gdbarch_vbit_in_delta (gdbarch, 1);
+  set_gdbarch_vbit_in_delta (gdbarch, true);
 
   return gdbarch;
 }

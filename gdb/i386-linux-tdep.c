@@ -53,9 +53,9 @@
 #include "arch/i386.h"
 #include "target-descriptions.h"
 
-/* Return non-zero, when the register is in the corresponding register
+/* Return true when the register is in the corresponding register
    group.  Put the LINUX_ORIG_EAX register in the system group.  */
-static int
+static bool
 i386_linux_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 				const struct reggroup *group)
 {
@@ -246,14 +246,13 @@ i386_linux_sigtramp_p (const frame_info_ptr &this_frame)
     return (i386_linux_sigtramp_start (this_frame) != 0
 	    || i386_linux_rt_sigtramp_start (this_frame) != 0);
 
-  return (strcmp ("__restore", name) == 0
-	  || strcmp ("__restore_rt", name) == 0);
+  return streq ("__restore", name) || streq ("__restore_rt", name);
 }
 
-/* Return one if the PC of THIS_FRAME is in a signal trampoline which
+/* Return true if the PC of THIS_FRAME is in a signal trampoline which
    may have DWARF-2 CFI.  */
 
-static int
+static bool
 i386_linux_dwarf_signal_frame_p (struct gdbarch *gdbarch,
 				 const frame_info_ptr &this_frame)
 {
@@ -264,11 +263,9 @@ i386_linux_dwarf_signal_frame_p (struct gdbarch *gdbarch,
 
   /* If a vsyscall DSO is in use, the signal trampolines may have these
      names.  */
-  if (name && (strcmp (name, "__kernel_sigreturn") == 0
-	       || strcmp (name, "__kernel_rt_sigreturn") == 0))
-    return 1;
-
-  return 0;
+  return (name != nullptr
+	  && (streq (name, "__kernel_sigreturn")
+	      || streq (name, "__kernel_rt_sigreturn")));
 }
 
 /* Offset to struct sigcontext in ucontext, from <asm/ucontext.h>.  */
@@ -952,9 +949,6 @@ i386_linux_record_signal (struct gdbarch *gdbarch,
 				     I386_LINUX_xstate + I386_LINUX_frame_size))
     return -1;
 
-  if (record_full_arch_list_add_end ())
-    return -1;
-
   return 0;
 }
 
@@ -1626,10 +1620,6 @@ i386_linux_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   tdep->i386_intx80_record = i386_linux_intx80_sysenter_syscall_record;
   tdep->i386_sysenter_record = i386_linux_intx80_sysenter_syscall_record;
   tdep->i386_syscall_record = i386_linux_intx80_sysenter_syscall_record;
-
-  /* N_FUN symbols in shared libraries have 0 for their values and need
-     to be relocated.  */
-  set_gdbarch_sofun_address_maybe_missing (gdbarch, 1);
 
   /* GNU/Linux uses SVR4-style shared libraries.  */
   set_gdbarch_skip_trampoline_code (gdbarch, find_solib_trampoline_target);

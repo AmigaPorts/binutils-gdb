@@ -50,10 +50,8 @@ static const struct cmdpy_completer completers[] =
 
 /* A gdb command.  For the time being only ordinary commands (not
    set/show commands) are allowed.  */
-struct cmdpy_object
+struct cmdpy_object : public PyObject
 {
-  PyObject_HEAD
-
   /* The corresponding gdb command object, or NULL if the command is
      no longer installed.  */
   struct cmd_list_element *command;
@@ -64,6 +62,8 @@ struct cmdpy_object
      command, then this field is unused.  */
   struct cmd_list_element *sub_list;
 };
+
+static_assert (gdb::is_python_allocatable_v<cmdpy_object>);
 
 extern PyTypeObject cmdpy_object_type;
 
@@ -78,7 +78,7 @@ static PyObject *
 cmdpy_dont_repeat (PyObject *self, PyObject *args)
 {
   dont_repeat ();
-  Py_RETURN_NONE;
+  return py_none ().release ();
 }
 
 
@@ -188,7 +188,7 @@ cmdpy_completer_helper (struct cmd_list_element *command,
   if (word == NULL)
     {
       /* "brkchars" phase.  */
-      wordobj = gdbpy_ref<>::new_reference (Py_None);
+      wordobj = py_none ();
     }
   else
     {

@@ -23,6 +23,7 @@
 #include "bfd.h"
 #include "libbfd.h"
 #include "elf-bfd.h"
+#include "elf-solaris2.h"
 #include "elf/sparc.h"
 #include "opcode/sparc.h"
 #include "elfxx-sparc.h"
@@ -596,8 +597,7 @@ elf64_sparc_add_symbol_hook (bfd *abfd, struct bfd_link_info *info,
    which we cannot easily keep in the symbol hash table.  */
 
 static bool
-elf64_sparc_output_arch_syms (bfd *output_bfd ATTRIBUTE_UNUSED,
-			      struct bfd_link_info *info,
+elf64_sparc_output_arch_syms (struct bfd_link_info *info,
 			      void * flaginfo,
 			      int (*func) (void *, const char *,
 					   Elf_Internal_Sym *,
@@ -1004,7 +1004,24 @@ static const struct elf_size_info elf64_sparc_size_info =
 
 #include "elf64-target.h"
 
+#ifdef OBJ_MAYBE_ELF_SOLARIS2
+
 /* Solaris 2.  */
+
+static bool
+elf64_sparc_solaris2_add_symbol_hook (bfd *abfd,
+				      struct bfd_link_info *info,
+				      Elf_Internal_Sym *sym,
+				      const char **namep,
+				      flagword *flagsp,
+				      asection **secp,
+				      bfd_vma *valp)
+{
+  return (elf64_sparc_add_symbol_hook (abfd, info, sym, namep,
+				       flagsp, secp, valp)
+	  && elf_solaris2_add_symbol_hook (abfd, info, sym, namep,
+					   flagsp, secp, valp));
+}
 
 #undef	TARGET_BIG_SYM
 #define	TARGET_BIG_SYM				sparc_elf64_sol2_vec
@@ -1025,6 +1042,9 @@ static const struct elf_size_info elf64_sparc_size_info =
 #undef  elf_backend_static_tls_alignment
 #define elf_backend_static_tls_alignment	16
 
+#undef	elf_backend_add_symbol_hook
+#define	elf_backend_add_symbol_hook	elf64_sparc_solaris2_add_symbol_hook
+
 static bool
 elf64_sparc_copy_solaris_special_section_fields (const bfd *ibfd ATTRIBUTE_UNUSED,
                                   bfd *obfd ATTRIBUTE_UNUSED,
@@ -1041,4 +1061,4 @@ elf64_sparc_copy_solaris_special_section_fields (const bfd *ibfd ATTRIBUTE_UNUSE
 
 #include "elf64-target.h"
 
-#undef  elf_backend_copy_special_section_fields
+#endif /* OBJ_MAYBE_ELF_SOLARIS2 */

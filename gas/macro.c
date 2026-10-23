@@ -67,7 +67,8 @@ macro_init (void)
 void
 macro_end (void)
 {
-  htab_delete (macro_hash);
+  if (ENABLE_LEAK_CHECK)
+    htab_delete (macro_hash);
 }
 
 /* Read input lines till we get to a TO string.
@@ -104,10 +105,12 @@ buffer_and_nest (const char *from, const char *to, sb *ptr,
     const char *prefix = flag_m68k_mri ? "" : ".";
     const char *file = as_where_top (&line);
 
+    if (*input_line_pointer == '\n')
+      line++;
     if (file)
-      linefile = xasprintf ("\t%slinefile %u \"%s\"", prefix, line + 1, file);
+      linefile = xasprintf ("\t%slinefile %u \"%s\"", prefix, line, file);
     else
-      linefile = xasprintf ("\t%slinefile %u .", prefix, line + 1);
+      linefile = xasprintf ("\t%slinefile %u .", prefix, line);
     sb_add_string (ptr, linefile);
     xfree (linefile);
   }

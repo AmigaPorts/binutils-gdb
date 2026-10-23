@@ -31,10 +31,8 @@
 
 /* The Python object that represents a connection.  */
 
-struct connection_object
+struct connection_object : public PyObject
 {
-  PyObject_HEAD
-
   /* The process target that represents this connection.   When a
      connection_object is created this field will always point at a valid
      target.  Later, if GDB stops using this target (the target is popped
@@ -43,6 +41,8 @@ struct connection_object
      the is_valid() method below).  */
   struct process_stratum_target *target;
 };
+
+static_assert (gdb::is_python_allocatable_v<connection_object>);
 
 extern PyTypeObject connection_object_type;
 
@@ -76,7 +76,7 @@ gdbpy_ref<>
 target_to_connection_object (process_stratum_target *target)
 {
   if (target == nullptr)
-    return gdbpy_ref<>::new_reference (Py_None);
+    return py_none ();
 
   gdbpy_ref <connection_object> conn_obj;
   auto conn_obj_iter = all_connection_objects.find (target);
@@ -101,7 +101,7 @@ target_to_connection_object (process_stratum_target *target)
   gdb_assert (conn_obj != nullptr);
 
   /* Repackage the result as a PyObject reference.  */
-  return gdbpy_ref<> ((PyObject *) conn_obj.release ());
+  return conn_obj;
 }
 
 /* Return a list of gdb.TargetConnection objects, one for each currently
@@ -203,7 +203,7 @@ connpy_repr (PyObject *obj)
     return gdb_py_invalid_object_repr (obj);
 
   return PyUnicode_FromFormat ("<%s num=%d, what=\"%s\">",
-			       Py_TYPE (obj)->tp_name,
+			       gdbpy_py_obj_tp_name (obj).c_str (),
 			       target->connection_number,
 			       make_target_connection_string (target).c_str ());
 }
@@ -218,9 +218,9 @@ connpy_is_valid (PyObject *self, PyObject *args)
   connection_object *conn = (connection_object *) self;
 
   if (conn->target == nullptr)
-    Py_RETURN_FALSE;
+    return py_false ().release ();
 
-  Py_RETURN_TRUE;
+  return py_true ().release ();
 }
 
 /* Return the id number of this connection.  */
@@ -276,7 +276,7 @@ connpy_get_connection_details (PyObject *self, void *closure)
   if (details != nullptr)
     return host_string_to_python_string (details).release ();
   else
-    Py_RETURN_NONE;
+    return py_none ().release ();
 }
 
 /* Python specific initialization for this file.  */
@@ -323,8 +323,7 @@ struct py_send_packet_callbacks : public send_remote_packet_callbacks
     else
       {
 	/* We didn't get back any result data; set the result to None.  */
-	Py_INCREF (Py_None);
-	m_result.reset (Py_None);
+	m_result = py_none ();
       }
   }
 

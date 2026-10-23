@@ -42,6 +42,7 @@ Dwarf::assemble {
 		DW_AT_name _start
 		DW_AT_low_pc $_start_start DW_FORM_addr
 		DW_AT_high_pc $_start_end DW_FORM_addr
+		DW_AT_external 1 DW_FORM_flag
 	    }
 	    base_type {
 		DW_AT_name int
@@ -56,11 +57,15 @@ Dwarf::assemble {
 	name _start subprogram cu_label 0xEDDB6232
 	name int base_type cu_label 0xB888030
     }
+
+    aranges {} cu_label {
+	arange {} $_start_end $_start_len
+    }
 }
 
 if {[prepare_for_testing "failed to prepare" $testfile "${asm_file} ${srcfile}" \
 	 [list ldflags=-nostartfiles]]} {
-    return -1
+    return
 }
 
 # Verify that .debug_names section is not ignored.

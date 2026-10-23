@@ -88,13 +88,7 @@ objfile_pspace_info::~objfile_pspace_info ()
 static struct objfile_pspace_info *
 get_objfile_pspace_data (struct program_space *pspace)
 {
-  struct objfile_pspace_info *info;
-
-  info = objfiles_pspace_data.get (pspace);
-  if (info == NULL)
-    info = objfiles_pspace_data.emplace (pspace);
-
-  return info;
+  return &objfiles_pspace_data.try_emplace (pspace);
 }
 
 
@@ -147,7 +141,7 @@ set_objfile_main_name (struct objfile *objfile,
 		       const char *name, enum language lang)
 {
   if (objfile->per_bfd->name_of_main == NULL
-      || strcmp (objfile->per_bfd->name_of_main, name) != 0)
+      || !streq (objfile->per_bfd->name_of_main, name))
     objfile->per_bfd->name_of_main
       = obstack_strdup (&objfile->per_bfd->storage_obstack, name);
   objfile->per_bfd->language_of_main = lang;
@@ -288,34 +282,6 @@ objfile::objfile (gdb_bfd_ref_ptr bfd_, program_space *pspace,
     }
 
   set_objfile_per_bfd (this);
-}
-
-/* See objfiles.h.  */
-
-int
-entry_point_address_query (program_space *pspace, CORE_ADDR *entry_p)
-{
-  objfile *objf = pspace->symfile_object_file;
-  if (objf == NULL || !objf->per_bfd->ei.entry_point_p)
-    return 0;
-
-  int idx = objf->per_bfd->ei.the_bfd_section_index;
-  *entry_p = objf->per_bfd->ei.entry_point + objf->section_offsets[idx];
-
-  return 1;
-}
-
-/* See objfiles.h.  */
-
-CORE_ADDR
-entry_point_address (program_space *pspace)
-{
-  CORE_ADDR retval;
-
-  if (!entry_point_address_query (pspace, &retval))
-    error (_("Entry point address is not known."));
-
-  return retval;
 }
 
 separate_debug_iterator &
@@ -496,7 +462,7 @@ objfile::~objfile ()
      and if so, call clear_last_displayed_sal.  */
   if (symtab *last_displayed_symtab = get_last_displayed_symtab ();
       last_displayed_symtab != nullptr
-      && last_displayed_symtab->compunit ()->objfile () == this)
+      && last_displayed_symtab->compunit ().objfile () == this)
     clear_last_displayed_sal ();
 
   /* Rebuild section map next time we need it.  */
@@ -647,31 +613,6 @@ objfile::has_symbols ()
 
 /* See objfiles.h.  */
 
-bool
-have_partial_symbols (program_space *pspace)
-{
-  for (objfile &ofp : pspace->objfiles ())
-    if (ofp.has_partial_symbols ())
-      return true;
-
-  return false;
-}
-
-/* See objfiles.h.  */
-
-bool
-have_full_symbols (program_space *pspace)
-{
-  for (objfile &ofp : pspace->objfiles ())
-    if (ofp.has_full_symbols ())
-      return true;
-
-  return false;
-}
-
-
-/* See objfiles.h.  */
-
 void
 objfile_purge_solibs (program_space *pspace)
 {
@@ -683,18 +624,6 @@ objfile_purge_solibs (program_space *pspace)
       if (!(objf.flags & OBJF_USERLOADED) && (objf.flags & OBJF_SHARED))
 	objf.unlink ();
     }
-}
-
-/* See objfiles.h.  */
-
-bool
-have_minimal_symbols (program_space *pspace)
-{
-  for (objfile &ofp : pspace->objfiles ())
-    if (ofp.per_bfd->minimal_symbol_count > 0)
-      return true;
-
-  return false;
 }
 
 /* Qsort comparison function.  */
@@ -1053,7 +982,7 @@ pc_in_section (CORE_ADDR pc, const char *name)
   struct obj_section *s = find_pc_section (pc);
   return (s != nullptr
 	  && s->the_bfd_section->name != nullptr
-	  && strcmp (s->the_bfd_section->name, name) == 0);
+	  && streq (s->the_bfd_section->name, name));
 }
 
 /* See objfiles.h.  */

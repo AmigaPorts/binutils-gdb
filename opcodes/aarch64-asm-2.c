@@ -572,7 +572,6 @@ aarch64_find_real_opcode (const aarch64_opcode *opcode)
     case A64_OPID_d5080000_ic_SYSREG_IC_Rt_SYS:
     case A64_OPID_d5080000_dc_SYSREG_DC_Rt:
     case A64_OPID_d5080000_at_SYSREG_AT_Rt:
-    case A64_OPID_d5080000_mlbi_SYSREG_MLBI_Rt_SYS:
     case A64_OPID_d5080000_sys_UIMM3_OP1_CRn_CRm_UIMM3_OP2_Rt:
       value = A64_OPID_d5080000_sys_UIMM3_OP1_CRn_CRm_UIMM3_OP2_Rt;
       break;
@@ -631,8 +630,8 @@ aarch64_find_real_opcode (const aarch64_opcode *opcode)
     case A64_OPID_05203800_dup_SVE_Zd_Rn_SP:
       value = A64_OPID_05203800_dup_SVE_Zd_Rn_SP;
       break;
-    case A64_OPID_05202000_mov_SVE_Zd_SVE_Zn_INDEX:
     case A64_OPID_05202000_mov_SVE_Zd_SVE_VZn:
+    case A64_OPID_05202000_mov_SVE_Zd_SVE_Zn_INDEX:
     case A64_OPID_05202000_dup_SVE_Zd_SVE_Zn_INDEX:
       value = A64_OPID_05202000_dup_SVE_Zd_SVE_Zn_INDEX;
       break;
@@ -866,7 +865,6 @@ aarch64_insert_operand (const aarch64_operand *self,
     case AARCH64_OPND_Em:
     case AARCH64_OPND_Em16:
     case AARCH64_OPND_Em8:
-    case AARCH64_OPND_SM3_IMM2:
       return aarch64_ins_reglane (self, info, code, inst, errors);
     case AARCH64_OPND_Em_INDEX1_14:
     case AARCH64_OPND_Em_INDEX2_13:
@@ -1001,7 +999,6 @@ aarch64_insert_operand (const aarch64_operand *self,
       return aarch64_ins_addr_regoff (self, info, code, inst, errors);
     case AARCH64_OPND_ADDR_SIMM7:
     case AARCH64_OPND_ADDR_SIMM9:
-    case AARCH64_OPND_ADDR_SIMM9_2:
     case AARCH64_OPND_ADDR_SIMM11:
     case AARCH64_OPND_ADDR_SIMM13:
       return aarch64_ins_addr_simm (self, info, code, inst, errors);
@@ -1024,7 +1021,6 @@ aarch64_insert_operand (const aarch64_operand *self,
     case AARCH64_OPND_SYSREG_TLBI:
     case AARCH64_OPND_SYSREG_TLBIP:
     case AARCH64_OPND_SYSREG_PLBI:
-    case AARCH64_OPND_SYSREG_MLBI:
     case AARCH64_OPND_SYSREG_SR:
     case AARCH64_OPND_GIC:
     case AARCH64_OPND_GICR:

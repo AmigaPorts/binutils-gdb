@@ -58,6 +58,10 @@ pj_elf_reloc (bfd *abfd,
       && bfd_is_und_section (symbol_in->section))
     return bfd_reloc_undefined;
 
+  if (!bfd_reloc_offset_in_range (reloc_entry->howto, abfd,
+				  input_section, reloc_entry->address))
+    return bfd_reloc_outofrange;
+
   if (bfd_is_com_section (symbol_in->section))
     sym_value = 0;
   else
@@ -271,8 +275,8 @@ static const struct elf_reloc_map pj_reloc_map[] =
     { BFD_RELOC_PJ_CODE_DIR32,	R_PJ_CODE_DIR32	   },
     { BFD_RELOC_PJ_CODE_LO16,	R_PJ_CODE_LO16	   },
     { BFD_RELOC_PJ_CODE_HI16,	R_PJ_CODE_HI16	   },
-    { BFD_RELOC_PJ_CODE_REL32,	R_PJ_CODE_REL32	   },
-    { BFD_RELOC_PJ_CODE_REL16,	R_PJ_CODE_REL16	   },
+    { BFD_RELOC_32_PCREL,	R_PJ_CODE_REL32	   },
+    { BFD_RELOC_16_PCREL,	R_PJ_CODE_REL16	   },
     { BFD_RELOC_VTABLE_INHERIT, R_PJ_GNU_VTINHERIT },
     { BFD_RELOC_VTABLE_ENTRY,   R_PJ_GNU_VTENTRY   },
 };

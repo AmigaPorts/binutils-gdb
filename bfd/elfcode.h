@@ -919,6 +919,11 @@ elf_object_p (bfd *abfd)
   bfd_set_error (bfd_error_wrong_format);
 
  got_no_match:
+  if (abfd->sections != NULL)
+    /* Unlike most early section processing, the object attribute v2
+       code uses bfd_malloc rather than bfd_alloc.  Free memory
+       containing attributes.  */
+    _bfd_elf_cleanup_object_attributes (abfd);
   return NULL;
 }
 
@@ -1263,7 +1268,7 @@ elf_slurp_symbol_table (bfd *abfd, asymbol **symptrs, bool dynamic)
 
   if (! dynamic)
     {
-      hdr = &elf_tdata (abfd)->symtab_hdr;
+      hdr = &elf_symtab_hdr (abfd);
       verhdr = NULL;
       symcount = hdr->sh_size / ebd->s->sizeof_sym;
     }

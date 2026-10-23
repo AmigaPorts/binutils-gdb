@@ -20,7 +20,7 @@ require allow_shlib_tests
 set gdbserver_reconnect_p 1
 if { [info proc gdb_reconnect] == "" } {
     unsupported "requires gdbserver reconnect"
-    return 0
+    return
 }
 
 set testfile solib-disc
@@ -50,7 +50,7 @@ if { [prepare_for_testing "prepare" $testfile $execsrc $exec_opts] != 0 } {
 gdb_load_shlib $libobj
 
 if {![runto_main]} {
-    return 0
+    return
 }
 
 gdb_test_no_output "set stop-on-solib-events 1"
@@ -60,7 +60,7 @@ gdb_test "continue" "Stopped due to shared library event.*" "continue to load"
 set msg "save \$pc after load"
 set saved_pc ""
 gdb_test_multiple "print/x \$pc" $msg {
-    -re "\\\$$decimal = (\[^\r\n\]*)\r\n$gdb_prompt $" {
+    -re "${::valnum_re} = (\[^\r\n\]*)\r\n$gdb_prompt $" {
 	set saved_pc $expect_out(1,string)
 	pass $msg
     }
@@ -71,10 +71,10 @@ if { [gdb_reconnect] == 0 } {
     pass "reconnect after load"
 } else {
     fail "reconnect after load"
-    return 0
+    return
 }
 
-gdb_test "print/x \$pc" "\\\$$decimal = $saved_pc" "check \$pc after load"
+gdb_test "print/x \$pc" "${::valnum_re} = $saved_pc" "check \$pc after load"
 
 
 gdb_test "continue" "Stopped due to shared library event.*" "continue to unload"
@@ -82,7 +82,7 @@ gdb_test "continue" "Stopped due to shared library event.*" "continue to unload"
 set msg "save \$pc after unload"
 set saved_pc ""
 gdb_test_multiple "print/x \$pc" $msg {
-    -re "\\\$$decimal = (\[^\r\n\]*)\r\n$gdb_prompt $" {
+    -re "${::valnum_re} = (\[^\r\n\]*)\r\n$gdb_prompt $" {
 	set saved_pc $expect_out(1,string)
 	pass $msg
     }
@@ -93,7 +93,7 @@ if { [gdb_reconnect] == 0 } {
     pass "reconnect after unload"
 } else {
     fail "reconnect after unload"
-    return 0
+    return
 }
 
-gdb_test "print/x \$pc" "\\\$$decimal = $saved_pc" "check \$pc after unload"
+gdb_test "print/x \$pc" "${::valnum_re} = $saved_pc" "check \$pc after unload"

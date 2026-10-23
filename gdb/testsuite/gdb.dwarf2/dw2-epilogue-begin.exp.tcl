@@ -166,11 +166,11 @@ Dwarf::assemble $asm_file {
 
 if { [prepare_for_testing "failed to prepare" ${testfile} \
 	  [list $srcfile $asm_file] {nodebug}] } {
-    return -1
+    return
 }
 
 if {![runto_main]} {
-    return -1
+    return
 }
 
 # Moving to the scope with a local variable.
@@ -191,7 +191,7 @@ gdb_test "continue" ".*\[W|w\]atchpoint . deleted.*" \
 # First we test that the trivial function has a line with both a prologue
 # and an epilogue. Do this by finding a line that has 3 Y columns
 set sep "\[ \t\]"
-set hex_number "0x\[0-9a-f\]+"
+set hex_number "${::hex}"
 gdb_test_multiple "maint info line-table" "test epilogue in linetable" -lbl {
     -re "\[0-9\]$sep+$trivial_line$sep+$hex_number$sep+$hex_number$sep+Y$sep+Y$sep+Y" {
 	pass $gdb_test_name

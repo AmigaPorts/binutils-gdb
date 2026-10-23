@@ -172,8 +172,7 @@ bpf_info_to_howto (bfd *abfd, arelent *bfd_reloc,
 #define sec_addr(sec) ((sec)->output_section->vma + (sec)->output_offset)
 
 static int
-bpf_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
-                          struct bfd_link_info *info,
+bpf_elf_relocate_section (struct bfd_link_info *info,
                           bfd *input_bfd,
                           asection *input_section,
                           bfd_byte *contents,
@@ -186,7 +185,7 @@ bpf_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
   Elf_Internal_Rela *rel;
   Elf_Internal_Rela *relend;
 
-  symtab_hdr = & elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
   relend     = relocs + input_section->reloc_count;
 

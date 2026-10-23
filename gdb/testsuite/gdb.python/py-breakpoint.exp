@@ -33,7 +33,7 @@ standard_testfile
 set options {debug c++}
 
 if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} ${options}] } {
-    return -1
+    return
 }
 
 set past_throw_catch_line [gdb_get_line_number "Past throw-catch."]
@@ -629,7 +629,7 @@ proc_with_prefix test_bkpt_address {} {
 
 proc_with_prefix test_bkpt_pending {} {
     delete_breakpoints
-    gdb_breakpoint "nosuchfunction" allow-pending
+    gdb_breakpoint "nosuchfunction" -allow-pending
     gdb_test "python print (gdb.breakpoints()\[0\].pending)" "True" \
 	"Check pending status of pending breakpoint"
 }

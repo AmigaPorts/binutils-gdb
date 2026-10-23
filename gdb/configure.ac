@@ -341,6 +341,19 @@ if test "$gdb_require_amd_dbgapi" = true \
     if test "$all_targets" = true; then
       TARGET_OBS="$TARGET_OBS \$(ALL_AMD_DBGAPI_TARGET_OBS)"
     fi
+
+    # Add the host-specific objects.
+    case ${gdb_host} in
+      *linux*)
+	gdb_host_obs="${gdb_host_obs} amd-dbgapi-posix-hdep.o"
+	;;
+      *mingw*)
+	gdb_host_obs="${gdb_host_obs} amd-dbgapi-mingw-hdep.o"
+	;;
+      *)
+	AC_MSG_ERROR([amd-dbgapi not supported for host ${gdb_host}])
+	;;
+    esac
   elif test "$gdb_require_amd_dbgapi" = true -o "$with_amd_dbgapi" = yes; then
     # amd-dbgapi was not found and...
     #
@@ -556,6 +569,12 @@ esac
 # We might need to link with -lm; most simulators need it.
 AC_CHECK_LIB(m, main)
 
+# GDB uses std::atomic, which sometimes (depending on the arch, compiler, types,
+# etc) generates some calls into libatomic.  Always link with libatomic when
+# it exists, there shouldn't be any downsides in linking with it even if not
+# needed.
+AC_CHECK_LIB(atomic, main)
+
 # Some systems (e.g. Solaris) have `gethostbyname' in libnsl.
 AC_SEARCH_LIBS(gethostbyname, nsl)
 
@@ -718,6 +737,28 @@ AC_SUBST(TARGET_PTR)
 AC_CONFIG_FILES([jit-reader.h:jit-reader.in])
 
 AC_SEARCH_LIBS(dlopen, dl)
+
+# Check for members required by the legacy Linux custom baud rate path.
+AC_CHECK_MEMBERS([struct termios.c_ospeed], [], [], [[#include <termios.h>]])
+
+# Check whether cfsetispeed/cfsetospeed accept arbitrary baud rates.
+AC_CACHE_CHECK([whether cfsetispeed/cfsetospeed accept arbitrary baud rates],
+  [gdb_cv_cfsetspeed_arbitrary], [
+  AC_COMPILE_IFELSE(
+    [AC_LANG_PROGRAM([[#include <termios.h>]],
+      [[
+       #if B9600 != 9600
+       #error B-constants are not numeric symbols
+       #endif
+      ]])],
+    [gdb_cv_cfsetspeed_arbitrary=yes],
+    [gdb_cv_cfsetspeed_arbitrary=no])
+])
+
+if test "$gdb_cv_cfsetspeed_arbitrary" = yes; then
+  AC_DEFINE([HAVE_CFSETSPEED_ARBITRARY], [1],
+	    [Define if cfsetispeed/cfsetospeed accept arbitrary baud rates.])
+fi
 
 GDB_AC_WITH_DIR([JIT_READER_DIR], [jit-reader-dir],
 		[directory to load the JIT readers from],
@@ -927,6 +968,7 @@ else
     # do except assume that the compiler will be able to find those files.
     python_includes=
     python_libs=
+    python_prefix=
     have_python_config=no
   fi
 
@@ -1056,6 +1098,13 @@ AC_SUBST(PYTHON_CPPFLAGS)
 AC_SUBST(PYTHON_LIBS)
 AM_CONDITIONAL(HAVE_PYTHON, test "${have_libpython}" != no)
 
+dnl Use --enable-py-limited-api to enable the build of GDB against the Python
+dnl limited API.
+dnl
+dnl no -   Disable the Python limited API.
+dnl yes -  Use the Python limited API to build GDB, error if the selected
+dnl        version of Python is not compatible with the Python limited API.
+
 # Check whether to build GDB against Python limited C API.
 AC_ARG_ENABLE([py-limited-api],
 	      [AS_HELP_STRING([--enable-py-limited-api],
@@ -1064,12 +1113,33 @@ AC_ARG_ENABLE([py-limited-api],
 	      [enable_py_limited_api=no])
 
 if test "$enable_py_limited_api" = yes; then
-  # The minimal Python limited API version is currently set to 3.11 for the
-  # support of PyBuffer_FillInfo and PyBuffer_Release.
-  # The choice of the minimal version for the Python limited API won't be frozen
-  # until the end of the migration.
-  AC_DEFINE(Py_LIMITED_API, 0x030b0000,
-	    [Define if GDB should be built against the Python limited C API.])
+  # The minimal Python limited API version is currently set to 3.14 for the
+  # support of Py_TYPE().
+  # The choice of the minimal version for the Python limited API won't be
+  # frozen until the end of the migration.
+  old_CFLAGS="$CFLAGS"
+  CFLAGS="$CFLAGS $PYTHON_CFLAGS"
+  old_CPPFLAGS="$CPPFLAGS"
+  CPPFLAGS="$CPPFLAGS $PYTHON_CPPFLAGS"
+  old_LIBS="$LIBS"
+  LIBS="$LIBS $PYTHON_LIBS"
+  AC_COMPILE_IFELSE([AC_LANG_PROGRAM(
+    [[#include <Python.h>
+#ifndef PY_VERSION_HEX
+#error "PY_VERSION_HEX is not defined"
+#endif
+#if PY_VERSION_HEX < 0x030e0000
+#error "Python limited API support requires at least Python version 3.14"
+#endif
+    ]],[[]])],
+    [AC_DEFINE(Py_LIMITED_API, 0x030e0000,
+      [Define if GDB should be built against the Python limited C API.])
+    ],[
+      AC_MSG_ERROR([Python limited API support requires at least Python version 3.14])
+    ])
+  CFLAGS="$old_CFLAGS"
+  CPPFLAGS="$old_CPPFLAGS"
+  LIBS="$old_LIBS"
 fi
 
 # -------------------- #
@@ -2105,57 +2175,31 @@ if test "${enable_gdbtk}" = "yes"; then
     if test -z "${no_tcl}" -a -z "${no_tk}"; then
 	SC_LOAD_TCLCONFIG
 
-	# Check for in-tree tcl
-	here=`pwd`
-	cd ${srcdir}/..
-	topdir=`pwd`
-	cd ${here}
-
-	intree="no"
-	if test "${TCL_SRC_DIR}" = "${topdir}/tcl"; then
-	  intree="yes"
-	fi
-
 	# Find Tcl private headers
-	if test x"${intree}" = xno; then
-	  CY_AC_TCL_PRIVATE_HEADERS
-	  TCL_INCLUDE="${TCL_INCLUDE_SPEC} ${TCL_PRIVATE_INCLUDE}"
-	  TCL_LIBRARY="${TCL_LIB_SPEC}"
-	  TCL_DEPS=""
-	else
-	  # If building tcl in the same src tree, private headers
-	  # are not needed, but we need to be sure to use the right
-	  # headers library
-	  TCL_INCLUDE="-I${TCL_SRC_DIR}/generic"
-	  TCL_LIBRARY="${TCL_BUILD_LIB_SPEC}"
-	  TCL_DEPS="../tcl/${configdir}${TCL_LIB_FILE}"
-	fi
+	CY_AC_TCL_PRIVATE_HEADERS
+	TCL_INCLUDE="${TCL_INCLUDE_SPEC} ${TCL_PRIVATE_INCLUDE}"
+	TCL_LIBRARY="${TCL_LIB_SPEC}"
+	TCL_DEPS=""
+	TCL_PLATFORM_DEFINE="TCL_PLATFORM_`echo \"${TCL_PLATFORM}\" | tr 'a-z-' 'A-Z_'`"
+	TCL_PLATFORM_DEFINE="${TCL_PLATFORM_DEFINE}=${TCL_PLATFORM_DEFINE}"
 	AC_SUBST(TCL_INCLUDE)
 	AC_SUBST(TCL_LIBRARY)
 	AC_SUBST(TCL_DEPS)
+	AC_SUBST(TCL_PLATFORM_DEFINE)
 
 	SC_LOAD_TKCONFIG
 
-	# Check for in-tree Tk
-	intree="no"
-	if test "${TK_SRC_DIR}" = "${topdir}/tk"; then
-	  intree="yes"
-	fi
-
 	# Find Tk private headers
-	if test x"${intree}" = xno; then
-	  CY_AC_TK_PRIVATE_HEADERS
-	  TK_INCLUDE="${TK_INCLUDE_SPEC} ${TK_PRIVATE_INCLUDE}"
-	  TK_LIBRARY=${TK_LIB_SPEC}
-	  TK_DEPS=""
-	else
-	  TK_INCLUDE="-I${TK_SRC_DIR}/generic"
-	  TK_LIBRARY="${TK_BUILD_LIB_SPEC}"
-	  TK_DEPS="../tk/${configdir}/${TK_LIB_FILE}"
-	fi
+	CY_AC_TK_PRIVATE_HEADERS
+	TK_INCLUDE="${TK_INCLUDE_SPEC} ${TK_PRIVATE_INCLUDE}"
+	TK_LIBRARY=${TK_LIB_SPEC}
+	TK_DEPS=""
+	TK_PLATFORM_DEFINE="TK_PLATFORM_`echo \"${TK_PLATFORM}\" | tr 'a-z-' 'A-Z_'`"
+	TK_PLATFORM_DEFINE="${TK_PLATFORM_DEFINE}=${TK_PLATFORM_DEFINE}"
 	AC_SUBST(TK_INCLUDE)
 	AC_SUBST(TK_LIBRARY)
 	AC_SUBST(TK_DEPS)
+	AC_SUBST(TK_PLATFORM_DEFINE)
 	AC_SUBST(TK_XINCLUDES)
 
 	ENABLE_CFLAGS="${ENABLE_CFLAGS} \$(SUBDIR_GDBTK_CFLAGS)"
@@ -2300,49 +2344,6 @@ fi
 
 AC_SUBST(LIBBACKTRACE_INC)
 AC_SUBST(LIBBACKTRACE_LIB)
-
-# Check for babeltrace and babeltrace-ctf
-AC_ARG_WITH(babeltrace,
-  AS_HELP_STRING([--with-babeltrace], [include babeltrace support (auto/yes/no)]),
-  [], [with_babeltrace=auto])
-AC_MSG_CHECKING([whether to use babeltrace])
-AC_MSG_RESULT([$with_babeltrace])
-
-if test "x$with_babeltrace" = "xno"; then
-  AC_MSG_WARN([babeltrace support disabled; GDB is unable to read CTF data.])
-else
-  # Append -Werror to CFLAGS so that configure can catch the warning
-  # "assignment from incompatible pointer type", which is related to
-  # the babeltrace change from 1.0.3 to 1.1.0.  Babeltrace 1.1.0 works
-  # in GDB, while babeltrace 1.0.3 is broken.
-  # AC_LIB_HAVE_LINKFLAGS may modify CPPFLAGS in it, so it should be
-  # safe to save and restore CFLAGS here.
-  saved_CFLAGS=$CFLAGS
-  CFLAGS="$CFLAGS -Werror"
-  AC_LIB_HAVE_LINKFLAGS([babeltrace], [babeltrace-ctf],
-			[#include <babeltrace/babeltrace.h>
-			 #include <babeltrace/ctf/events.h>
-			 #include <babeltrace/ctf/iterator.h>],
-			[struct bt_iter_pos *pos = bt_iter_get_pos (bt_ctf_get_iter (NULL));
-			struct bt_ctf_event *event = NULL;
-			const struct bt_definition *scope;
-
-			pos->type = BT_SEEK_BEGIN;
-			bt_iter_set_pos (bt_ctf_get_iter (NULL), pos);
-			scope = bt_ctf_get_top_level_scope (event,
-							   BT_STREAM_EVENT_HEADER);
-			bt_ctf_get_uint64 (bt_ctf_get_field (event, scope, "id"));
-			])
-  CFLAGS=$saved_CFLAGS
-
-  if test "$HAVE_LIBBABELTRACE" != yes; then
-     if test "$with_babeltrace" = yes; then
-       AC_MSG_ERROR([babeltrace is missing or unusable])
-     else
-       AC_MSG_WARN([babeltrace is missing or unusable; GDB is unable to read CTF data.])
-     fi
-  fi
-fi
 
 GCC_ENABLE([libctf], [yes], [], [Handle .ctf type-info sections])
 if test "${enable_libctf}" = yes; then

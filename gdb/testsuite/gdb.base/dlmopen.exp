@@ -194,7 +194,7 @@ proc test_dlmopen_no_attach {} {
 
     # Break in the to-be-loaded library and at the end of main.
     delete_breakpoints
-    gdb_breakpoint $::srcfile_lib:$::bp_inc allow-pending
+    gdb_breakpoint $::srcfile_lib:$::bp_inc -allow-pending
     gdb_breakpoint $::srcfile:$::bp_main
 
     test_dlmopen
@@ -294,7 +294,7 @@ proc_with_prefix test_solib_unmap_events { } {
     # This test relies on finding the dynamic linker library, and is
     # currently written assuming Linux.
     if { ![istarget *-linux*] } {
-	unsupport "cannot find dynamic linker library on this target"
+	unsupported "cannot find dynamic linker library on this target"
 	return
     }
 

@@ -422,7 +422,7 @@ frv_register_sim_regno (struct gdbarch *gdbarch, int reg)
 
 constexpr gdb_byte frv_break_insn[] = {0xc0, 0x70, 0x00, 0x01};
 
-typedef BP_MANIPULATION (frv_break_insn) frv_breakpoint;
+using frv_breakpoint = BP_MANIPULATION (frv_break_insn);
 
 /* Define the maximum number of instructions which may be packed into a
    bundle (VLIW instruction).  */
@@ -1071,9 +1071,9 @@ frv_skip_main_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
       call_dest = pc + 4 * displ;
       bound_minimal_symbol s = lookup_minimal_symbol_by_pc (call_dest);
 
-      if (s.minsym != NULL
-	  && s.minsym->linkage_name () != NULL
-	  && strcmp (s.minsym->linkage_name (), "__main") == 0)
+      if (s.minsym != nullptr
+	  && s.minsym->linkage_name () != nullptr
+	  && streq (s.minsym->linkage_name (), "__main"))
 	{
 	  pc += 4;
 	  return pc;

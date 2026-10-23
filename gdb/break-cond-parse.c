@@ -15,7 +15,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "gdbsupport/gdb_assert.h"
 #include "gdbsupport/selftest.h"
 #include "test-target.h"
@@ -486,9 +485,9 @@ create_breakpoint_parse_arg_string
 	case token::type::THREAD:
 	  {
 	    if (thread != -1)
-	      error ("You can specify only one thread.");
+	      error (_("You can specify only one thread."));
 	    if (task != -1 || inferior != -1)
-	      error ("You can specify only one of thread, inferior, or task.");
+	      error (_("You can specify only one of thread, inferior, or task."));
 	    const char *tmptok;
 	    thread_info *thr = parse_thread_id (tok_value.c_str (), &tmptok);
 	    gdb_assert (*tmptok == '\0');
@@ -498,9 +497,9 @@ create_breakpoint_parse_arg_string
 	case token::type::INFERIOR:
 	  {
 	    if (inferior != -1)
-	      error ("You can specify only one inferior.");
+	      error (_("You can specify only one inferior."));
 	    if (task != -1 || thread != -1)
-	      error ("You can specify only one of thread, inferior, or task.");
+	      error (_("You can specify only one of thread, inferior, or task."));
 	    char *tmptok;
 	    long inferior_id = strtol (tok_value.c_str (), &tmptok, 0);
 	    if (*tmptok != '\0')
@@ -516,9 +515,9 @@ create_breakpoint_parse_arg_string
 	case token::type::TASK:
 	  {
 	    if (task != -1)
-	      error ("You can specify only one task.");
+	      error (_("You can specify only one task."));
 	    if (inferior != -1 || thread != -1)
-	      error ("You can specify only one of thread, inferior, or task.");
+	      error (_("You can specify only one of thread, inferior, or task."));
 	    char *tmptok;
 	    long task_id = strtol (tok_value.c_str (), &tmptok, 0);
 	    if (*tmptok != '\0')
@@ -588,9 +587,9 @@ test (const char *input, const char *condition, int thread = -1,
 
   if ((condition == nullptr) != (extracted_condition.get () == nullptr)
       || (condition != nullptr
-	  && strcmp (condition, extracted_condition.get ()) != 0)
+	  && !streq (condition, extracted_condition.get ()))
       || (rest == nullptr) != (extracted_rest.get () == nullptr)
-      || (rest != nullptr && strcmp (rest, extracted_rest.get ()) != 0)
+      || (rest != nullptr && !streq (rest, extracted_rest.get ()))
       || thread != extracted_thread
       || inferior != extracted_inferior
       || task != extracted_task

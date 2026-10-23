@@ -550,7 +550,7 @@ sparc32_pseudo_register_write (struct gdbarch *gdbarch,
 
 /* Implement the stack_frame_destroyed_p gdbarch method.  */
 
-int
+bool
 sparc_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   /* This function must return true if we are one instruction after an
@@ -743,7 +743,7 @@ sparc32_push_dummy_call (struct gdbarch *gdbarch, struct value *function,
    location for inserting the breakpoint.  */
 constexpr gdb_byte sparc_break_insn[] = { 0x91, 0xd0, 0x20, 0x01 };
 
-typedef BP_MANIPULATION (sparc_break_insn) sparc_breakpoint;
+using sparc_breakpoint = BP_MANIPULATION (sparc_break_insn);
 
 
 /* Allocate and initialize a frame cache.  */
@@ -1825,7 +1825,6 @@ sparc32_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_long_double_format (gdbarch, floatformats_ieee_quad);
 
   set_gdbarch_wchar_bit (gdbarch, 16);
-  set_gdbarch_wchar_signed (gdbarch, 1);
 
   set_gdbarch_num_regs (gdbarch, SPARC32_NUM_REGS);
   set_gdbarch_register_name (gdbarch, sparc32_register_name);

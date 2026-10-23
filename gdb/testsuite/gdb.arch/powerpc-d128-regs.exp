@@ -25,8 +25,8 @@ require {istarget "powerpc64*-*"}
 standard_testfile
 
 if  { [gdb_compile "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable {quiet debug}] != "" } {
-     untested "failed to compile"
-     return -1
+    untested "failed to compile"
+    return
 }
 
 clean_restart $::testfile
@@ -36,7 +36,7 @@ if {![runto_main]} {
 }
 
 if {[gdb_test "show arch" ".*powerpc:common.*" "checking for PPC arch"]} {
-    return -1
+    return
 }
 
 gdb_test "next" ""
@@ -44,7 +44,7 @@ gdb_test "next" ""
 for {set i 0} {$i < 16} {incr i 1} {
 gdb_test "set \$dl$i=d128" "" "set dl$i register"
 
-gdb_test "print \$dl$i" "\\\$$decimal = 1\.2345678910" "print dl$i register as DFP"
+gdb_test "print \$dl$i" "${::valnum_re} = 1\.2345678910" "print dl$i register as DFP"
 
 gdb_test "info reg dl$i" \
 	 "dl$i\[ \]*1\.2345678910\[ \t\]*\\(raw 0x2205800000000000000000049c5de09c\\)" \

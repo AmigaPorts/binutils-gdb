@@ -121,7 +121,7 @@ struct value_ref_policy
 
 /* A gdb:;ref_ptr pointer to a struct value.  */
 
-typedef gdb::ref_ptr<struct value, value_ref_policy> value_ref_ptr;
+using value_ref_ptr = gdb::ref_ptr<struct value, value_ref_policy>;
 
 /* Note that the fields in this structure are arranged to save a bit
    of memory.  */
@@ -626,6 +626,14 @@ public:
   struct value *primitive_field (LONGEST offset, int fieldno,
 				 struct type *arg_type);
 
+  /* Given that this value is of a struct or union type, extract and
+     return the value of one of its (non-static) fields.  FIELDNO says
+     which field.  */
+  value *field (int fieldno)
+  {
+    return primitive_field (0, fieldno, type ());
+  }
+
   /* Create a new value by extracting it from this value.  TYPE is the
      type of the new value.  BIT_OFFSET and BIT_LENGTH describe the
      offset and field width of the value to extract from this value --
@@ -979,6 +987,10 @@ struct lval_funcs
 
 [[noreturn]] extern void error_value_optimized_out ();
 
+/* Throw an error complaining that the value is not available.  */
+
+[[noreturn]] extern void error_value_not_available ();
+
 /* Pointer to internal variable.  */
 #define VALUE_INTERNALVAR(val) (*((val)->deprecated_internalvar_hack ()))
 
@@ -1330,8 +1342,6 @@ extern int find_overload_match (gdb::array_view<value *> args,
 				struct value **valp, struct symbol **symp,
 				int *staticp, const int no_adl,
 				enum noside noside);
-
-extern struct value *value_field (struct value *arg1, int fieldno);
 
 extern struct type *value_rtti_indirect_type (struct value *, int *, LONGEST *,
 					      int *);

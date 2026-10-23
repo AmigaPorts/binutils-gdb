@@ -275,7 +275,6 @@ elf_common_parse (int ignore ATTRIBUTE_UNUSED, symbolS *symbolP, addressT size)
 	      *input_line_pointer = '\0';
 	      as_bad (_("bad .common segment %s"), p);
 	      *input_line_pointer = c;
-	      ignore_rest_of_line ();
 	      return NULL;
 	    }
 	  /* ??? Don't ask me why these are always global.  */
@@ -404,21 +403,24 @@ static void
 obj_elf_visibility (int visibility)
 {
   int c;
-  symbolS *symbolP;
-  asymbol *bfdsym;
-  elf_symbol_type *elfsym;
 
   do
     {
-      symbolP = get_sym_from_input_line_and_check ();
-
-      bfdsym = symbol_get_bfdsym (symbolP);
-      elfsym = elf_symbol_from (bfdsym);
+      symbolS *symbolP = get_sym_from_input_line_and_check ();
+      const asymbol *bfdsym = symbol_get_bfdsym (symbolP);
+      elf_symbol_type *elfsym = elf_symbol_from (bfdsym);
+      int current = ELF_ST_VISIBILITY (elfsym->internal_elf_sym.st_other);
 
       gas_assert (elfsym);
 
-      elfsym->internal_elf_sym.st_other &= ~3;
-      elfsym->internal_elf_sym.st_other |= visibility;
+      if (!current || visibility <= current)
+	{
+	  elfsym->internal_elf_sym.st_other &= ~ELF_ST_VISIBILITY (~0);
+	  elfsym->internal_elf_sym.st_other |= visibility;
+	}
+      else
+	as_warn (_("visibility of `%s' is already `%s'"), S_GET_NAME (symbolP),
+		 current == STV_HIDDEN ? "hidden" : "internal");
 
       c = *input_line_pointer;
       if (c == ',')
@@ -774,8 +776,6 @@ change_section (const char *name,
 
   if (old_sec == NULL)
     {
-      symbolS *secsym;
-
       if (type == SHT_NULL)
 	type = bfd_elf_get_default_section_type (flags);
       elf_section_type (sec) = type;
@@ -800,18 +800,7 @@ change_section (const char *name,
       elf_group_name (sec) = match_p->group_name;
 
       /* Add a symbol for this section to the symbol table.  */
-      secsym = symbol_find (name);
-      if (secsym != NULL)
-	{
-	  /* We could be repurposing an undefined symbol here: make sure we
-	     reset sy_value to look like other section symbols in order to avoid
-	     trying to incorrectly resolve this section symbol later on.  */
-	  static const expressionS exp = { .X_op = O_constant };
-	  symbol_set_value_expression (secsym, &exp);
-	  symbol_set_bfdsym (secsym, sec->symbol);
-	}
-      else
-	symbol_table_insert (section_symbol (sec));
+      symbol_table_insert (section_symbol (sec));
     }
   else
     {
@@ -1962,7 +1951,8 @@ obj_elf_get_vtable_inherit (void)
 {
   char *cname, *pname;
   symbolS *csym, *psym;
-  char c, bad = 0;
+  char c;
+  bool bad = false;
 
   if (*input_line_pointer == '#')
     ++input_line_pointer;
@@ -1974,11 +1964,13 @@ obj_elf_get_vtable_inherit (void)
      the same child symbol.  Also, we can currently only do this if the
      child symbol is already exists and is placed in a fragment.  */
 
-  if (csym == NULL || symbol_get_frag (csym) == NULL)
+  if (csym == NULL
+      || symbol_get_frag (csym) == NULL
+      || symbol_get_value_expression (csym)->X_op != O_constant)
     {
       as_bad (_("expected `%s' to have already been set for .vtable_inherit"),
 	      cname);
-      bad = 1;
+      bad = true;
     }
 
   restore_line_pointer (c);
@@ -2016,7 +2008,6 @@ obj_elf_get_vtable_inherit (void)
   if (bad)
     return NULL;
 
-  gas_assert (symbol_get_value_expression (csym)->X_op == O_constant);
   return fix_new (symbol_get_frag (csym),
 		  symbol_get_value_expression (csym)->X_add_number,
 		  0, psym, 0, 0, BFD_RELOC_VTABLE_INHERIT, 0);
@@ -2028,6 +2019,14 @@ obj_elf_get_vtable_inherit (void)
 void
 obj_elf_vtable_inherit (int ignore ATTRIBUTE_UNUSED)
 {
+  static bool warned = false;
+
+  if (!warned)
+    {
+      warned = true;
+      as_warn(".vtable_inherit has been deprecated");
+    }
+
   (void) obj_elf_get_vtable_inherit ();
 }
 
@@ -2070,6 +2069,14 @@ obj_elf_get_vtable_entry (void)
 void
 obj_elf_vtable_entry (int ignore ATTRIBUTE_UNUSED)
 {
+  static bool warned = false;
+
+  if (!warned)
+    {
+      warned = true;
+      as_warn("'.vtable_entry' has been deprecated");
+    }
+
   (void) obj_elf_get_vtable_entry ();
 }
 
@@ -2738,6 +2745,26 @@ elf_adjust_symtab (void)
 {
   unsigned int i;
 
+  if (!had_errors ())
+    for (symbolS *symp = symbol_rootP; symp; symp = symbol_next (symp))
+      if (!symbol_removed_p (symp)
+	  && S_IS_DEFINED (symp)
+	  && (bfd_keep_unused_section_symbols (stdoutput)
+	      || !symbol_section_p (symp)
+	      || symbol_used_in_reloc_p (symp)))
+	{
+	  const asymbol *bfdsym = symbol_get_bfdsym (symp);
+	  elf_symbol_type *elfsym = elf_symbol_from (bfdsym);
+
+	  /* Allow local symbol with non-protected visibility:
+	     https://sourceware.org/bugzilla/show_bug.cgi?id=34312 */
+	  if ((ELF_ST_VISIBILITY (elfsym->internal_elf_sym.st_other)
+	       == STV_PROTECTED)
+	      && !(bfdsym->flags & (BSF_GLOBAL | BSF_WEAK | BSF_GNU_UNIQUE)))
+	    as_warn (_("local symbol `%s' has protected visibility"),
+		     S_GET_NAME (symp));
+	}
+
   /* Make the SHT_GROUP sections that describe each section group.  We
      can't set up the section contents here yet, because elf section
      indices have yet to be calculated.  elf.c:set_group_contents does
@@ -3018,6 +3045,8 @@ elf_begin (void)
 void
 elf_end (void)
 {
+  if (!ENABLE_LEAK_CHECK)
+    return;
   while (section_stack)
     {
       struct section_stack *top = section_stack;

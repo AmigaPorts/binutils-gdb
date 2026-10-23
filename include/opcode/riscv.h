@@ -141,6 +141,9 @@ static inline unsigned int riscv_insn_length (insn_t insn)
   ((RV_X(x, 25, 2) << 5) | (RV_X(x, 9, 3) << 2))
 #define EXTRACT_MIPS_SDP_IMM(x) \
   ((RV_X(x, 25, 2) << 5) | (RV_X(x, 10, 2) << 3))
+/* Vendor-specific (SPACEMIT) encode macros.  */
+#define ENCODE_SPACEMIT_IME_UIMM2_SP(x) \
+  ((RV_X (x, 0, 1) << 7) | (RV_X (x, 1, 1) << 15))
 
 #define ENCODE_ITYPE_IMM(x) \
   (RV_X(x, 0, 12) << 20)
@@ -371,6 +374,8 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define OP_SH_VTA		6
 #define OP_MASK_VMA		0x1
 #define OP_SH_VMA		7
+#define OP_MASK_VTYPE_ALTFMT	0x1
+#define OP_SH_VTYPE_ALTFMT	8
 #define OP_MASK_VWD		0x1
 #define OP_SH_VWD		26
 
@@ -418,6 +423,16 @@ static inline unsigned int riscv_insn_length (insn_t insn)
 #define OP_SH_MIPS_SDP_OFFSET10     10
 #define OP_MASK_MIPS_SDP_OFFSET25   0x3
 #define OP_SH_MIPS_SDP_OFFSET25     25
+
+/* SpacemiT fields.  */
+#define OP_MASK_SPACEMIT_IME_VD		0xf
+#define OP_SH_SPACEMIT_IME_VD		8
+#define OP_MASK_SPACEMIT_IME_VS1	0xf
+#define OP_SH_SPACEMIT_IME_VS1		16
+#define OP_MASK_SPACEMIT_IME_WI		0x3
+#define OP_SH_SPACEMIT_IME_WI		29
+#define OP_MASK_SPACEMIT_IME_VMASK	0x1
+#define OP_SH_SPACEMIT_IME_VMASK	25
 
 /* ABI names for selected x-registers.  */
 
@@ -509,6 +524,7 @@ enum riscv_insn_class
   INSN_CLASS_ZIMOP,
   INSN_CLASS_ZMMUL,
   INSN_CLASS_ZAAMO,
+  INSN_CLASS_ZALASR,
   INSN_CLASS_ZALRSC,
   INSN_CLASS_ZAWRS,
   INSN_CLASS_F_INX,
@@ -546,12 +562,24 @@ enum riscv_insn_class
   INSN_CLASS_ZVBC,
   INSN_CLASS_ZVFBFMIN,
   INSN_CLASS_ZVFBFWMA,
+  INSN_CLASS_ZVFBDOTA32F,
+  INSN_CLASS_ZVFQWBDOTA8F,
+  INSN_CLASS_ZVFQWDOTA8F,
+  INSN_CLASS_ZVFWBDOTA16BF,
+  INSN_CLASS_ZVFWDOTA16BF,
   INSN_CLASS_ZVKB,
   INSN_CLASS_ZVKG,
   INSN_CLASS_ZVKNED,
   INSN_CLASS_ZVKNHA_OR_ZVKNHB,
   INSN_CLASS_ZVKSED,
   INSN_CLASS_ZVKSH,
+  INSN_CLASS_ZVABD,
+  INSN_CLASS_ZVQWBDOTA8I,
+  INSN_CLASS_ZVQWBDOTA16I,
+  INSN_CLASS_ZVQWBDOTA8I_OR_ZVQWBDOTA16I,
+  INSN_CLASS_ZVQWDOTA8I,
+  INSN_CLASS_ZVQWDOTA16I,
+  INSN_CLASS_ZVQWDOTA8I_OR_ZVQWDOTA16I,
   INSN_CLASS_ZICFISS,
   INSN_CLASS_ZICFISS_AND_ZCMOP,
   INSN_CLASS_ZICFILP,
@@ -606,6 +634,9 @@ enum riscv_insn_class
   INSN_CLASS_XMIPSCMOV,
   INSN_CLASS_XMIPSEXECTL,
   INSN_CLASS_XMIPSLSP,
+  INSN_CLASS_XSMTVDOT,
+  INSN_CLASS_XSMTVDOTII,
+  INSN_CLASS_XSMTVDOT_OR_XSMTVDOTII,
 };
 
 /* This structure holds information for a particular instruction.  */
@@ -719,6 +750,7 @@ extern const char * const riscv_pred_succ[16];
 extern const char riscv_vecr_names_numeric[NVECR][NRC];
 extern const char riscv_vecm_names_numeric[NVECM][NRC];
 extern const char * const riscv_vsew[8];
+extern const char * const riscv_vsew_altfmt[2];
 extern const char * const riscv_vlmul[8];
 extern const char * const riscv_vta[2];
 extern const char * const riscv_vma[2];

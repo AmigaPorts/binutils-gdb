@@ -38,6 +38,8 @@
 #include "cli/cli-style.h"
 #include "parser-defs.h"
 #include "rust-exp.h"
+#include "char-print.h"
+#include "extract-store-integer.h"
 
 /* See rust-lang.h.  */
 
@@ -136,7 +138,7 @@ rust_underscore_fields (struct type *type)
 	  const char *field_name = field.name ();
 	  if (startswith (field_name, "__"))
 	    field_name += 2;
-	  if (strcmp (buf, field_name) != 0)
+	  if (!streq (buf, field_name))
 	    return false;
 	  field_number++;
 	}
@@ -190,7 +192,7 @@ rust_range_type_p (struct type *type)
     return true;
 
   int field_num = 0;
-  if (strcmp (type->field (0).name (), "start") == 0)
+  if (streq (type->field (0).name (), "start"))
     {
       if (type->num_fields () == 1)
 	return true;
@@ -202,7 +204,7 @@ rust_range_type_p (struct type *type)
       return false;
     }
 
-  return strcmp (type->field (field_num).name (), "end") == 0;
+  return streq (type->field (field_num).name (), "end");
 }
 
 /* Return true if TYPE is an inclusive range type, otherwise false.
@@ -252,13 +254,13 @@ rust_get_trait_object_pointer (struct value *value)
   int vtable_field = 0;
   for (int i = 0; i < 2; ++i)
     {
-      if (strcmp (type->field (i).name (), "vtable") == 0)
+      if (streq (type->field (i).name (), "vtable"))
 	vtable_field = i;
-      else if (strcmp (type->field (i).name (), "pointer") != 0)
+      else if (!streq (type->field (i).name (), "pointer"))
 	return NULL;
     }
 
-  CORE_ADDR vtable = value_as_address (value_field (value, vtable_field));
+  CORE_ADDR vtable = value_as_address (value->field (vtable_field));
   struct symbol *symbol = find_symbol_at_address (vtable);
   if (symbol == NULL || symbol->subclass != SYMBOL_RUST_VTABLE)
     return NULL;
@@ -266,7 +268,7 @@ rust_get_trait_object_pointer (struct value *value)
   struct rust_vtable_symbol *vtable_sym
     = static_cast<struct rust_vtable_symbol *> (symbol);
   struct type *pointer_type = lookup_pointer_type (vtable_sym->concrete_type);
-  return value_cast (pointer_type, value_field (value, 1 - vtable_field));
+  return value_cast (pointer_type, value->field (1 - vtable_field));
 }
 
 /* Find and possibly rewrite the unsized part of a slice-like type.
@@ -377,7 +379,7 @@ rust_array_like_element_type (struct type *type)
   gdb_assert (rust_slice_type_p (type));
   for (const auto &field : type->fields ())
     {
-      if (strcmp (field.name (), "data_ptr") == 0)
+      if (streq (field.name (), "data_ptr"))
 	{
 	  struct type *base_type = field.type ()->target_type ();
 	  if (rewrite_slice_type (base_type, nullptr, 0, nullptr))
@@ -389,6 +391,69 @@ rust_array_like_element_type (struct type *type)
 }
 
 
+
+/* A wchar_printer specialized for Rust syntax.  */
+class rust_wchar_printer : public wchar_printer
+{
+  using wchar_printer::wchar_printer;
+
+  bool printable (gdb_wchar_t w) const override;
+  void print_char (gdb_wchar_t w) override;
+  void print_escape (const gdb_byte *orig, int orig_len) override;
+};
+
+bool
+rust_wchar_printer::printable (gdb_wchar_t w) const
+{
+  return (gdb_iswprint (w)
+	  || w == LCST ('\n') || w == LCST ('\r')
+	  || w == LCST ('\t') || w == LCST ('\0'));
+}
+
+void
+rust_wchar_printer::print_char (gdb_wchar_t w)
+{
+  if (w == LCST ('\\'))
+    m_file.write (LCST ("\\\\"));
+  else if (w == gdb_btowc (m_quoter))
+    {
+      m_file.write (LCST ('\\'));
+      m_file.write (w);
+    }
+  else if (w == LCST ('\n'))
+    m_file.write (LCST ("\\n"));
+  else if (w == LCST ('\r'))
+    m_file.write (LCST ("\\r"));
+  else if (w == LCST ('\t'))
+    m_file.write (LCST ("\\t"));
+  else if (w == LCST ('\0'))
+    m_file.write (LCST ("\\0"));
+  else
+    m_file.write (w);
+}
+
+void
+rust_wchar_printer::print_escape (const gdb_byte *orig, int orig_len)
+{
+  int i;
+
+  for (i = 0; i + m_width <= orig_len; i += m_width)
+    {
+      ULONGEST value = extract_unsigned_integer (&orig[i], m_width,
+						 m_byte_order);
+      if (value <= 255)
+	gdb_printf (&m_file, "\\x%02x", (int) value);
+      else
+	gdb_printf (&m_file, "\\u{%06lx}", (unsigned long) value);
+    }
+
+  /* If we somehow have extra bytes, print them now.  */
+  while (i < orig_len)
+    {
+      gdb_printf (&m_file, "\\x%02x", orig[i] & 0xff);
+      ++i;
+    }
+}
 
 /* See language.h.  */
 
@@ -417,9 +482,8 @@ rust_language::printstr (struct ui_file *stream, struct type *type,
 	}
     }
 
-  /* This is not ideal as it doesn't use our character printer.  */
-  generic_printstr (stream, type, string, length, encoding, force_ellipses,
-		    '"', 0, options);
+  rust_wchar_printer printer (type, '"', encoding);
+  printer.print (stream, string, length, force_ellipses, 0, options);
 }
 
 
@@ -463,8 +527,7 @@ rust_language::val_print_slice
 
   /* &str is handled here; but for all other slice types it is fine to
      simply print the contents.  */
-  if (orig_type->name () != nullptr
-      && strcmp (orig_type->name (), "&str") == 0)
+  if (orig_type->name () != nullptr && streq (orig_type->name (), "&str"))
     {
       LONGEST low_bound, high_bound;
       if (get_array_bounds (type, &low_bound, &high_bound))
@@ -556,7 +619,7 @@ rust_language::val_print_struct
 	  gdb_puts (": ", stream);
 	}
 
-      common_val_print (value_field (val, i), stream, recurse + 1, &opts,
+      common_val_print (val->field (i), stream, recurse + 1, &opts,
 			this);
     }
 
@@ -636,7 +699,7 @@ rust_language::print_enum (struct value *val, struct ui_file *stream,
 		    styled_string (variable_name_style.style (),
 				   variant_type->field (j).name ()));
 
-      common_val_print (value_field (val, j), stream, recurse + 1, &opts,
+      common_val_print (val->field (j), stream, recurse + 1, &opts,
 			this);
     }
 
@@ -696,8 +759,10 @@ rust_language::value_print_inner
 
     case TYPE_CODE_INT:
       /* Recognize the unit type.  */
-      if (type->is_unsigned () && type->length () == 0
-	  && type->name () != NULL && strcmp (type->name (), "()") == 0)
+      if (type->is_unsigned ()
+	  && type->length () == 0
+	  && type->name () != nullptr
+	  && streq (type->name (), "()"))
 	{
 	  gdb_puts ("()", stream);
 	  break;
@@ -1259,18 +1324,17 @@ rust_compute_range (struct type *type, struct value *range,
     return;
 
   i = 0;
-  if (strcmp (type->field (0).name (), "start") == 0)
+  if (streq (type->field (0).name (), "start"))
     {
       *kind = RANGE_HIGH_BOUND_DEFAULT;
-      *low = value_as_long (value_field (range, 0));
+      *low = value_as_long (range->field (0));
       ++i;
     }
-  if (type->num_fields () > i
-      && strcmp (type->field (i).name (), "end") == 0)
+  if (type->num_fields () > i && streq (type->field (i).name (), "end"))
     {
       *kind = (*kind == (RANGE_LOW_BOUND_DEFAULT | RANGE_HIGH_BOUND_DEFAULT)
 	       ? RANGE_LOW_BOUND_DEFAULT : RANGE_STANDARD);
-      *high = value_as_long (value_field (range, i));
+      *high = value_as_long (range->field (i));
 
       if (rust_inclusive_range_type_p (type))
 	++*high;
@@ -1414,8 +1478,8 @@ rust_subscript_operation::subscript (struct expression *exp,
 	  addr = value_as_long (addrval);
 	  tem = value_at_lazy (slice, addr);
 
-	  value_assign (value_field (tem, 0), value_addr (result));
-	  value_assign (value_field (tem, 1),
+	  value_assign (tem->field (0), value_addr (result));
+	  value_assign (tem->field (1),
 			value_from_longest (usize, high - low));
 
 	  result = value_at_lazy (slice, addr);
@@ -1687,11 +1751,13 @@ rust_structop::evaluate_funcall (struct type *expect_type,
 					   SEARCH_FUNCTION_DOMAIN,
 					   nullptr);
   if (sym.symbol == NULL)
-    error (_("Could not find function named '%s'"), name.c_str ());
+    error (_("Could not find function named '%ps'"),
+	   styled_string (function_name_style.style (), name.c_str ()));
 
   struct type *fn_type = sym.symbol->type ();
   if (fn_type->num_fields () == 0)
-    error (_("Function '%s' takes no arguments"), name.c_str ());
+    error (_("Function '%ps' takes no arguments"),
+	   styled_string (function_name_style.style (), name.c_str ()));
 
   if (fn_type->field (0).type ()->code () == TYPE_CODE_PTR)
     args[0] = value_addr (args[0]);
@@ -1772,28 +1838,15 @@ rust_language::print_type (struct type *type, const char *varstring,
 /* See language.h.  */
 
 void
-rust_language::emitchar (int ch, struct type *chtype,
-			 struct ui_file *stream, int quoter) const
+rust_language::printchar (int ch, struct type *chtype,
+			  struct ui_file *stream) const
 {
   if (!rust_chartype_p (chtype))
-    generic_emit_char (ch, chtype, stream, quoter,
-		       target_charset (chtype->arch ()));
-  else if (ch == '\\' || ch == quoter)
-    gdb_printf (stream, "\\%c", ch);
-  else if (ch == '\n')
-    gdb_puts ("\\n", stream);
-  else if (ch == '\r')
-    gdb_puts ("\\r", stream);
-  else if (ch == '\t')
-    gdb_puts ("\\t", stream);
-  else if (ch == '\0')
-    gdb_puts ("\\0", stream);
-  else if (ch >= 32 && ch <= 127 && c_isprint (ch))
-    gdb_putc (ch, stream);
-  else if (ch <= 255)
-    gdb_printf (stream, "\\x%02x", ch);
+    generic_emit_char (ch, chtype, stream, target_charset (chtype->arch ()));
   else
-    gdb_printf (stream, "\\u{%06x}", ch);
+    {
+      rust_wchar_printer (chtype, '\'').print (ch, stream);
+    }
 }
 
 /* See language.h.  */
@@ -1823,7 +1876,7 @@ rust_language::is_string_type_p (struct type *type) const
 	  || (type->code () == TYPE_CODE_STRUCT
 	      && !rust_enum_p (type)
 	      && rust_slice_type_p (type)
-	      && strcmp (type->name (), "&str") == 0));
+	      && streq (type->name (), "&str")));
 }
 
 /* See language.h.  */

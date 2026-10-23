@@ -250,7 +250,7 @@ pascm_make_param_smob (void)
   SCM p_scm;
 
   p_smob->cmd_class = no_class;
-  p_smob->type = var_boolean; /* ARI: var_boolean */
+  p_smob->type = var_boolean;
   p_smob->set_func = SCM_BOOL_F;
   p_smob->show_func = SCM_BOOL_F;
   p_scm = scm_new_smob (parameter_smob_tag, (scm_t_bits) p_smob);
@@ -614,7 +614,7 @@ compute_enum_list (SCM enum_values_scm, int arg_pos, const char *func_name)
 
 static const scheme_integer_constant parameter_types[] =
 {
-  { "PARAM_BOOLEAN", param_boolean }, /* ARI: param_boolean */
+  { "PARAM_BOOLEAN", param_boolean },
   { "PARAM_AUTO_BOOLEAN", param_auto_boolean },
   { "PARAM_ZINTEGER", param_zinteger },
   { "PARAM_UINTEGER", param_uinteger },
@@ -795,7 +795,7 @@ pascm_set_param_value_x (param_smob *p_smob,
 	  gdbscm_throw (exception);
 	for (i = 0; enumeration[i]; ++i)
 	  {
-	    if (strcmp (enumeration[i], str.get ()) == 0)
+	    if (streq (enumeration[i], str.get ()))
 	      break;
 	  }
 	if (enumeration[i] == nullptr)
@@ -993,7 +993,7 @@ gdbscm_make_parameter (SCM name_scm, SCM rest)
   char *s;
   char *name;
   int cmd_class = no_class;
-  int param_type = param_boolean; /* ARI: param_boolean */
+  int param_type = param_boolean;
   SCM enum_list_scm = SCM_BOOL_F;
   SCM set_func = SCM_BOOL_F, show_func = SCM_BOOL_F;
   char *doc = NULL, *set_doc = NULL, *show_doc = NULL;

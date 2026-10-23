@@ -19,9 +19,8 @@
 
 #include "python-internal.h"
 
-struct membuf_object {
-  PyObject_HEAD
-
+struct membuf_object : public PyObject
+{
   /* Pointer to the raw data, and array of gdb_bytes.  */
   void *buffer;
 
@@ -31,6 +30,8 @@ struct membuf_object {
   /* The number of octets in BUFFER.  */
   CORE_ADDR length;
 };
+
+static_assert (gdb::is_python_allocatable_v<membuf_object>);
 
 extern PyTypeObject membuf_object_type;
 

@@ -4059,6 +4059,41 @@ This has a single attribute:
 The exiting thread.
 @end defvar
 
+@item events.selected_context
+This is emitted when the user directly, or indirectly, causes the
+selected inferior context to change.  The context consists of the
+currently selected inferior, thread, and frame.  Examples commands
+that trigger this event are @kbd{inferior}, @kbd{thread}, and
+@kbd{frame}.
+
+The event is of type @code{gdb.SelectedContextEvent} and has the
+following attributes:
+
+@defvar SelectedContextEvent.inferior
+The currently selected inferior.  This is of type @code{gdb.Inferior}
+(@pxref{Inferiors In Python}).
+@end defvar
+
+@defvar SelectedContextEvent.thread
+The currently selected thread.  If not @code{None} then this is of
+type @code{gdb.InferiorThread} (@pxref{Threads In Python}).  If
+switching to an inferior that is not yet started, then the
+@code{thread} attribute will be @code{None}.
+@end defvar
+
+@defvar SelectedContextEvent.frame
+The currently selected frame.  If not @code{None} then this is of type
+@code{gdb.Frame} (@pxref{Frames In Python}).  If switching to an
+inferior that is not yet started, then the @code{frame} attribute will
+be @code{None}.
+@end defvar
+
+In some cases @value{GDBN} might emit the @code{selected_context}
+event even when the context has not changed.  The state within the
+event will always reflect the state of the current inferior.  These
+unnecessary events could be removed in future releases of
+@value{GDBN}.
+
 @item events.gdb_exiting
 This is emitted when @value{GDBN} exits.  This event is not emitted if
 @value{GDBN} exits as a result of an internal error, or after an
@@ -4111,6 +4146,17 @@ command, @value{GDBN} updates both of these fields, but the executable
 file is updated first, so when this event is emitted, the executable
 filename will have changed, but the symbol filename might still hold
 its previous value.
+
+@item events.corefile_changed
+Emits @code{gdb.CorefileChangedEvent} which indicates that the core
+file associated with a @code{gdb.Inferior} has changed, either a new
+core file has been loaded, or the existing core file has been
+unloaded (@pxref{Core Files In Python}).
+
+@defvar CorefileChangedEvent.inferior
+The @code{gdb.Inferior} in which the core file has changed
+(@pxref{Inferiors In Python}).
+@end defvar
 
 @item events.new_progspace
 This is emitted when @value{GDBN} adds a new program space
@@ -6307,6 +6353,14 @@ One past the last address that appears in the block.  This attribute
 is not writable.
 @end defvar
 
+@defvar Block.ranges
+A tuple representing address ranges of the block.  Each range is represented
+as a pair (two-element tuple) where the first element is the start of the
+range and the second element is one past the last address that appears in
+the range. The order of ranges is unspecified.  Contiguous blocks have only
+one range.  This attribute is not writable.
+@end defvar
+
 @defvar Block.function
 The name of the block represented as a @code{gdb.Symbol}.  If the
 block is not named, then this attribute holds @code{None}.  This
@@ -6782,6 +6836,32 @@ Return the line table associated with the symbol table.
 @xref{Line Tables In Python}.
 @end defun
 
+@defun Symtab.source_lines (first = @code{1}, last = @code{0}, unstyled = @code{False})
+Read source lines from the file associated with this Symtab, this will
+be the filename pointed to by @code{Symtab.fullname}.  The source
+lines are returned as a tuple of strings, each string represents a
+single source line.
+
+The @var{first} and @var{last} arguments can be used to only return
+some lines from the file, @var{first} will be the first line returned,
+and @var{last} will be the last line returned, as such @var{first}
+must be less than, or equal to, @var{last}.
+
+The default for @var{first} is @code{1}, which is the first line of
+the file.  The default for @var{last} is @code{0}, which is a special
+value meaning the last line of the file.
+
+When @var{unstyled} is @code{True} then the strings returned will have
+no style information included.  When @var{unstyled} is @code{False},
+the default, then the returned strings will include style information
+if styling is enabled (@pxref{Output Styling}), and @value{GDBN} knows
+how to style the source file.  Styling information will take the form of
+ANSI terminal escape sequences embedded within the strings.
+
+If the source file cannot be read, for example, if the source file is
+missing, then this method returns @code{None}.
+@end defun
+
 @node Line Tables In Python
 @subsubsection Manipulating line tables using Python
 
@@ -7221,6 +7301,9 @@ and deleted when the execution will run out of the breakpoint scope (i.e.@:
 Finish breakpoints are thread specific and must be create with the right
 thread selected.
 
+It is not possible to create a @code{gdb.FinishBreakpoint} for an
+inline frame (@pxref{Inline Functions}).
+
 @defun FinishBreakpoint.__init__ (@r{[}frame@r{]} @r{[}, internal@r{]})
 Create a finish breakpoint at the return address of the @code{gdb.Frame}
 object @var{frame}.  If @var{frame} is not provided, this defaults to the
@@ -7568,7 +7651,7 @@ A @code{gdb.Architecture} class has the following methods:
 Return the name (string value) of the architecture.
 @end defun
 
-@defun Architecture.disassemble (start_pc @r{[}, end_pc @r{[}, count@r{]]})
+@defun Architecture.disassemble (start_pc @r{[}, end_pc @r{[}, count@r{]]} @w{@r{[}, styling = @code{False}@r{]}})
 Return a list of disassembled instructions starting from the memory
 address @var{start_pc}.  The optional arguments @var{end_pc} and
 @var{count} determine the number of instructions in the returned list.
@@ -7596,6 +7679,11 @@ The value corresponding to this key is a string value which represents
 the instruction with assembly language mnemonics.  The assembly
 language flavor used is the same as that specified by the current CLI
 variable @code{disassembly-flavor}.  @xref{Machine Code}.
+
+When the optional argument @var{styling} is @code{True} the @samp{asm}
+string can contain ANSI terminal escape sequences if styling is
+enabled (@pxref{Output Styling}).  When @var{styling} is @code{False},
+which is the default, then no styling will be applied to @samp{asm}.
 
 @item length
 The value corresponding to this key is the length (integer value) of the
@@ -8952,8 +9040,10 @@ processes address space when the core file was created.
 A @code{gdb.CorefileMappedFile} object has the following attributes:
 
 @defvar CorefileMappedFile.filename
-This read only attribute contains a non-empty string, the file name of
-the mapped file.
+This read only attribute contains a string, the file name of the
+mapped file.  This string can be empty if @value{GDBN} was unable to
+find the name of the mapped file.  If this string is empty then
+@code{CorefileMappedFile.build_id} will not be @code{None}.
 @end defvar
 
 @defvar CorefileMappedFile.build_id
@@ -8993,7 +9083,9 @@ the inferior.
 
 @defvar CorefileMappedFileRegion.file_offset
 This read only attribute contains the offset within the mapped file
-for this mapping.
+for this mapping.  This attribute will be @code{0} if the containing
+@code{CorefileMappedFile.filename} is empty, in which case this
+attribute has no meaning.
 @end defvar
 
 @node Python Auto-loading

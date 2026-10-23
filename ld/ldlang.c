@@ -1119,6 +1119,11 @@ lang_for_each_statement_worker (void (*func) (lang_statement_union_type *),
 					  s->group_statement.children.head,
 					  constrained);
 	  break;
+	case lang_lib_statement_enum:
+	  lang_for_each_statement_worker (func,
+					  s->lib_statement.children.head,
+					  constrained);
+	  break;
 	case lang_data_statement_enum:
 	case lang_reloc_statement_enum:
 	case lang_object_symbols_statement_enum:
@@ -1210,6 +1215,7 @@ new_afile (const char *name,
   p->flags.add_DT_NEEDED_for_dynamic = input_flags.add_DT_NEEDED_for_dynamic;
   p->flags.add_DT_NEEDED_for_regular = input_flags.add_DT_NEEDED_for_regular;
   p->flags.whole_archive = input_flags.whole_archive;
+  p->flags.link_mapless = input_flags.link_mapless;
   p->flags.sysrooted = input_flags.sysrooted;
   p->sort_key = NULL;
 
@@ -1225,6 +1231,25 @@ new_afile (const char *name,
       p->filename = name;
       p->local_sym_name = name;
       break;
+    case lang_input_file_is_fake_archive_enum:
+      p->filename = name;
+      p->flags.link_mapless = true;
+      break;
+    case lang_input_file_is_search_member_enum:
+      p->filename = name;
+      p->local_sym_name = name;
+      /* If name is a relative path, search the directory of the current linker
+	 script first. */
+      if (from_filename && !IS_ABSOLUTE_PATH (name))
+	p->extra_search_path = stat_ldirname (from_filename);
+      p->flags.member = true;
+      p->flags.search_dirs = true;
+      break;
+    case lang_input_file_is_member_enum:
+      p->filename = name;
+      p->local_sym_name = name;
+      p->flags.member = true;
+      break;
     case lang_input_file_is_l_enum:
       if (name[0] == ':' && name[1] != '\0')
 	{
@@ -1233,7 +1258,7 @@ new_afile (const char *name,
 	}
       else
 	p->filename = name;
-      p->local_sym_name = concat ("-l", name, (const char *) NULL);
+      p->local_sym_name = stat_concat ("-l", name, (const char *) NULL);
       p->flags.maybe_archive = true;
       p->flags.real = true;
       p->flags.search_dirs = true;
@@ -1301,9 +1326,9 @@ lang_add_input_file (const char *name,
     {
       lang_input_statement_type *ret;
       char *sysrooted_name
-	= concat (ld_sysroot,
-		  name + (*name == '=' ? 1 : strlen ("$SYSROOT")),
-		  (const char *) NULL);
+	= stat_concat (ld_sysroot,
+		       name + (*name == '=' ? 1 : strlen ("$SYSROOT")),
+		       (const char *) NULL);
 
       /* We've now forcibly prepended the sysroot, making the input
 	 file independent of the context.  Therefore, temporarily
@@ -1454,6 +1479,37 @@ lang_finish (void)
 {
   output_section_statement_table_free ();
   ldfile_free ();
+}
+
+/* Called by ld_cleanup() at linker exit.  Frees any remaining memory used by
+   ldlang.c in order to pacify memory leak checkers.  */
+
+void
+lang_cleanup (void)
+{
+  lang_input_statement_type *search;
+
+  /* FIXME: Walking the file_chain list closes most of the open bfds but not
+     all of them.  We should find and close the others as well.
+
+     Note: the bfds closed here can also be found on the input_file_chain and
+     link_info.input_bfd lists.  A bfd can only be closed once however, so we
+     must not walk those other lists.  */
+
+  for (search = (void *) file_chain.head;
+       search != NULL;
+       search = search->next_real_file)
+    {
+      if (search->the_bfd == NULL)
+	continue;
+      
+      bfd_close_all_done (search->the_bfd);
+      search->the_bfd = NULL;
+    }
+
+  stat_free (NULL);
+
+  obstack_free (&pt_obstack, NULL);
 }
 
 /*----------------------------------------------------------------------
@@ -1995,6 +2051,7 @@ insert_os_after (lang_statement_union_type *after)
 	case lang_output_statement_enum:
 	case lang_group_statement_enum:
 	case lang_insert_statement_enum:
+	case lang_lib_statement_enum:
 	  continue;
 	case lang_input_matcher_enum:
 	  FAIL ();
@@ -2714,17 +2771,36 @@ wont_add_section_p (asection *section,
 
   if (discard)
     {
+      /* /DISCARD/ is seen first and the top-most clause has precedence on the
+	 next ones, thus the section will be dropped.  No need to warn about
+	 potential change in behavior with non-contiguous regions when the
+	 section is already dropped.  */
       if (section->output_section == NULL)
 	{
 	  /* This prevents future calls from assigning this section or
 	     warning about it again.  */
 	  section->output_section = bfd_abs_section_ptr;
 	}
-      else if (bfd_is_abs_section (section->output_section))
-	;
-      else if (link_info.non_contiguous_regions_warnings)
+      /* The /DISCARD/ clause follows clauses that assign the input section to
+	 an output section. Since /DISCARD/ does not have the precedence,
+	 /DISCARD/ is ignored.
+	 1. If the input section can be assigned to an output section,
+	    the link will succeed. The warning below is emitted with
+	    --enable-non-contiguous-regions-warnings so that the user can
+	    notice that /DISCARD/ did not do what he might have expected,
+	    i.e. discarding the input section.
+	 2. If the input section cannot be assigned, the link will fail
+	    with an error. The warning below is emitted with
+	    --enable-non-contiguous-regions-warnings so that the user can
+	    notice that /DISCARD/ was ignored for this input section, then
+	    leading to a link failure caused by not enough space in the output
+	    section for the input section.  */
+      else if (! bfd_is_abs_section (section->output_section)
+	       && link_info.non_contiguous_regions_warnings)
 	einfo (_("%P:%pS: warning: --enable-non-contiguous-regions makes "
-		 "section `%pA' from `%pB' match /DISCARD/ clause.\n"),
+		 "section `%pA' from `%pB' match /DISCARD/ clause.  If the "
+		 "section can be assigned to an output section, it won't be "
+		 "discarded.\n"),
 	       NULL, section, section->owner);
 
       return true;
@@ -2980,6 +3056,31 @@ check_section_callback (lang_wild_statement_type *ptr ATTRIBUTE_UNUSED,
     os->all_input_readonly = false;
 }
 
+/* Build a new input file node and arrange to splice the input statement
+   added into statement_list after the current input_file_chain tail.  */
+
+static lang_input_statement_type *
+insert_input_file (const char *name,
+		   lang_input_file_enum_type file_type,
+		   const char *target)
+{
+  lang_statement_union_type **tail = stat_ptr->tail;
+  lang_statement_union_type **after
+    = (void *) ((char *) input_file_chain.tail
+		- offsetof (lang_input_statement_type, next_real_file)
+		+ offsetof (lang_input_statement_type, header.next));
+  lang_statement_union_type *rest = *after;
+  lang_input_statement_type *p;
+
+  stat_ptr->tail = after;
+  p = new_afile (name, file_type, target, NULL);
+  *stat_ptr->tail = rest;
+  if (*tail == NULL)
+    stat_ptr->tail = tail;
+
+  return p;
+}
+
 /* This is passed a file name which must have been seen already and
    added to the statement tree.  We will see if it has been opened
    already and had its symbols read.  If not then we'll read it.  */
@@ -3005,23 +3106,12 @@ lookup_name (const char *name)
 
   if (search == NULL)
     {
-      /* Arrange to splice the input statement added by new_afile into
-	 statement_list after the current input_file_chain tail.
-	 We know input_file_chain is not an empty list, and that
+      /* We know input_file_chain is not an empty list, and that
 	 lookup_name was called via open_input_bfds.  Later calls to
 	 lookup_name should always match an existing input_statement.  */
-      lang_statement_union_type **tail = stat_ptr->tail;
-      lang_statement_union_type **after
-	= (void *) ((char *) input_file_chain.tail
-		    - offsetof (lang_input_statement_type, next_real_file)
-		    + offsetof (lang_input_statement_type, header.next));
-      lang_statement_union_type *rest = *after;
-      stat_ptr->tail = after;
-      search = new_afile (name, lang_input_file_is_search_file_enum,
-			  default_target, NULL);
-      *stat_ptr->tail = rest;
-      if (*tail == NULL)
-	stat_ptr->tail = tail;
+      search = insert_input_file (name, lang_input_file_is_search_file_enum,
+				  default_target);
+      ASSERT (search != NULL);
     }
 
   /* If we have already added this file, or this file is not real
@@ -3201,6 +3291,7 @@ load_symbols (lang_input_statement_type *entry,
     case bfd_archive:
       check_excluded_libs (entry->the_bfd);
 
+      bfd_set_link_mapless (entry->the_bfd, entry->flags.link_mapless);
       bfd_set_usrdata (entry->the_bfd, entry);
       if (entry->flags.whole_archive)
 	{
@@ -3778,6 +3869,54 @@ open_input_bfds (lang_statement_union_type *s,
 	  if (s->assignment_statement.exp->type.node_class != etree_assert)
 	    exp_fold_tree_no_dot (s->assignment_statement.exp, os);
 	  break;
+	case lang_lib_statement_enum:
+	  {
+	    lang_statement_union_type *c;
+	    bfd *first_bfd = NULL, **next_bfd = &first_bfd;
+
+	    for (c = s->lib_statement.children.head;
+		 c != NULL;
+		 c = c->header.next)
+	      if (c->header.type == lang_input_statement_enum
+		  && c->input_statement.flags.member)
+		{
+		  bfd *abfd;
+
+		  c->input_statement.target = current_target;
+		  ldfile_open_file (&c->input_statement);
+		  abfd = c->input_statement.the_bfd;
+		  if (abfd != NULL)
+		    {
+		      *next_bfd = abfd;
+		      next_bfd = &abfd->proxy_handle.abfd;
+		    }
+		}
+
+	    if (first_bfd != NULL)
+	      {
+		lang_input_statement_type *h, *p;
+		bfd *fake_bfd;
+
+		h = &s->lib_statement.children.head->input_statement;
+		p = insert_input_file (NULL,
+				       lang_input_file_is_fake_archive_enum,
+				       h->target);
+		ASSERT (p != NULL);
+
+		fake_bfd = bfd_openr_fake_archive (first_bfd);
+		if (fake_bfd == NULL)
+		  fatal
+		    (_("cannot create --start-lib/--end-lib wrapper BFD:"
+		       " %E\n"));
+		p->the_bfd = fake_bfd;
+
+		if (!load_symbols (p, NULL))
+		  config.make_executable = false;
+	      }
+
+	    open_input_bfds (s->lib_statement.children.head, os, mode,
+			     nested_group_count_p);
+	  }
 	default:
 	  break;
 	}
@@ -4238,6 +4377,12 @@ check_input_sections
 	  if (!output_section_statement->all_input_readonly)
 	    return;
 	  break;
+	case lang_lib_statement_enum:
+	  check_input_sections (s->lib_statement.children.head,
+				output_section_statement);
+	  if (!output_section_statement->all_input_readonly)
+	    return;
+	  break;
 	default:
 	  break;
 	}
@@ -4360,6 +4505,8 @@ map_input_to_output_sections
 	  map_input_to_output_sections (s->group_statement.children.head,
 					target,
 					os);
+	  break;
+	case lang_lib_statement_enum:
 	  break;
 	case lang_data_statement_enum:
 	  if (os == NULL)
@@ -5403,6 +5550,17 @@ print_group (lang_group_statement_type *s,
   fprintf (config.map_file, "END GROUP\n");
 }
 
+/* Print a lib statement.  */
+
+static void
+print_lib (lang_lib_statement_type *s,
+	   lang_output_section_statement_type *os)
+{
+  fprintf (config.map_file, "START LIB\n");
+  print_statement_list (s->children.head, os);
+  fprintf (config.map_file, "END LIB\n");
+}
+
 /* Print the list of statements in S.
    This can be called for any statement type.  */
 
@@ -5484,6 +5642,9 @@ print_statement (lang_statement_union_type *s,
       break;
     case lang_group_statement_enum:
       print_group (&s->group_statement, os);
+      break;
+    case lang_lib_statement_enum:
+      print_lib (&s->lib_statement, os);
       break;
     case lang_insert_statement_enum:
       minfo ("INSERT %s %s\n",
@@ -5582,7 +5743,7 @@ size_input_section
   lang_input_section_type *is = &((*this_ptr)->input_section);
   asection *i = is->section;
   asection *o = output_section_statement->bfd_section;
-  *removed = 0;
+  *removed = false;
 
   if (link_info.non_contiguous_regions)
     {
@@ -5593,7 +5754,7 @@ size_input_section
 	 have reinitialized its size.  */
       if (i->already_assigned && i->already_assigned != o)
 	{
-	  *removed = 1;
+	  *removed = true;
 	  return dot;
 	}
     }
@@ -5643,10 +5804,12 @@ size_input_section
 
 	      if (dot + TO_ADDR (i->size) > end)
 		{
-		  if (i->flags & SEC_LINKER_CREATED)
-		    fatal (_("%P: Output section `%pA' not large enough for "
-			     "the linker-created stubs section `%pA'.\n"),
-			   i->output_section, i);
+		  if (i->veneer)
+		    fatal (_("%P: Memory region `%s' not large enough for the "
+			     "linker-created stubs section `%pA' associated to "
+			     "output section `%pA'\n"),
+			   output_section_statement->region->name_list.name, i,
+			   i->output_section);
 
 		  if (i->rawsize && i->rawsize != i->size)
 		    fatal (_("%P: Relaxation not supported with "
@@ -5654,7 +5817,7 @@ size_input_section
 			     "would overflow `%pA' after it changed size).\n"),
 			   i, i->output_section);
 
-		  *removed = 1;
+		  *removed = true;
 		  dot = end;
 		  i->output_section = NULL;
 		  return dot;
@@ -6497,6 +6660,9 @@ lang_size_sections_1
 	case lang_address_statement_enum:
 	  break;
 
+	case lang_lib_statement_enum:
+	  break;
+
 	default:
 	  FAIL ();
 	  break;
@@ -6890,6 +7056,9 @@ lang_do_assignments_1 (lang_statement_union_type *s,
 	  break;
 
 	case lang_address_statement_enum:
+	  break;
+
+	case lang_lib_statement_enum:
 	  break;
 
 	default:
@@ -8299,21 +8468,15 @@ lang_add_gc_name (const char *name)
 static void
 lang_check_relocs (void)
 {
-  if (link_info.check_relocs_after_open_input)
-    {
-      bfd *abfd;
-
-      for (abfd = link_info.input_bfds;
-	   abfd != (bfd *) NULL; abfd = abfd->link.next)
-	if (!bfd_link_check_relocs (abfd, &link_info))
-	  {
-	    /* No object output, fail return.  */
-	    config.make_executable = false;
-	    /* Note: we do not abort the loop, but rather
-	       continue the scan in case there are other
-	       bad relocations to report.  */
-	  }
-    }
+  for (bfd *abfd = link_info.input_bfds; abfd != NULL; abfd = abfd->link.next)
+    if (!bfd_link_check_relocs (abfd, &link_info))
+      {
+	/* No object output, fail return.  */
+	config.make_executable = false;
+	/* Note: we do not abort the loop, but rather
+	   continue the scan in case there are other
+	   bad relocations to report.  */
+      }
 }
 
 /* Look through all output sections looking for places where we can
@@ -8337,9 +8500,14 @@ lang_propagate_lma_regions (void)
     }
 }
 
+/* Checks whether any input section was not allocated to an output section.
+   If such a case is found, emits an error for the corresponding input section
+   and stops the link process.  */
+
 static void
-warn_non_contiguous_discards (void)
+error_non_contiguous_unallocated_sections (void)
 {
+  bool removed_section = false;
   LANG_FOR_EACH_INPUT_STATEMENT (file)
     {
       if ((file->the_bfd->flags & (BFD_LINKER_CREATED | DYNAMIC)) != 0
@@ -8347,12 +8515,17 @@ warn_non_contiguous_discards (void)
 	continue;
 
       for (asection *s = file->the_bfd->sections; s != NULL; s = s->next)
-	if (s->output_section == NULL
-	    && (s->flags & SEC_LINKER_CREATED) == 0)
-	  einfo (_("%P: warning: --enable-non-contiguous-regions "
-		   "discards section `%pA' from `%pB'\n"),
-		 s, file->the_bfd);
+	if (s->output_section == NULL && !s->veneer)
+	  {
+	    einfo (_("%P: error: --enable-non-contiguous-regions was not able "
+		     "to allocate the input section `%pA' (%pB) to an output "
+		     "section\n"),
+		   s, file->the_bfd);
+	    removed_section = true;
+	  }
     }
+  if (removed_section)
+    fatal (_("%P: final link failed\n"));
 }
 
 static void
@@ -8691,16 +8864,19 @@ lang_process (void)
     {
       asection *found;
 
-      ld_start_phase (PHASE_MERGE);
+      if (! link_info.skip_optional)
+	{
+	  ld_start_phase (PHASE_MERGE);
 
-      /* Merge SEC_MERGE sections.  This has to be done after GC of
-	 sections, so that GCed sections are not merged, but before
-	 assigning dynamic symbols, since removing whole input sections
-	 is hard then.  */
-      if (!bfd_merge_sections (link_info.output_bfd, &link_info))
-	fatal (_("%P: bfd_merge_sections failed: %E\n"));
+	  /* Merge SEC_MERGE sections.  This has to be done after GC of
+	     sections, so that GCed sections are not merged, but before
+	     assigning dynamic symbols, since removing whole input sections
+	     is hard then.  */
+	  if (!bfd_merge_sections (link_info.output_bfd, &link_info))
+	    fatal (_("%P: bfd_merge_sections failed: %E\n"));
 
-      ld_stop_phase (PHASE_MERGE);
+	  ld_stop_phase (PHASE_MERGE);
+	}
 
       /* Look for a text section and set the readonly attribute in it.  */
       found = bfd_get_section_by_name (link_info.output_bfd, ".text");
@@ -8777,9 +8953,8 @@ lang_process (void)
   if (command_line.check_section_addresses)
     lang_check_section_addresses ();
 
-  if (link_info.non_contiguous_regions
-      && link_info.non_contiguous_regions_warnings)
-    warn_non_contiguous_discards ();
+  if (link_info.non_contiguous_regions)
+    error_non_contiguous_unallocated_sections ();
 
   /* Check any required symbols are known.  */
   ldlang_check_require_defined_symbols ();
@@ -9204,6 +9379,35 @@ lang_enter_group (void)
 void
 lang_leave_group (void)
 {
+  pop_stat_ptr ();
+}
+
+/* Enter an artificial library.  This creates a new lang_lib_statement,
+   and sets stat_ptr to build new statements within the library.  */
+
+void
+lang_enter_lib (void)
+{
+  lang_lib_statement_type *l;
+
+  ASSERT (!input_flags.fake_archive);
+  l = new_stat (lang_lib_statement, stat_ptr);
+  lang_list_init (&l->children);
+  push_stat_ptr (&l->children);
+  input_flags.fake_archive = true;
+}
+
+/* Leave an artificial library.  This just resets stat_ptr to start
+   writing to the regular list of statements again.  We only support
+   a single level of artificial libraries (i.e. they can't be nested
+   in one another) and they need to be wholly contained in any group,
+   so there's no issue with getting stat_ptr messed up.  */
+
+void
+lang_leave_lib (void)
+{
+  ASSERT (input_flags.fake_archive);
+  input_flags.fake_archive = false;
   pop_stat_ptr ();
 }
 
@@ -11191,8 +11395,7 @@ cmdline_load_object_only_section (const char *name)
   lang_input_statement_type *entry
     = new_afile (name, lang_input_file_is_file_enum, NULL, NULL);
 
-  if (!entry)
-    abort ();
+  ASSERT (entry != NULL);
 
   ldfile_open_file (entry);
 

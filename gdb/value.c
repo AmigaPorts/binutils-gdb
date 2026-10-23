@@ -1128,6 +1128,12 @@ error_value_optimized_out (void)
 }
 
 void
+error_value_not_available ()
+{
+  throw_error (NOT_AVAILABLE_ERROR, _("value is not available"));
+}
+
+void
 value::require_not_optimized_out () const
 {
   if (!m_optimized_out.empty ())
@@ -1144,7 +1150,7 @@ void
 value::require_available () const
 {
   if (!m_unavailable.empty ())
-    throw_error (NOT_AVAILABLE_ERROR, _("value is not available"));
+    error_value_not_available ();
 }
 
 gdb::array_view<const gdb_byte>
@@ -1711,7 +1717,8 @@ value::record_latest ()
 
   /* We preserve VALUE_LVAL so that the user can find out where it was fetched
      from.  This is a bit dubious, because then *&$1 does not just return $1
-     but the current contents of that location.  c'est la vie...  */
+     but the current contents of that location.  <codespell:ignore-begin>
+     C'est la vie... <codespell:ignore-end>.  */
   set_modifiable (false);
 
   value_history.push_back (release_value (this));
@@ -3136,16 +3143,6 @@ value::primitive_field (LONGEST offset, int fieldno, struct type *arg_type)
     }
   v->set_component_location (this);
   return v;
-}
-
-/* Given a value ARG1 of a struct or union type,
-   extract and return the value of one of its (non-static) fields.
-   FIELDNO says which field.  */
-
-struct value *
-value_field (struct value *arg1, int fieldno)
-{
-  return arg1->primitive_field (0, fieldno, arg1->type ());
 }
 
 /* Return a non-virtual function as a value.

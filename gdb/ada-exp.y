@@ -44,6 +44,7 @@
 #include "frame.h"
 #include "block.h"
 #include "ada-exp.h"
+#include "cli/cli-style.h"
 
 #define parse_type(ps) builtin_type (ps->gdbarch ())
 
@@ -97,7 +98,7 @@ struct ada_parse_state
   std::vector<ada_assign_up> assignments;
 
   /* Track currently active iterated assignment names.  */
-  gdb::unordered_map<std::string, std::vector<ada_index_var_operation *>>
+  gdb::unordered_string_map<std::vector<ada_index_var_operation *>>
        iterated_associations;
 
   auto_obstack temp_space;
@@ -563,7 +564,7 @@ exp1	:	exp
 
 primary :	primary DOT_ID
 			{
-			  if (strcmp ($2.ptr, "all") == 0)
+			  if (streq ($2.ptr, "all"))
 			    ada_wrap<ada_unop_ind_operation> ();
 			  else
 			    {
@@ -1348,7 +1349,9 @@ write_object_renaming (struct parser_state *par_state,
   block_symbol sym_info = ada_lookup_encoded_symbol (name, orig_left_context,
 						     SEARCH_VFT);
   if (sym_info.symbol == NULL)
-    error (_("Could not find renamed variable: %s"), ada_decode (name).c_str ());
+    error (_("Could not find renamed variable: %ps"),
+	   styled_string (variable_name_style.style (),
+			  ada_decode (name).c_str ()));
   else if (sym_info.symbol->loc_class () == LOC_TYPEDEF)
     /* We have a renaming of an old-style renaming symbol.  Don't
        trust the block information.  */
@@ -1495,7 +1498,7 @@ block_lookup (const struct block *context, const char *raw_name)
     symtab = NULL;
 
   if (symtab != NULL)
-    result = symtab->compunit ()->blockvector ()->static_block ();
+    result = symtab->compunit ().blockvector ()->static_block ();
   else if (syms.empty () || syms[0].symbol->loc_class () != LOC_BLOCK)
     {
       if (context == NULL)
@@ -1553,7 +1556,7 @@ find_primitive_type (struct parser_state *par_state, const char *name)
   type = language_lookup_primitive_type (par_state->language (),
 					 par_state->gdbarch (),
 					 name);
-  if (type == NULL && strcmp ("system__address", name) == 0)
+  if (type == NULL && streq ("system__address", name))
     type = type_system_address (par_state);
 
   if (type != NULL)
@@ -1870,10 +1873,11 @@ write_var_or_type (struct parser_state *par_state,
 	    }
 	}
 
-      if (!have_full_symbols (current_program_space)
-	  && !have_partial_symbols (current_program_space)
+      if (!current_program_space->has_full_symbols ()
+	  && !current_program_space->has_partial_symbols ()
 	  && block == NULL)
-	error (_("No symbol table is loaded.  Use the \"file\" command."));
+	error (_("No symbol table is loaded.  Use the \"%ps\" command."),
+	       styled_string (command_style.style (), "file"));
       if (block == par_state->expression_context_block)
 	error (_("No definition of \"%s\" in current context."), name0.ptr);
       else

@@ -378,7 +378,7 @@ search_symbol_list (const char *name, int num, struct symbol **syms)
 {
   for (int i = 0; i < num; ++i)
     {
-      if (strcmp (name, syms[i]->natural_name ()) == 0)
+      if (streq (name, syms[i]->natural_name ()))
 	return syms[i];
     }
   return nullptr;
@@ -633,11 +633,14 @@ compare_filenames_for_search (const char *filename, const char *search_name)
 	      && STRIP_DRIVE_SPEC (filename) == &filename[len - search_len]));
 }
 
-/* See symtab.h.  */
+/* Return the first symtab in PSPACE matching NAME and for which
+   CALLBACK returns true.
 
-void
-iterate_over_symtabs (program_space *pspace, const char *name,
-		      gdb::function_view<bool (symtab *)> callback)
+   See documentation for for_each_symtab for how exactly NAME is matched.  */
+
+static symtab *
+find_symtab (program_space *pspace, const char *name,
+	     find_symtab_callback_ftype callback)
 {
   gdb::unique_xmalloc_ptr<char> real_path;
 
@@ -650,9 +653,26 @@ iterate_over_symtabs (program_space *pspace, const char *name,
     }
 
   for (objfile &objfile : pspace->objfiles ())
-    if (objfile.map_symtabs_matching_filename (name, real_path.get (),
-					       callback))
-      return;
+    if (symtab *result
+	  = objfile.find_symtab_matching_filename (name, real_path.get (),
+						   callback);
+	result != nullptr)
+      return result;
+
+  return nullptr;
+}
+
+/* See symtab.h.  */
+
+void
+for_each_symtab (program_space *pspace, const char *name,
+		 for_each_symtab_callback_ftype callback)
+{
+  find_symtab (pspace, name, [&] (symtab *symtab)
+	       {
+		 callback (symtab);
+		 return false;
+	       });
 }
 
 /* See symtab.h.  */
@@ -660,15 +680,7 @@ iterate_over_symtabs (program_space *pspace, const char *name,
 symtab *
 lookup_symtab (program_space *pspace, const char *name)
 {
-  struct symtab *result = NULL;
-
-  iterate_over_symtabs (pspace, name, [&] (symtab *symtab)
-    {
-      result = symtab;
-      return true;
-    });
-
-  return result;
+  return find_symtab (pspace, name, [&] (symtab *symtab) { return true; });
 }
 
 
@@ -708,8 +720,8 @@ gdb_mangle_name (struct type *type, int method_id, int signature_id)
 
   is_full_physname_constructor = is_constructor_name (physname);
 
-  is_constructor = is_full_physname_constructor
-    || (newname && strcmp (field_name, newname) == 0);
+  is_constructor = (is_full_physname_constructor
+		    || (newname != nullptr && streq (field_name, newname)));
 
   if (!is_destructor)
     is_destructor = (startswith (physname, "__dt"));
@@ -1159,9 +1171,9 @@ matching_obj_sections (struct obj_section *obj_first,
       != bfd_section_vma (second) - bfd_get_start_address (second->owner))
     return false;
 
-  if (bfd_section_name (first) == NULL
-      || bfd_section_name (second) == NULL
-      || strcmp (bfd_section_name (first), bfd_section_name (second)) != 0)
+  if (bfd_section_name (first) == nullptr
+      || bfd_section_name (second) == nullptr
+      || !streq (bfd_section_name (first), bfd_section_name (second)))
     return false;
 
   /* Otherwise check that they are in corresponding objfiles.  */
@@ -1246,7 +1258,7 @@ eq_symbol_entry (const struct symbol_cache_slot *slot,
 
       if (slot->state == SYMBOL_SLOT_NOT_FOUND)
 	{
-	  if (strcmp (slot_name, name) != 0)
+	  if (!streq (slot_name, name))
 	    return 0;
 	}
       else
@@ -1322,7 +1334,7 @@ get_symbol_cache (struct program_space *pspace)
 
   if (cache == NULL)
     {
-      cache = symbol_cache_key.emplace (pspace);
+      cache = &symbol_cache_key.emplace (pspace);
       resize_symbol_cache (cache, symbol_cache_size);
     }
 
@@ -1668,9 +1680,9 @@ maintenance_print_symbol_cache_statistics (const char *args, int from_tty)
 /* This module's 'new_objfile' observer.  */
 
 static void
-symtab_new_objfile_observer (struct objfile *objfile)
+symtab_new_objfile_observer (struct objfile &objfile)
 {
-  symbol_cache_flush (objfile->pspace ());
+  symbol_cache_flush (objfile.pspace ());
 }
 
 /* This module's 'all_objfiles_removed' observer.  */
@@ -2385,9 +2397,11 @@ lookup_symbol_via_quick_fns (struct objfile *objfile,
     {
       const struct blockvector *bv = symtab->blockvector ();
       const struct block *block = bv->block (block_index);
-      /* If the accumulator finds a best symbol, end the search by
-	 returning false; otherwise keep going by returning true.  */
-      return !accum.search (symtab, block, lookup_name, domain);
+      /* End the search if the accumulator finds a best symbol.  */
+      if (accum.search (symtab, block, lookup_name, domain))
+	return iteration_status::stop;
+
+      return iteration_status::keep_going;
     };
 
   objfile->search (nullptr, &lookup_name, nullptr, searcher,
@@ -2650,7 +2664,7 @@ lookup_transparent_type_quick (struct objfile *objfile,
   sym = block_find_symbol (block, name, flags, nullptr);
   if (sym == nullptr)
     error_in_psymtab_expansion (block_index, name.c_str (), cust);
-  gdb_assert (!TYPE_IS_OPAQUE (sym->type ()));
+  gdb_assert (!sym->type ()->is_opaque ());
   return sym->type ();
 }
 
@@ -2687,23 +2701,18 @@ lookup_transparent_type (const char *name, domain_search_flags flags)
 
 /* See symtab.h.  */
 
-bool
-iterate_over_symbols (const struct block *block,
-		      const lookup_name_info &name,
-		      const domain_search_flags domain,
-		      gdb::function_view<symbol_found_callback_ftype> callback)
+void
+for_each_symbol (const struct block *block, const lookup_name_info &name,
+		 const domain_search_flags domain,
+		 for_each_symbol_callback_ftype callback)
 {
   for (struct symbol *sym : block_iterator_range (block, &name))
-    {
-      if (sym->matches (domain))
-	{
-	  struct block_symbol block_sym = {sym, block};
+    if (sym->matches (domain))
+      {
+	block_symbol block_sym = { sym, block };
 
-	  if (!callback (&block_sym))
-	    return false;
-	}
-    }
-  return true;
+	callback (&block_sym);
+      }
 }
 
 /* Find the compunit symtab associated with PC and SECTION.
@@ -2971,7 +2980,7 @@ find_sal_for_pc_sect (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 	   * so of course we can't find the real func/line info,
 	   * but the "break" still works, and the warning is annoying.
 	   * So I commented out the warning.  RT */
-	  /* warning ("In stub for %s; unable to find real function/line info",
+	  /* warning (_("In stub for %s; unable to find real function/line info"),
 	     msymbol->linkage_name ()); */
 	  ;
 	/* fall through */
@@ -2979,7 +2988,7 @@ find_sal_for_pc_sect (CORE_ADDR pc, struct obj_section *section, int notcurrent)
 		 == msymbol.value_address ())
 	  /* Avoid infinite recursion */
 	  /* See above comment about why warning is commented out.  */
-	  /* warning ("In stub for %s; unable to find real function/line info",
+	  /* warning (_("In stub for %s; unable to find real function/line info"),
 	     msymbol->linkage_name ()); */
 	  ;
 	/* fall through */
@@ -3384,7 +3393,7 @@ find_pc_for_line (struct symtab *symtab, int line, CORE_ADDR *pc)
   if (symtab != NULL)
     {
       l = symtab->linetable ();
-      *pc = l->item[ind].pc (symtab->compunit ()->objfile ());
+      *pc = l->item[ind].pc (symtab->compunit ().objfile ());
       return true;
     }
   else
@@ -3506,10 +3515,10 @@ find_function_start_sal_1 (CORE_ADDR func_addr, obj_section *section,
   symtab_and_line sal = find_sal_for_pc_sect (func_addr, section, 0);
 
   if (funfirstline && sal.symtab != NULL
-      && (sal.symtab->compunit ()->locations_valid ()
+      && (sal.symtab->compunit ().locations_valid ()
 	  || sal.symtab->language () == language_asm))
     {
-      struct gdbarch *gdbarch = sal.symtab->compunit ()->objfile ()->arch ();
+      struct gdbarch *gdbarch = sal.symtab->compunit ().objfile ()->arch ();
 
       sal.pc = func_addr;
       if (gdbarch_skip_entrypoint_p (gdbarch))
@@ -3587,7 +3596,7 @@ skip_prologue_using_lineinfo (CORE_ADDR func_addr, struct symtab *symtab)
   if (!find_pc_partial_function (func_addr, NULL, &func_start, &func_end))
     return func_addr;
 
-  struct objfile *objfile = symtab->compunit ()->objfile ();
+  struct objfile *objfile = symtab->compunit ().objfile ();
 
   /* Linetable entries are ordered by PC values, see the commentary in
      symtab.h where `struct linetable' is defined.  Thus, the first
@@ -3629,7 +3638,7 @@ skip_prologue_using_linetable (CORE_ADDR func_addr)
     {
       const linetable *linetable = prologue_sal.symtab->linetable ();
 
-      struct objfile *objfile = prologue_sal.symtab->compunit ()->objfile ();
+      struct objfile *objfile = prologue_sal.symtab->compunit ().objfile ();
 
       unrelocated_addr unrel_start
 	= unrelocated_addr (start_pc - objfile->text_section_offset ());
@@ -3722,7 +3731,7 @@ skip_prologue_sal (struct symtab_and_line *sal)
      have proven the CU (Compilation Unit) supports it.  sal->SYMTAB does not
      have to be set by the caller so we use SYM instead.  */
   if (sym != NULL
-      && sym->symtab ()->compunit ()->locations_valid ())
+      && sym->symtab ()->compunit ().locations_valid ())
     force_skip = 0;
 
   symtab_and_line start_sal;
@@ -3880,7 +3889,7 @@ skip_prologue_using_sal (struct gdbarch *gdbarch, CORE_ADDR func_addr)
       if (prologue_sal.symtab->language () != language_asm)
 	{
 	  struct objfile *objfile
-	    = prologue_sal.symtab->compunit ()->objfile ();
+	    = prologue_sal.symtab->compunit ().objfile ();
 	  const linetable *linetable = prologue_sal.symtab->linetable ();
 	  gdb_assert (linetable->nitems > 0);
 	  int idx = 0;
@@ -3981,7 +3990,7 @@ find_epilogue_using_linetable (CORE_ADDR func_addr)
   const struct symtab_and_line sal = find_sal_for_pc (end_pc - 1, 0);
   if (sal.symtab != nullptr && sal.symtab->language () != language_asm)
     {
-      struct objfile *objfile = sal.symtab->compunit ()->objfile ();
+      struct objfile *objfile = sal.symtab->compunit ().objfile ();
       unrelocated_addr unrel_start
 	= unrelocated_addr (start_pc - objfile->text_section_offset ());
       unrelocated_addr unrel_end
@@ -4543,9 +4552,10 @@ info_sources_worker (struct ui_out *uiout,
 static void
 info_sources_command (const char *args, int from_tty)
 {
-  if (!have_full_symbols (current_program_space)
-      && !have_partial_symbols (current_program_space))
-    error (_("No symbol table is loaded.  Use the \"file\" command."));
+  if (!current_program_space->has_full_symbols ()
+      && !current_program_space->has_partial_symbols ())
+    error (_("No symbol table is loaded.  Use the \"%ps\" command."),
+	   styled_string (command_style.style (), "file"));
 
   filename_partial_match_opts match_opts;
   auto group = make_info_sources_options_def_group (&match_opts);
@@ -4604,8 +4614,10 @@ symbol_search::compare_search_syms (const symbol_search &sym_a,
 {
   int c;
 
-  c = FILENAME_CMP (sym_a.symbol->symtab ()->filename (),
-		    sym_b.symbol->symtab ()->filename ());
+  /* The output is going to be displayed to the user, so sort the file
+     names according to how they will be shown.  */
+  c = FILENAME_CMP (symtab_to_filename_for_display (sym_a.symbol->symtab ()),
+		    symtab_to_filename_for_display (sym_b.symbol->symtab ()));
   if (c != 0)
     return c;
 
@@ -4936,8 +4948,8 @@ global_symbol_searcher::search () const
 	 This is just a courtesy to make the matching less sensitive
 	 to how many spaces the user leaves between 'operator'
 	 and <TYPENAME> or <OPERATOR>.  */
-      const char *opend;
-      const char *opname = operator_chars (symbol_name_regexp, &opend);
+      const char *op_end;
+      const char *opname = operator_chars (symbol_name_regexp, &op_end);
 
       if (*opname)
 	{
@@ -5434,8 +5446,13 @@ rbreak_command (const char *regexp, int from_tty)
 	}
     }
 
+  /* Compute this property now.  We want to use the property after
+     std::move (file_name), but at that point we can no longer compute it
+     because the std::move nullifies file_name.  */
+  bool file_name_p = file_name != nullptr;
+
   global_symbol_searcher spec (SEARCH_FUNCTION_DOMAIN, regexp);
-  if (file_name != nullptr)
+  if (file_name_p)
     spec.add_filename (std::move (file_name));
   std::vector<symbol_search> symbols = spec.search ();
 
@@ -5448,7 +5465,7 @@ rbreak_command (const char *regexp, int from_tty)
       std::string name;
       if (p.msymbol.minsym == nullptr)
 	{
-	  if (file_name != nullptr)
+	  if (file_name_p)
 	    {
 	      struct symtab *symtab = p.symbol->symtab ();
 	      const char *fullname = symtab_to_fullname (symtab);
@@ -5782,32 +5799,32 @@ find_gnu_ifunc (const symbol *sym)
   struct objfile *objfile = sym->objfile ();
 
   CORE_ADDR address = sym->value_block ()->entry_pc ();
-  minimal_symbol *ifunc = NULL;
-
-  iterate_over_minimal_symbols (objfile, lookup_name,
-				[&] (minimal_symbol *minsym)
+  minimal_symbol *ifunc
+    = find_minimal_symbol (objfile, lookup_name,
+			   [&] (minimal_symbol *minsym)
     {
       if (minsym->type () == mst_text_gnu_ifunc
 	  || minsym->type () == mst_data_gnu_ifunc)
 	{
 	  CORE_ADDR msym_addr = minsym->value_address (objfile);
+
 	  if (minsym->type () == mst_data_gnu_ifunc)
 	    {
 	      struct gdbarch *gdbarch = objfile->arch ();
 	      msym_addr = gdbarch_convert_from_func_ptr_addr
 		(gdbarch, msym_addr, current_inferior ()->top_target ());
 	    }
+
 	  if (msym_addr == address)
-	    {
-	      ifunc = minsym;
-	      return true;
-	    }
+	    return true;
 	}
+
       return false;
     });
 
-  if (ifunc != NULL)
+  if (ifunc != nullptr)
     return {ifunc, objfile};
+
   return {};
 }
 
@@ -5955,7 +5972,7 @@ default_collect_symbol_completion_matches_break_on
 	     add_symtab_completions (symtab,
 				     tracker, mode, lookup_name,
 				     sym_text, word, code);
-	     return true;
+	     return iteration_status::keep_going;
 	   },
 	 SEARCH_GLOBAL_BLOCK | SEARCH_STATIC_BLOCK,
 	 SEARCH_ALL_DOMAINS);
@@ -6140,12 +6157,11 @@ collect_file_symbol_completion_matches (completion_tracker &tracker,
 
   /* Go through symtabs for SRCFILE and check the externs and statics
      for symbols which match.  */
-  iterate_over_symtabs (current_program_space, srcfile, [&] (symtab *s)
+  for_each_symtab (current_program_space, srcfile, [&] (symtab *s)
     {
-      add_symtab_completions (s->compunit (),
+      add_symtab_completions (&s->compunit (),
 			      tracker, mode, lookup_name,
 			      sym_text, word, TYPE_CODE_UNDEF);
-      return false;
     });
 }
 
@@ -6228,8 +6244,8 @@ make_source_files_completion_list (const char *text)
   const char *base_name;
   struct add_partial_filename_data datum;
 
-  if (!have_full_symbols (current_program_space)
-      && !have_partial_symbols (current_program_space))
+  if (!current_program_space->has_full_symbols ()
+      && !current_program_space->has_partial_symbols ())
     return list;
 
   filename_seen_cache filenames_seen;
@@ -6284,20 +6300,13 @@ make_source_files_completion_list (const char *text)
 static main_info *
 get_main_info (program_space *pspace)
 {
-  main_info *info = main_progspace_key.get (pspace);
-
-  if (info == NULL)
-    {
-      /* It may seem strange to store the main name in the progspace
-	 and also in whatever objfile happens to see a main name in
-	 its debug info.  The reason for this is mainly historical:
-	 gdb returned "main" as the name even if no function named
-	 "main" was defined the program; and this approach lets us
-	 keep compatibility.  */
-      info = main_progspace_key.emplace (pspace);
-    }
-
-  return info;
+  /* It may seem strange to store the main name in the progspace
+     and also in whatever objfile happens to see a main name in
+     its debug info.  The reason for this is mainly historical:
+     gdb returned "main" as the name even if no function named
+     "main" was defined the program; and this approach lets us
+     keep compatibility.  */
+  return &main_progspace_key.try_emplace (pspace);
 }
 
 static void
@@ -6404,10 +6413,10 @@ find_main_name (void)
 	 if (symbol_found_p)
 	   {
 	     set_main_name (pspace, "main", lang);
-	     return 1;
+	     return true;
 	   }
 
-	 return 0;
+	 return false;
        }, nullptr);
 
   if (symbol_found_p)
@@ -6555,7 +6564,7 @@ struct objfile *
 symbol::objfile () const
 {
   gdb_assert (is_objfile_owned ());
-  return owner.symtab->compunit ()->objfile ();
+  return owner.symtab->compunit ().objfile ();
 }
 
 /* See symtab.h.  */
@@ -6565,7 +6574,7 @@ symbol::arch () const
 {
   if (!is_objfile_owned ())
     return owner.arch;
-  return owner.symtab->compunit ()->objfile ()->arch ();
+  return owner.symtab->compunit ().objfile ()->arch ();
 }
 
 /* See symtab.h.  */

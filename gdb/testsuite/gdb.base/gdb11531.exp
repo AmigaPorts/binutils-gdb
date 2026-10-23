@@ -30,7 +30,7 @@ set allow_hw_watchpoint_tests_p [allow_hw_watchpoint_tests]
 standard_testfile
 
 if { [prepare_for_testing "failed to prepare" $testfile $testfile.c {debug}] } {
-    return -1
+    return
 }
 
 # Disable hardware watchpoints if necessary.
@@ -47,7 +47,7 @@ if {![runto "$srcfile:$line"]} {
 # watched (myrec.x) gets updated.  This is the instruction where we
 # expect to receive a watchpoint notification when we do the "stepi"
 # below.  However, having the breakpoint at the same location as this
-# intruction can possibly interfere with our testcase, as stepping
+# instruction can possibly interfere with our testcase, as stepping
 # over the breakpoint in order to get past it may incorrectly lead
 # to the debugger missing the watchpoint hit.  This would be a bug
 # in GDB, but this is not the bug that we are trying to test here.
@@ -57,12 +57,12 @@ delete_breakpoints
 
 set nl "\[\r\n\]+"
 
-gdb_test "watch myrec.x" ".*atchpoint \[0-9\]+: myrec\.x" "set watchpoint"
+gdb_test "watch myrec.x" ".*atchpoint ${::decimal}: myrec\.x" "set watchpoint"
 
 gdb_test "next" \
-    ".*${nl}.*atchpoint \[0-9\]+: myrec\.x${nl}Old value = 0${nl}New value = 5${nl}.*" \
+    ".*${nl}.*atchpoint ${::decimal}: myrec\.x${nl}Old value = 0${nl}New value = 5${nl}.*" \
     "watchpoint variable triggers at next"
 
 gdb_test "continue" \
-    ".*${nl}.*atchpoint \[0-9\]+: myrec\.x${nl}Old value = 5${nl}New value = 78${nl}.*" \
+    ".*${nl}.*atchpoint ${::decimal}: myrec\.x${nl}Old value = 5${nl}New value = 78${nl}.*" \
     "watchpoint variable triggers at continue"

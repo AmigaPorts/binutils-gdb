@@ -17,7 +17,6 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "server.h"
 #include "linux-low.h"
 
 #include "elf/common.h"
@@ -29,7 +28,7 @@
 #include <sys/ptrace.h>
 
 #include "gdb_proc_service.h"
-
+#include "tdesc.h"
 
 static int microblaze_regmap[] =
  {PT_GPR(0),     PT_GPR(1),     PT_GPR(2),     PT_GPR(3),
@@ -80,7 +79,7 @@ constexpr auto microblaze_num_regs
 
 /* Defined in auto-generated file microblaze-linux-generated.c.  */
 void init_registers_microblaze_linux ();
-extern const target_desc *tdesc_microblaze_linux;
+extern const_target_desc_up tdesc_microblaze_linux;
 
 bool
 microblaze_target::low_supports_breakpoints ()
@@ -230,7 +229,7 @@ microblaze_target::get_regs_info ()
 void
 microblaze_target::low_arch_setup ()
 {
-  current_process ()->tdesc = tdesc_microblaze_linux;
+  current_process ()->tdesc = tdesc_microblaze_linux.get ();
 }
 
 linux_process_target *the_linux_target = &the_microblaze_target;

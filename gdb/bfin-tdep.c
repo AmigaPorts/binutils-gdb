@@ -108,10 +108,12 @@
 #define P_RTS				0x0010
 /* MNOP  */
 #define P_MNOP				0xC803
+/* codespell:ignore-begin.  Ignore EXCPT.  */
 /* EXCPT, 16-bit, min  */
 #define P_EXCPT_MIN			0x00A0
 /* EXCPT, 16-bit, max  */
 #define P_EXCPT_MAX			0x00AF
+/* codespell:ignore-end.  */
 /* multi instruction mask 1, 16-bit  */
 #define P_BIT_MULTI_INS_1		0xC000
 /* multi instruction mask 2, 16-bit  */
@@ -597,7 +599,7 @@ bfin_sw_breakpoint_from_kind (struct gdbarch *gdbarch, int kind, int *size)
 
   *size = kind;
 
-  if (strcmp (target_shortname (), "sim") == 0)
+  if (streq (target_shortname (), "sim"))
     return bfin_sim_breakpoint;
   else
     return bfin_breakpoint;
@@ -814,7 +816,6 @@ bfin_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_register_name (gdbarch, bfin_register_name);
   set_gdbarch_register_type (gdbarch, bfin_register_type);
   set_gdbarch_push_dummy_call (gdbarch, bfin_push_dummy_call);
-  set_gdbarch_believe_pcc_promotion (gdbarch, 1);
   set_gdbarch_return_value (gdbarch, bfin_return_value);
   set_gdbarch_skip_prologue (gdbarch, bfin_skip_prologue);
   set_gdbarch_inner_than (gdbarch, core_addr_lessthan);

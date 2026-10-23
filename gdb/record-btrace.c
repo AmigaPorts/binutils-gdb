@@ -413,7 +413,7 @@ record_btrace_target::stop_recording ()
 
   /* Check that before so stop recording is atomic.  */
   for (thread_info &tp : current_inferior ()->non_exited_threads ())
-    if (tp.state == THREAD_RUNNING)
+    if (tp.state () == THREAD_RUNNING)
       error (_("You cannot stop recording while threads are running."));
 
   bool is_replaying = record_is_replaying (inferior_ptid);
@@ -729,7 +729,7 @@ btrace_find_line_range (CORE_ADDR pc)
   if (nlines <= 0)
     return btrace_mk_line_range (symtab, 0, 0);
 
-  struct objfile *objfile = symtab->compunit ()->objfile ();
+  struct objfile *objfile = symtab->compunit ().objfile ();
   unrelocated_addr unrel_pc
     = unrelocated_addr (pc - objfile->text_section_offset ());
 
@@ -1995,18 +1995,18 @@ get_thread_current_frame_id (struct thread_info *tp)
 
   process_stratum_target *proc_target = tp->inf->process_target ();
 
-  /* Clear the executing flag to allow changes to the current frame.
-     We are not actually running, yet.  We just started a reverse execution
-     command or a record goto command.
-     For the latter, EXECUTING is false and this has no effect.
-     For the former, EXECUTING is true and we're in wait, about to
-     move the thread.  Since we need to recompute the stack, we temporarily
-     set EXECUTING to false.  */
-  bool executing = tp->executing ();
-  set_executing (proc_target, inferior_ptid, false);
+  /* Temporarily set the thread to internally stopped to allow changes
+     to the current frame.  We are not actually running, yet.  We just
+     started a reverse execution command or a record goto command.
+     For the latter, the thread is stopped and this has no effect.
+     For the former, the thread is running and we're in wait, about to
+     move the thread.  Since we need to recompute the stack, we
+     temporarily set the thread to internally stopped.  */
+  thread_int_state prev_int_state = tp->internal_state ();
+  set_internal_state (proc_target, inferior_ptid, THREAD_INT_STOPPED);
   SCOPE_EXIT
     {
-      set_executing (proc_target, inferior_ptid, executing);
+      set_internal_state (proc_target, inferior_ptid, prev_int_state);
     };
   return get_frame_id (get_current_frame ());
 }
@@ -2097,7 +2097,7 @@ record_btrace_stop_replaying (struct thread_info *tp)
   if (btinfo->replay == nullptr)
     return;
 
-  switch (tp->state)
+  switch (tp->state ())
     {
     case THREAD_STOPPED:
       /* Forget why we stopped; it was at a different location.  */
@@ -2777,7 +2777,7 @@ record_btrace_set_replay (struct thread_info *tp,
 {
   struct btrace_thread_info *btinfo;
 
-  if (tp->state == THREAD_RUNNING)
+  if (tp->state () == THREAD_RUNNING)
     error (_("You cannot do that while the thread is running."));
 
   btinfo = &tp->btrace;
@@ -2799,7 +2799,7 @@ record_btrace_set_replay (struct thread_info *tp,
   record_btrace_clear_histories (btinfo);
 
   tp->set_stop_pc (regcache_read_pc (get_thread_regcache (tp)));
-  print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
+  print_stack_frame (get_selected_frame (), 1, SRC_AND_LOC, 1);
 }
 
 /* The goto_record_begin method of target record-btrace.  */
@@ -3035,7 +3035,9 @@ cmd_set_record_btrace_cpu (const char *args, int from_tty)
       stepping = 0;
     }
   else
-    error (_("Bad format.  See \"help set record btrace cpu\"."));
+    error (_("Bad format.  See \"%ps\"."),
+	   styled_string (command_style.style (),
+			  "help set record btrace cpu"));
 
   if (USHRT_MAX < family)
     error (_("Cpu family too big."));

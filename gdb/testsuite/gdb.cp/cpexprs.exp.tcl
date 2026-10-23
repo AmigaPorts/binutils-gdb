@@ -116,7 +116,7 @@ proc get_functions {cmd} {
 
 # Some convenience variables for this test
 set DEC {[0-9]}; # a decimal number
-set HEX {[0-9a-fA-F]}; # a hexidecimal number
+set HEX {[0-9a-fA-F]}; # a hexadecimal number
 set CONVAR "\\\$$DEC+"; # convenience variable regexp
 set ADDR "0x$HEX+"; # address
 
@@ -706,7 +706,7 @@ standard_testfile cpexprs.cc
 set flags "$flags debug c++"
 
 if {[prepare_for_testing "failed to prepare" $testfile $srcfile "$flags"]} {
-    return -1
+    return
 }
 
 if {![runto_main]} {
@@ -741,7 +741,7 @@ foreach cv {{} { const} { volatile} { const volatile}} {
   set correct dummy_value
 
   gdb_test_multiple $test $test {
-      -re "( = {.*} 0x\[0-9a-f\]+ <CV::m.*>)\r\n$gdb_prompt $" {
+      -re "( = {.*} ${::hex} <CV::m.*>)\r\n$gdb_prompt $" {
 	  # = {void (CV * const, CV::t)} 0x400944 <CV::m(int)>
 	  set correct $expect_out(1,string)
 	  pass $test

@@ -1,5 +1,24 @@
 -*- text -*-
 
+Changes in 2.47:
+
+* Add a linker optimization level of zero.  Using "-O 0" on the linker command
+  line will stop it from combining the contents of mergeable sections.  This
+  can significantly speed up the link process at the cost of producing larger
+  binaries.
+
+* Add linker support for --start-lib/--end-lib options and LIB linker script
+  statement for treating a list of object files as members of an artificial
+  archive.
+
+* Add linker support for archives with no symbol index in their all formats,
+  not only XCOFF.  On by default and controlled with --no-link-mapless and
+  --link-mapless options, also for XCOFF.
+
+* Change the default architecture for H8 family from H8/300 to H8/300H.
+  Support for H8/300 was removed from gcc in 2020, making H8/300H the
+  default architecture.
+
 Changes in 2.46:
 
 * Add --gnu-tls-tag/--no-gnu-tls-tag options to i386 ELF linker to add

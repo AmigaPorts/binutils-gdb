@@ -41,6 +41,7 @@
 #include "expop.h"
 #include "c-exp.h"
 #include "inferior.h"
+#include "cli/cli-style.h"
 
 
 /* Parse the string EXP as a C expression, evaluate it,
@@ -455,10 +456,10 @@ fake_method::fake_method (type_instance_flags flags,
 {
   struct type *type = &m_type;
 
-  TYPE_MAIN_TYPE (type) = &m_main_type;
+  type->main_type = &m_main_type;
   type->set_length (1);
   type->set_code (TYPE_CODE_METHOD);
-  TYPE_CHAIN (type) = type;
+  type->chain = type;
   type->set_instance_flags (flags);
   if (num_types > 0)
     {
@@ -783,9 +784,10 @@ scope_operation::evaluate_funcall (struct type *expect_type,
       if (!static_memfuncp)
 	{
 	  /* For the time being, we don't handle this.  */
-	  error (_("Call to overloaded function %s requires "
+	  error (_("Call to overloaded function %ps requires "
 		   "`this' pointer"),
-		 function_name);
+		 styled_string (function_name_style.style (),
+				function_name));
 	}
 
       arg_view = arg_view.slice (1);
@@ -1015,7 +1017,7 @@ add_struct_fields (struct type *type, completion_list &output,
 	      computed_type_name = 1;
 	    }
 	  /* Omit constructors from the completion list.  */
-	  if (!type_name || strcmp (type_name, name))
+	  if (!type_name || !streq (type_name, name))
 	    output.emplace_back (concat (prefix, name, nullptr));
 	}
     }
@@ -1086,7 +1088,7 @@ eval_op_var_entry_value (struct type *expect_type, struct expression *exp,
     error (_("Symbol \"%s\" does not have any specific entry value"),
 	   sym->print_name ());
 
-  frame_info_ptr frame = get_selected_frame (NULL);
+  frame_info_ptr frame = get_selected_frame ();
   return computed_ops->read_variable_at_entry (sym, frame);
 }
 
@@ -1119,7 +1121,8 @@ eval_op_func_static_var (struct type *expect_type, struct expression *exp,
   struct block_symbol sym = lookup_symbol (var, blk, SEARCH_VAR_DOMAIN,
 					   nullptr);
   if (sym.symbol == NULL)
-    error (_("No symbol \"%s\" in specified context."), var);
+    error (_("No symbol \"%ps\" in specified context."),
+	   styled_string (variable_name_style.style (), var));
   return evaluate_var_value (noside, sym.block, sym.symbol);
 }
 

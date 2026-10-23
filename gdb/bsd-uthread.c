@@ -84,10 +84,7 @@ static const registry<gdbarch>::key<struct bsd_uthread_ops> bsd_uthread_data;
 static struct bsd_uthread_ops *
 get_bsd_uthread (struct gdbarch *gdbarch)
 {
-  struct bsd_uthread_ops *ops = bsd_uthread_data.get (gdbarch);
-  if (ops == nullptr)
-    ops = bsd_uthread_data.emplace (gdbarch);
-  return ops;
+  return &bsd_uthread_data.try_emplace (gdbarch);
 }
 
 /* Set the function that supplies registers from an inactive thread
@@ -416,7 +413,7 @@ bsd_uthread_target::wait (ptid_t ptid, struct target_waitstatus *status,
 
   /* Don't let the core see a ptid without a corresponding thread.  */
   thread_info *thread = beneath->find_thread (ptid);
-  if (thread == NULL || thread->state == THREAD_EXITED)
+  if (thread == NULL || thread->state () == THREAD_EXITED)
     add_thread (beneath, ptid);
 
   return ptid;
@@ -457,7 +454,7 @@ bsd_uthread_target::update_thread_list ()
   int offset = bsd_uthread_thread_next_offset;
   CORE_ADDR addr;
 
-  prune_threads ();
+  prune_threads (current_inferior ()->process_target ());
 
   addr = bsd_uthread_read_memory_address (bsd_uthread_thread_list_addr);
   while (addr != 0)
@@ -467,7 +464,7 @@ bsd_uthread_target::update_thread_list ()
       process_stratum_target *proc_target
 	= as_process_stratum_target (this->beneath ());
       thread_info *thread = proc_target->find_thread (ptid);
-      if (thread == nullptr || thread->state == THREAD_EXITED)
+      if (thread == nullptr || thread->state () == THREAD_EXITED)
 	{
 	  /* If INFERIOR_PTID doesn't have a tid member yet, then ptid
 	     is still the initial thread of the process.  Notify GDB

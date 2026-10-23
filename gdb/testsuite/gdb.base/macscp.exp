@@ -26,7 +26,7 @@ if  {[gdb_compile "${srcdir}/${subdir}/macscp1.c" "${objfile}" \
 	  object $options] != ""
      || [gdb_compile "${objfile}" "${binfile}" executable $options] != "" } {
     untested "failed to compile"
-    return -1
+    return
 }
 
 clean_restart $testfile
@@ -58,7 +58,7 @@ proc info_macro {macro} {
 
     # Line number zero is set for macros defined from the compiler command-line.
     # Such macros are not being tested by this function.
-    set nonzero {[1-9][0-9]*}
+    set nonzero $::positive
 
     send_gdb "info macro ${macro}\n"
 
@@ -205,7 +205,7 @@ gdb_test_multiple "info source" "test macro information"  {
 }
 if {$macro_support == 0} {
     unsupported "skipping test because debug information does not include macro information."
-    return 0
+    return
 }
 
 list_and_check_macro main WHERE {macscp1.c {before macscp1_3}}
@@ -334,7 +334,7 @@ proc maybe_kfail { func test_name } {
 
 # Start the program running.
 if {! [runto_main]} {
-    return 0
+    return
 }
 
 # Set a breakpoint on each of the functions.

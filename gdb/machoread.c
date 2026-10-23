@@ -422,7 +422,7 @@ macho_add_oso_symfile (oso_el *oso, const gdb_bfd_ref_ptr &abfd,
 
   macho_debug (0, _("Loading debugging symbols from oso: %s\n"), oso->name);
 
-  if (!bfd_check_format (abfd.get (), bfd_object))
+  if (!gdb_bfd_check_format (abfd.get (), bfd_object))
     {
       warning (_("`%s': can't read symbols: %s."), oso->name,
 	       bfd_errmsg (bfd_get_error ()));
@@ -483,7 +483,7 @@ macho_add_oso_symfile (oso_el *oso, const gdb_bfd_ref_ptr &abfd,
 	  struct macho_sym_hash_entry *ent;
 
 	  ent = (struct macho_sym_hash_entry *)
-	    bfd_hash_lookup (&table, sym->name, TRUE, FALSE);
+	    bfd_hash_lookup (&table, sym->name, true, false);
 	  if (ent->sym != NULL)
 	    complaint (_("Duplicated symbol %s in symbol table"), sym->name);
 	  else
@@ -548,7 +548,7 @@ macho_add_oso_symfile (oso_el *oso, const gdb_bfd_ref_ptr &abfd,
 		  struct macho_sym_hash_entry *ent;
 
 		  ent = (struct macho_sym_hash_entry *)
-		    bfd_hash_lookup (&table, sym->name, FALSE, FALSE);
+		    bfd_hash_lookup (&table, sym->name, false, false);
 		  if (ent != NULL)
 		    addr = bfd_asymbol_value (ent->sym);
 		}
@@ -634,7 +634,7 @@ macho_symfile_read_all_oso (std::vector<oso_el> *oso_vector_ptr,
 	      ix = last_ix;
 	      continue;
 	    }
-	  if (!bfd_check_format (archive_bfd.get (), bfd_archive))
+	  if (!gdb_bfd_check_format (archive_bfd.get (), bfd_archive))
 	    {
 	      warning (_("OSO archive file \"%s\" not an archive."),
 		       archive_name.c_str ());
@@ -748,7 +748,7 @@ macho_check_dsym (struct objfile *objfile, std::string *filenamep)
       return NULL;
     }
 
-  if (!bfd_check_format (dsym_bfd.get (), bfd_object))
+  if (!gdb_bfd_check_format (dsym_bfd.get (), bfd_object))
     {
       warning (_("bad dsym file format: %s"), bfd_errmsg (bfd_get_error ()));
       return NULL;
@@ -835,7 +835,7 @@ macho_symfile_read (struct objfile *objfile, symfile_add_flags symfile_flags)
 	       asect && dsect;
 	       asect = asect->next, dsect = dsect->next)
 	    {
-	      if (strcmp (asect->name, dsect->name) != 0)
+	      if (!streq (asect->name, dsect->name))
 		break;
 	      bfd_set_section_size (dsect, bfd_section_size (asect));
 	    }
@@ -912,8 +912,8 @@ macho_symfile_offsets (struct objfile *objfile,
 
       if (startswith (bfd_sect_name, "LC_SEGMENT."))
 	bfd_sect_name += 11;
-      if (strcmp (bfd_sect_name, "__TEXT") == 0
-	  || strcmp (bfd_sect_name, "__TEXT.__text") == 0)
+      if (streq (bfd_sect_name, "__TEXT")
+	  || streq (bfd_sect_name, "__TEXT.__text"))
 	objfile->sect_index_text = sect_index;
     }
 }

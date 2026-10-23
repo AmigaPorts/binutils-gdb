@@ -69,18 +69,18 @@ extern bool _bfd_mips_elf_check_relocs
 extern bool _bfd_mips_elf_adjust_dynamic_symbol
   (struct bfd_link_info *, struct elf_link_hash_entry *) ATTRIBUTE_HIDDEN;
 extern bool _bfd_mips_elf_late_size_sections
-  (bfd *, struct bfd_link_info *) ATTRIBUTE_HIDDEN;
+  (struct bfd_link_info *) ATTRIBUTE_HIDDEN;
 extern int _bfd_mips_elf_relocate_section
-  (bfd *, struct bfd_link_info *, bfd *, asection *, bfd_byte *,
+  (struct bfd_link_info *, bfd *, asection *, bfd_byte *,
    Elf_Internal_Rela *, Elf_Internal_Sym *, asection **) ATTRIBUTE_HIDDEN;
 extern bool _bfd_mips_elf_finish_dynamic_symbol
-  (bfd *, struct bfd_link_info *, struct elf_link_hash_entry *,
+  (struct bfd_link_info *, struct elf_link_hash_entry *,
    Elf_Internal_Sym *) ATTRIBUTE_HIDDEN;
 extern bool _bfd_mips_vxworks_finish_dynamic_symbol
-  (bfd *, struct bfd_link_info *, struct elf_link_hash_entry *,
+  (struct bfd_link_info *, struct elf_link_hash_entry *,
    Elf_Internal_Sym *) ATTRIBUTE_HIDDEN;
 extern bool _bfd_mips_elf_finish_dynamic_sections
-  (bfd *, struct bfd_link_info *, bfd_byte *) ATTRIBUTE_HIDDEN;
+  (struct bfd_link_info *, bfd_byte *) ATTRIBUTE_HIDDEN;
 extern bool _bfd_mips_elf_sort_relocs_p
   (asection *) ATTRIBUTE_HIDDEN;
 extern void _bfd_mips_final_write_processing
@@ -168,8 +168,6 @@ extern bfd_reloc_status_type _bfd_mips_elf_generic_reloc
   ATTRIBUTE_HIDDEN;
 extern unsigned long _bfd_elf_mips_mach
   (flagword);
-extern bfd_vma _bfd_mips_elf_sign_extend
-  (bfd_vma, int) ATTRIBUTE_HIDDEN;
 extern void _bfd_mips_elf_merge_symbol_attribute
   (struct elf_link_hash_entry *, unsigned int, bool, bool) ATTRIBUTE_HIDDEN;
 extern char *_bfd_mips_elf_get_target_dtag
@@ -224,6 +222,15 @@ static inline bool
 literal_reloc_p (int r_type)
 {
   return r_type == R_MIPS_LITERAL || r_type == R_MICROMIPS_LITERAL;
+}
+
+/* Sign-extend VALUE, which has the indicated number of BITS.  */
+
+static inline bfd_vma
+_bfd_mips_elf_sign_extend (bfd_vma value, int bits)
+{
+  bfd_vma sign = (bfd_vma) 1 << (bits - 1);
+  return (value ^ sign) - sign;
 }
 
 #define elf_backend_common_definition   _bfd_mips_elf_common_definition

@@ -63,7 +63,7 @@ struct inferior;
 
 /* Define const gdb_byte using one identifier, to make it easy for
    make-target-delegates.py to parse.  */
-typedef const gdb_byte const_gdb_byte;
+using const_gdb_byte = const gdb_byte;
 
 #include "infrun.h"
 #include "breakpoint.h"
@@ -85,8 +85,8 @@ typedef const gdb_byte const_gdb_byte;
 #include "tracepoint.h"
 #include "gdbsupport/fileio.h"
 #include "gdbsupport/x86-xstate.h"
-
 #include "gdbsupport/break-common.h"
+#include "find-memory-region.h"
 
 enum strata
   {
@@ -373,11 +373,6 @@ extern ULONGEST get_target_memory_unsigned (struct target_ops *ops,
 					    enum bfd_endian byte_order);
 
 struct thread_info;		/* fwd decl for parameter list below: */
-
-/* The type of the callback to the to_async method.  */
-
-typedef void async_callback_ftype (enum inferior_event_type event_type,
-				   void *context);
 
 /* Normally target debug printing is purely type-based.  However,
    sometimes it is necessary to override the debug printing on a
@@ -770,7 +765,7 @@ struct target_ops
     virtual bool always_non_stop_p ()
       TARGET_DEFAULT_RETURN (false);
     /* find_memory_regions support method for gcore */
-    virtual int find_memory_regions (find_memory_region_ftype func, void *data)
+    virtual bool find_memory_regions (find_memory_region_ftype func)
       TARGET_DEFAULT_FUNC (dummy_find_memory_regions);
     /* make_corefile_notes support method for gcore */
     virtual gdb::unique_xmalloc_ptr<char> make_corefile_notes (bfd *, int *)
@@ -991,8 +986,8 @@ struct target_ops
        target file descriptor, or -1 if an error occurs (and set
        *TARGET_ERRNO).  */
     virtual int fileio_open (struct inferior *inf, const char *filename,
-			     int flags, int mode, int warn_if_slow,
-			     fileio_error *target_errno);
+			     fileio_open_flags flags, fileio_mode_flags mode,
+			     bool warn_if_slow, fileio_error *target_errno);
 
     /* Write up to LEN bytes from WRITE_BUF to FD on the target.
        Return the number of bytes written, or -1 if an error occurs
@@ -1430,7 +1425,7 @@ struct target_ops_deleter
 };
 
 /* A unique pointer for target_ops.  */
-typedef std::unique_ptr<target_ops, target_ops_deleter> target_ops_up;
+using target_ops_up = std::unique_ptr<target_ops, target_ops_deleter>;
 
 /* A policy class to interface gdb::ref_ptr with target_ops.  */
 
@@ -1447,7 +1442,9 @@ struct target_ops_ref_policy
 };
 
 /* A gdb::ref_ptr pointer to a target_ops.  */
-typedef gdb::ref_ptr<target_ops, target_ops_ref_policy> target_ops_ref;
+using target_ops_ref = gdb::ref_ptr<target_ops, target_ops_ref_policy>;
+using process_target_ops_ref
+  = gdb::ref_ptr<process_stratum_target, target_ops_ref_policy>;
 
 /* Native target backends call this once at initialization time to
    inform the core about which is the target that can respond to "run"
@@ -2040,15 +2037,12 @@ extern const char *target_pid_to_exec_file (int pid);
 
 extern gdbarch *target_thread_architecture (ptid_t ptid);
 
-/*
- * Iterator function for target memory regions.
- * Calls a callback function once for each memory region 'mapped'
- * in the child process.  Defined as a simple macro rather than
- * as a function macro so that it can be tested for nullity.
- */
+/* Call FUNC once for each memory region 'mapped' in the child process.
 
-extern int target_find_memory_regions (find_memory_region_ftype func,
-				       void *data);
+   If FUNC ever returns false, stop iterating and return false.  Otherwise,
+   return true.  */
+
+extern bool target_find_memory_regions (find_memory_region_ftype func);
 
 /*
  * Compose corefile .note section.
@@ -2250,33 +2244,44 @@ extern int target_search_memory (CORE_ADDR start_addr,
 
 extern bool target_filesystem_is_local ();
 
+/* A remote file descriptor is just an integer, but we use a separate
+   type to avoid confusion with local file descriptors.  */
+enum class target_fd : int
+{
+  INVALID = -1,
+};
+
 /* Open FILENAME on the target, in the filesystem as seen by INF,
    using FLAGS and MODE.  If INF is NULL, use the filesystem seen by
    the debugger (GDB or, for remote targets, the remote stub).  Return
-   a target file descriptor, or -1 if an error occurs (and set
-   *TARGET_ERRNO).  If WARN_IF_SLOW is true, print a warning message
-   if the file is being accessed over a link that may be slow.  */
-extern int target_fileio_open (struct inferior *inf,
-			       const char *filename, int flags,
-			       int mode, bool warn_if_slow,
-			       fileio_error *target_errno);
+   a target file descriptor, or target_fd::INVALID if an error occurs
+   (and set *TARGET_ERRNO).  If WARN_IF_SLOW is true, print a warning
+   message if the file is being accessed over a link that may be
+   slow.  */
+extern target_fd target_fileio_open (struct inferior *inf,
+				     const char *filename,
+				     fileio_open_flags flags,
+				     fileio_mode_flags mode,
+				     bool warn_if_slow,
+				     fileio_error *target_errno);
 
 /* Write up to LEN bytes from WRITE_BUF to FD on the target.
    Return the number of bytes written, or -1 if an error occurs
    (and set *TARGET_ERRNO).  */
-extern int target_fileio_pwrite (int fd, const gdb_byte *write_buf, int len,
-				 ULONGEST offset, fileio_error *target_errno);
+extern int target_fileio_pwrite (target_fd fd, const gdb_byte *write_buf,
+				 int len, ULONGEST offset,
+				 fileio_error *target_errno);
 
 /* Read up to LEN bytes FD on the target into READ_BUF.
    Return the number of bytes read, or -1 if an error occurs
    (and set *TARGET_ERRNO).  */
-extern int target_fileio_pread (int fd, gdb_byte *read_buf, int len,
+extern int target_fileio_pread (target_fd fd, gdb_byte *read_buf, int len,
 				ULONGEST offset, fileio_error *target_errno);
 
 /* Get information about the file opened as FD on the target
    and put it in SB.  Return 0 on success, or -1 if an error
    occurs (and set *TARGET_ERRNO).  */
-extern int target_fileio_fstat (int fd, struct stat *sb,
+extern int target_fileio_fstat (target_fd fd, struct stat *sb,
 				fileio_error *target_errno);
 
 /* Get information about the file at FILENAME on the target and put it in
@@ -2289,7 +2294,7 @@ extern int target_fileio_lstat (struct inferior *inf, const char *filename,
 
 /* Close FD on the target.  Return 0, or -1 if an error occurs
    (and set *TARGET_ERRNO).  */
-extern int target_fileio_close (int fd, fileio_error *target_errno);
+extern int target_fileio_close (target_fd fd, fileio_error *target_errno);
 
 /* Unlink FILENAME on the target, in the filesystem as seen by INF.
    If INF is NULL, use the filesystem seen by the debugger (GDB or,
@@ -2494,7 +2499,7 @@ struct target_unpusher
 
 /* A unique_ptr that unpushes a target on destruction.  */
 
-typedef std::unique_ptr<struct target_ops, target_unpusher> target_unpush_up;
+using target_unpush_up = std::unique_ptr<struct target_ops, target_unpusher>;
 
 extern void target_pre_inferior ();
 

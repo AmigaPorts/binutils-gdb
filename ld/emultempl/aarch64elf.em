@@ -59,7 +59,6 @@ gld${EMULATION_NAME}_before_parse (void)
   input_flags.dynamic = ${DYNAMIC_LINK-true};
   config.has_shared = `if test -n "$GENERATE_SHLIB_SCRIPT" ; then echo true ; else echo false ; fi`;
   config.separate_code = `if test "x${SEPARATE_CODE}" = xyes ; then echo true ; else echo false ; fi`;
-  link_info.check_relocs_after_open_input = true;
 EOF
 if test -n "$COMMONPAGESIZE"; then
 fragment <<EOF
@@ -200,6 +199,8 @@ elf${ELFSIZE}_aarch64_add_stub_section (const char *stub_sec_name,
   if (stub_sec == NULL)
     goto err_ret;
 
+  stub_sec->veneer = 1;
+
   /* Long branch stubs contain a 64-bit address, so the section requires
      8 byte alignment.  */
   bfd_set_section_alignment (stub_sec, 3);
@@ -258,7 +259,7 @@ gld${EMULATION_NAME}_after_allocation (void)
      ie. doesn't affect any code, so we can delay resizing the
      sections.  It's likely we'll resize everything in the process of
      adding stubs.  */
-  ret = bfd_elf_discard_info (link_info.output_bfd, & link_info);
+  ret = bfd_elf_discard_info (&link_info);
   if (ret < 0)
     {
       einfo (_("%X%P: .eh_frame/.stab edit: %E\n"));

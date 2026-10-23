@@ -32,6 +32,7 @@
 #include "block.h"
 #include "objfiles.h"
 #include "language.h"
+#include "cli/cli-style.h"
 
 /* Basic byte-swapping routines.  All 'extract' functions return a
    host-format integer from a target-format integer at ADDR which is
@@ -299,7 +300,8 @@ language_defn::read_var_value (struct symbol *var,
   if (sym_need == SYMBOL_NEEDS_FRAME)
     gdb_assert (frame != NULL);
   else if (sym_need == SYMBOL_NEEDS_REGISTERS && !target_has_registers ())
-    error (_("Cannot read `%s' without registers"), var->print_name ());
+    error (_("Cannot read `%ps' without registers"),
+	   styled_string (variable_name_style.style (), var->print_name ()));
 
   if (frame != NULL)
     frame = get_hosting_frame (var, var_block, frame);
@@ -620,7 +622,7 @@ value_from_register (struct type *type, int regnum, const frame_info_ptr &frame)
 
   if (gdbarch_convert_register_p (gdbarch, regnum, type1))
     {
-      int optim, unavail, ok;
+      bool optim, unavail;
 
       /* The ISA/ABI need to something weird when obtaining the
 	 specified value from this register.  It might need to
@@ -631,9 +633,9 @@ value_from_register (struct type *type, int regnum, const frame_info_ptr &frame)
 	 including the location.  */
       v = value::allocate_register (get_next_frame_sentinel_okay (frame),
 				    regnum, type);
-      ok = gdbarch_register_to_value (gdbarch, frame, regnum, type1,
-				      v->contents_raw ().data (), &optim,
-				      &unavail);
+      bool ok = gdbarch_register_to_value (gdbarch, frame, regnum, type1,
+					   v->contents_raw ().data (), &optim,
+					   &unavail);
 
       if (!ok)
 	{

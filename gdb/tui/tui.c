@@ -1,8 +1,9 @@
-/* General functions for the WDB TUI.
+/* General functions for the GDB TUI.
 
    Copyright (C) 1998-2026 Free Software Foundation, Inc.
 
-   Contributed by Hewlett-Packard Company.
+   Contributed by Hewlett-Packard Company.  Developed as part of HP Wildebeest
+   (WDB), a port of GDB to HP-UX.
 
    This file is part of GDB.
 
@@ -111,7 +112,7 @@ static Keymap tui_readline_standard_keymap;
 /* TUI readline command.
    Switch the output mode between TUI/standard gdb.  */
 static int
-tui_rl_switch_mode (int notused1, int notused2)
+tui_rl_switch_mode (int notused1 = 0, int notused2 = 0)
 {
 
   /* Don't let exceptions escape.  We're in the middle of a readline
@@ -178,6 +179,18 @@ tui_rl_switch_mode (int notused1, int notused2)
   return 0;
 }
 
+/* Try to switch into TUI mode, if not already active.  Return if TUI mode
+   is active.  */
+
+static bool
+tui_try_activate ()
+{
+  if (!tui_active)
+    tui_rl_switch_mode ();
+
+  return tui_active;
+}
+
 /* TUI readline command.
    Change the TUI layout to show a next layout.
    This function is bound to CTRL-X 2.  It is intended to provide
@@ -185,10 +198,7 @@ tui_rl_switch_mode (int notused1, int notused2)
 static int
 tui_rl_change_windows (int notused1, int notused2)
 {
-  if (!tui_active)
-    tui_rl_switch_mode (0 /* notused */, 0 /* notused */);
-
-  if (tui_active)
+  if (tui_try_activate ())
     tui_next_layout ();
 
   return 0;
@@ -199,10 +209,7 @@ tui_rl_change_windows (int notused1, int notused2)
 static int
 tui_rl_delete_other_windows (int notused1, int notused2)
 {
-  if (!tui_active)
-    tui_rl_switch_mode (0 /* notused */, 0 /* notused */);
-
-  if (tui_active)
+  if (tui_try_activate ())
     tui_remove_some_windows ();
 
   return 0;
@@ -213,14 +220,9 @@ tui_rl_delete_other_windows (int notused1, int notused2)
 static int
 tui_rl_other_window (int count, int key)
 {
-  struct tui_win_info *win_info;
+  if (tui_try_activate ())
+    tui_set_win_focus_to (tui_next_win (tui_win_with_focus ()));
 
-  if (!tui_active)
-    tui_rl_switch_mode (0 /* notused */, 0 /* notused */);
-
-  win_info = tui_next_win (tui_win_with_focus ());
-  if (win_info)
-    tui_set_win_focus_to (win_info);
   return 0;
 }
 
@@ -269,8 +271,8 @@ tui_rl_command_mode (int count, int key)
 static int
 tui_rl_next_keymap (int notused1, int notused2)
 {
-  if (!tui_active)
-    tui_rl_switch_mode (0 /* notused */, 0 /* notused */);
+  if (!tui_try_activate ())
+    return 0;
 
   if (rl_end)
     {
@@ -363,8 +365,8 @@ tui_ensure_readline_initialized ()
   rl_bind_key_in_map ('a', tui_rl_switch_mode, tui_ctlx_keymap);
   rl_bind_key_in_map ('A', tui_rl_switch_mode, emacs_ctlx_keymap);
   rl_bind_key_in_map ('A', tui_rl_switch_mode, tui_ctlx_keymap);
-  rl_bind_key_in_map (CTRL ('A'), tui_rl_switch_mode, emacs_ctlx_keymap);
-  rl_bind_key_in_map (CTRL ('A'), tui_rl_switch_mode, tui_ctlx_keymap);
+  rl_bind_key_in_map (c_ctrl ('A'), tui_rl_switch_mode, emacs_ctlx_keymap);
+  rl_bind_key_in_map (c_ctrl ('A'), tui_rl_switch_mode, tui_ctlx_keymap);
   rl_bind_key_in_map ('1', tui_rl_delete_other_windows, emacs_ctlx_keymap);
   rl_bind_key_in_map ('1', tui_rl_delete_other_windows, tui_ctlx_keymap);
   rl_bind_key_in_map ('2', tui_rl_change_windows, emacs_ctlx_keymap);
@@ -393,6 +395,67 @@ gdb_getenv_term (void)
   return "<unset>";
 }
 
+/* Error out if the toplevel interpreter is not the TUI interpreter.  */
+
+static void
+require_tui_interpreter ()
+{
+  const char *interp = top_level_interpreter ()->name ();
+  if (!streq (interp, INTERP_TUI))
+    error (_("Cannot enable or disable the TUI when the interpreter is '%s'"),
+	   interp);
+}
+
+/* Error out if the terminal doesn't support TUI.  */
+
+static void
+require_tui_terminal ()
+{
+  /* Don't try to setup curses (and print funny control
+     characters) if we're not outputting to a terminal.  */
+  if (!gdb_stderr->isatty ())
+    error (_("Cannot enable the TUI when output is not a terminal"));
+
+  /* Check required terminal capabilities.  The MinGW port of
+     ncurses does have them, but doesn't expose them through "cup".  */
+#ifndef __MINGW32__
+  const char *cap = tigetstr ((char *) "cup");
+  const char *not_a_string_capability = (char *) -1;
+  if (cap == nullptr || cap == not_a_string_capability || *cap == '\0')
+    error (_("Cannot enable the TUI: "
+	     "terminal doesn't support cursor addressing [TERM=%s]"),
+	   gdb_getenv_term ());
+#endif
+}
+
+/* Initialize ncurses, if necessary.  */
+
+static SCREEN *
+init_ncurses ()
+{
+  static SCREEN *tui_screen = nullptr;
+  if (tui_screen != nullptr)
+    {
+      /* Init ncurses only once.  */
+      return tui_screen;
+    }
+
+  tui_screen = newterm (nullptr, stdout, stdin);
+
+#ifdef __MINGW32__
+  /* The MinGW port of ncurses requires $TERM to be unset in order
+     to activate the Windows console driver.  */
+  if (tui_screen == nullptr)
+    tui_screen = newterm ((char *) "unknown", stdout, stdin);
+#endif
+
+  if (tui_screen == nullptr)
+    error (_("Cannot enable the TUI: error opening terminal [TERM=%s]"),
+	   gdb_getenv_term ());
+
+  return tui_screen;
+}
+
 /* Enter in the tui mode (curses).
    When in normal mode, it installs the tui hooks in gdb, redirects
    the gdb output, configures the readline to work in tui mode.
@@ -416,42 +479,24 @@ tui_enable (void)
 	 again.  */
       error (_("Cannot enable the TUI"));
     }
-  else if (tui_finish_init == TRIBOOL_TRUE)
+
+  if (tui_finish_init == TRIBOOL_TRUE)
     {
       WINDOW *w;
-      SCREEN *s;
-#ifndef __MINGW32__
-       const char *cap;
-#endif
-      const char *interp;
 
       /* If the top level interpreter is not the console/tui (e.g.,
 	 MI), enabling curses will certainly lose.  */
-      interp = top_level_interpreter ()->name ();
-      if (strcmp (interp, INTERP_TUI) != 0)
-	error (_("Cannot enable the TUI when the interpreter is '%s'"), interp);
+      require_tui_interpreter ();
 
-      /* Don't try to setup curses (and print funny control
-	 characters) if we're not outputting to a terminal.  */
-      if (!gdb_stderr->isatty ())
-	error (_("Cannot enable the TUI when output is not a terminal"));
+      /* Require a terminal that supports TUI.  */
+      require_tui_terminal ();
 
       /* Don't try initialization again.  */
       tui_finish_init = TRIBOOL_UNKNOWN;
 
-      s = newterm (NULL, stdout, stdin);
-#ifdef __MINGW32__
-      /* The MinGW port of ncurses requires $TERM to be unset in order
-	 to activate the Windows console driver.  */
-      if (s == NULL)
-	s = newterm ((char *) "unknown", stdout, stdin);
-#endif
-      if (s == NULL)
-	{
-	  error (_("Cannot enable the TUI: error opening terminal [TERM=%s]"),
-		 gdb_getenv_term ());
-	}
+      init_ncurses ();
       w = stdscr;
+
       if (has_colors ())
 	{
 #ifdef HAVE_USE_DEFAULT_COLORS
@@ -462,41 +507,41 @@ tui_enable (void)
 	  start_color ();
 	}
 
-      /* Check required terminal capabilities.  The MinGW port of
-	 ncurses does have them, but doesn't expose them through "cup".  */
-#ifndef __MINGW32__
-      cap = tigetstr ((char *) "cup");
-      if (cap == NULL || cap == (char *) -1 || *cap == '\0')
-	{
-	  endwin ();
-	  delscreen (s);
-	  error (_("Cannot enable the TUI: "
-		   "terminal doesn't support cursor addressing [TERM=%s]"),
-		 gdb_getenv_term ());
-	}
-#endif
-
       /* We must mark the tui sub-system active before trying to setup the
 	 current layout as tui windows defined by an extension language
 	 rely on this flag being true in order to know that the window
 	 they are creating is currently valid.  */
       tui_active = true;
+      try
+	{
+	  cbreak ();
+	  noecho ();
+	  /* timeout (1); */
+	  nodelay (w, FALSE);
+	  nl ();
+	  keypad (w, TRUE);
+	  tui_set_term_height_to (LINES);
+	  tui_set_term_width_to (COLS);
+	  def_prog_mode ();
+	  tui_show_frame_info (deprecated_safe_get_selected_frame ());
+	  tui_set_initial_layout ();
+	  tui_set_win_focus_to (tui_src_win ());
+	  keypad (tui_cmd_win ()->handle.get (), TRUE);
+	  wrefresh (tui_cmd_win ()->handle.get ());
+	}
+      catch (const gdb_exception &)
+	{
+	  endwin ();
 
-      cbreak ();
-      noecho ();
-      /* timeout (1); */
-      nodelay(w, FALSE);
-      nl();
-      keypad (w, TRUE);
-      tui_set_term_height_to (LINES);
-      tui_set_term_width_to (COLS);
-      def_prog_mode ();
+	  /* Initialization failed, so TUI is not active.  */
+	  tui_active = false;
 
-      tui_show_frame_info (deprecated_safe_get_selected_frame ());
-      tui_set_initial_layout ();
-      tui_set_win_focus_to (tui_src_win ());
-      keypad (tui_cmd_win ()->handle.get (), TRUE);
-      wrefresh (tui_cmd_win ()->handle.get ());
+	  /* Allow trying to initialize TUI again.  */
+	  tui_finish_init = TRIBOOL_TRUE;
+
+	  throw;
+	}
+
       tui_finish_init = TRIBOOL_FALSE;
     }
   else
@@ -554,6 +599,8 @@ tui_disable (void)
 
   if (!tui_active)
     return;
+
+  require_tui_interpreter ();
 
   /* Restore initial readline keymap.  */
   rl_set_keymap (tui_readline_standard_keymap);

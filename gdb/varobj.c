@@ -37,7 +37,7 @@
 #include "python/python.h"
 #include "python/python-internal.h"
 #else
-typedef int PyObject;
+using PyObject = int;
 #endif
 
 /* See varobj.h.  */
@@ -276,7 +276,7 @@ varobj_create (const char *objname,
 	{
 	  /* Allow creator to specify context of variable.  */
 	  if ((type == USE_CURRENT_FRAME) || (type == USE_SELECTED_FRAME))
-	    fi = get_selected_frame (NULL);
+	    fi = get_selected_frame ();
 	  else
 	    /* FIXME: cagney/2002-11-23: This code should be doing a
 	       lookup using the frame ID and not just the frame's
@@ -354,7 +354,7 @@ varobj_create (const char *objname,
 
 	  var->root->frame = get_frame_id (fi);
 	  var->root->thread_id = inferior_thread ()->global_num;
-	  old_id = get_frame_id (get_selected_frame (NULL));
+	  old_id = get_frame_id (get_selected_frame ());
 	  select_frame (fi);
 	}
 
@@ -2181,7 +2181,7 @@ varobj_value_get_print_value (struct value *value,
 			    = gdbpy_get_display_hint (value_formatter);
 			  if (hint)
 			    {
-			      if (!strcmp (hint.get (), "string"))
+			      if (streq (hint.get (), "string"))
 				string_print = true;
 			    }
 

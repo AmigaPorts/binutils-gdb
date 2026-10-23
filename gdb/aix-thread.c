@@ -205,13 +205,7 @@ get_aix_thread_variables_data (struct inferior *inf)
   if (inf == NULL)
     return NULL;
 
-  struct aix_thread_variables* data;
-
-  data = aix_thread_variables_handle.get (inf);
-  if (data == NULL)
-    data = aix_thread_variables_handle.emplace (inf);
-
-  return data;
+  return &aix_thread_variables_handle.try_emplace (inf);
 }
 
 /* Helper to get data for ptid in a function.  */
@@ -890,13 +884,17 @@ pd_update (pid_t pid)
   if (status != PTHDB_SUCCESS)
     return ptid_t (pid);
 
-  sync_threadlists (pid);
+  /* Attempt to sync_threadlists () only when debugging object files
+     and not core files since list of threads never change for core
+     files.  */
+  if (target_has_execution ())
+    sync_threadlists (pid);
 
   /* Define "current thread" as one that just received a trap signal.  */
 
   tid = get_signaled_thread (pid);
   if (tid != 0)
-    thread = iterate_over_threads ([&] (struct thread_info *thread)
+    thread = find_thread ([&] (thread_info *thread)
       {
 	return thread->ptid.lwp () == tid;
       });
@@ -976,7 +974,12 @@ pd_enable (inferior *inf)
     = lookup_minimal_symbol (current_program_space, stub_name);
   if (ms.minsym == NULL)
     return;
-  data->pd_brk_addr = ms.value_address ();
+
+  /* On AIX, symbols can be function descriptors, so we need to resolve
+     them to get the actual code address.  */
+  if (!msymbol_is_function (ms.objfile, ms.minsym, &data->pd_brk_addr))
+    return;
+
   if (!create_thread_event_breakpoint (current_inferior ()->arch (),
 				       data->pd_brk_addr))
     return;
@@ -1017,7 +1020,7 @@ pd_disable (inferior *inf)
    for thread debugging.  */
 
 static void
-new_objfile (struct objfile *objfile)
+new_objfile (struct objfile &objfile)
 {
   pd_enable (current_inferior ());
 }

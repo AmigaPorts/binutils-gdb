@@ -197,10 +197,6 @@ LIBEXPAT = @LIBEXPAT@
 # Where is lzma?  This will be empty if lzma was not available.
 LIBLZMA = @LIBLZMA@
 
-# Where is libbabeltrace? This will be empty if libbabeltrace was not
-# available.
-LIBBABELTRACE = @LIBBABELTRACE@
-
 # Where is libxxhash? This will be empty if libxxhash was not
 # available.
 LIBXXHASH = @LIBXXHASH@
@@ -422,6 +418,7 @@ SUBDIR_PYTHON_SRCS = \
 	python/py-micmd.c \
 	python/py-newobjfileevent.c \
 	python/py-objfile.c \
+	python/py-obj-type.c \
 	python/py-param.c \
 	python/py-prettyprint.c \
 	python/py-progspace.c \
@@ -462,6 +459,7 @@ SELFTESTS_SRCS = \
 	unittests/common-utils-selftests.c \
 	unittests/copy_bitwise-selftests.c \
 	unittests/enum-flags-selftests.c \
+	unittests/enumerate-selftests.c \
 	unittests/environ-selftests.c \
 	unittests/filtered_iterator-selftests.c \
 	unittests/format_pieces-selftests.c \
@@ -470,9 +468,11 @@ SELFTESTS_SRCS = \
 	unittests/gdb_tilde_expand-selftests.c \
 	unittests/gmp-utils-selftests.c \
 	unittests/intrusive_list-selftests.c \
+	unittests/iterator-range-selftests.c \
 	unittests/lookup_name_info-selftests.c \
 	unittests/memory-map-selftests.c \
 	unittests/memrange-selftests.c \
+	unittests/next-iterator-selftests.c \
 	unittests/offset-type-selftests.c \
 	unittests/observable-selftests.c \
 	unittests/packed-selftests.c \
@@ -558,32 +558,22 @@ GDBTK_LIBRARY = $(datadir)/insight$(GDBTK_VERSION)
 # the testsuite won't run properly.
 GDBTK_SRC_DIR = @GDBTK_SRC_DIR@
 
-SUBDIR_GDBTK_OBS = \
-	gdbtk.o \
-	gdbtk-bp.o \
-	gdbtk-cmds.o \
-	gdbtk-hooks.o \
-	gdbtk-interp.o \
-	gdbtk-register.o \
-	gdbtk-stack.o \
-	gdbtk-varobj.o \
-	gdbtk-wrapper.o
-
 SUBDIR_GDBTK_SRCS = \
 	gdbtk/generic/gdbtk.c \
 	gdbtk/generic/gdbtk-bp.c \
 	gdbtk/generic/gdbtk-cmds.c \
 	gdbtk/generic/gdbtk-hooks.c \
 	gdbtk/generic/gdbtk-interp.c \
-	gdbtk/generic/gdbtk-main.c \
 	gdbtk/generic/gdbtk-register.c \
 	gdbtk/generic/gdbtk-stack.c \
 	gdbtk/generic/gdbtk-varobj.c \
 	gdbtk/generic/gdbtk-wrapper.c
 
+SUBDIR_GDBTK_OBS = $(patsubst %.c,%.o,$(SUBDIR_GDBTK_SRCS))
+
 SUBDIR_GDBTK_DEPS = $(LIBGUI) $(TCL_DEPS) $(TK_DEPS)
 SUBDIR_GDBTK_LDFLAGS =
-SUBDIR_GDBTK_CFLAGS = -DGDBTK
+SUBDIR_GDBTK_CFLAGS= -DGDBTK -D@TCL_PLATFORM_DEFINE@ -D@TK_PLATFORM_DEFINE@
 
 CONFIG_OBS = @CONFIG_OBS@
 CONFIG_SRCS = @CONFIG_SRCS@
@@ -598,7 +588,7 @@ HAVE_NATIVE_GCORE_TARGET = @HAVE_NATIVE_GCORE_TARGET@
 HAVE_GSTACK = @HAVE_GSTACK@
 
 CONFIG_SRC_SUBDIR = arch cli dwarf2 mi compile tui unittests guile python \
-	target nat
+	target nat gdbtk/generic
 CONFIG_DEP_SUBDIR = $(addsuffix /$(DEPDIR),$(CONFIG_SRC_SUBDIR))
 
 # -I. for config files.
@@ -684,10 +674,10 @@ CLIBS = $(SIM) $(READLINE) $(OPCODES) $(LIBCTF) $(BFD) $(ZLIB) $(ZSTD_LIBS) \
         $(LIBSUPPORT) $(INTL) $(LIBIBERTY) $(LIBDECNUMBER) \
 	$(XM_CLIBS) $(GDBTKLIBS)  $(LIBBACKTRACE_LIB) \
 	@LIBS@ @GUILE_LIBS@ @PYTHON_LIBS@ $(AMD_DBGAPI_LIBS) \
-	$(LIBEXPAT) $(LIBLZMA) $(LIBBABELTRACE) $(LIBIPT) \
+	$(LIBEXPAT) $(LIBLZMA) $(LIBIPT) \
 	$(WIN32LIBS) $(LIBGNU) $(LIBGNU_EXTRA_LIBS) $(LIBICONV) \
 	$(GMPLIBS) $(SRCHIGH_LIBS) $(LIBXXHASH) $(PTHREAD_LIBS) \
-	$(DEBUGINFOD_LIBS) $(LIBBABELTRACE_LIB)
+	$(DEBUGINFOD_LIBS)
 CDEPS = $(NAT_CDEPS) $(SIM) $(BFD) $(READLINE_DEPS) $(CTF_DEPS) \
 	$(OPCODES) $(INTL_DEPS) $(LIBIBERTY) $(CONFIG_DEPS) $(LIBGNU) \
 	$(LIBSUPPORT)
@@ -1072,12 +1062,14 @@ COMMON_SFILES = \
 	breakpoint.c \
 	bt-utils.c \
 	btrace.c \
+	buffered-streams.c \
 	build-id.c \
 	buildsym.c \
 	c-lang.c \
 	c-typeprint.c \
 	c-valprint.c \
 	c-varobj.c \
+	char-print.c \
 	charset.c \
 	cli-out.c \
 	complaints.c \
@@ -1176,7 +1168,6 @@ COMMON_SFILES = \
 	progspace.c \
 	progspace-and-thread.c \
 	prologue-value.c \
-	psymtab.c \
 	record.c \
 	record-btrace.c \
 	record-full.c \
@@ -1215,7 +1206,6 @@ COMMON_SFILES = \
 	thread-iter.c \
 	tid-parse.c \
 	top.c \
-	tracectf.c \
 	tracefile.c \
 	tracefile-tfile.c \
 	tracepoint.c \
@@ -1296,15 +1286,18 @@ HFILES_NO_SRCDIR = \
 	amd64-nat.h \
 	amd64-ravenscar-thread.h \
 	amd64-tdep.h \
+	amd-dbgapi-hdep.h \
 	amd-dbgapi-target.h \
 	amdgpu-tdep.h \
 	annotate.h \
 	arch/aarch32.h \
+	arch/aarch64-fpmr-linux.h \
 	arch/aarch64-gcs-linux.h \
 	arch/aarch64.h \
 	arch/aarch64-insn.h \
 	arch/aarch64-mte.h \
 	arch/aarch64-mte-linux.h \
+	arch/aarch64-pauth-linux.h \
 	arch/aarch64-scalable-linux.h \
 	arch/amd64.h \
 	arch/amd64-linux-tdesc.h \
@@ -1347,6 +1340,7 @@ HFILES_NO_SRCDIR = \
 	bsd-uthread.h \
 	btrace.h \
 	bt-utils.h \
+	buffered-streams.h \
 	build-id.h \
 	buildsym.h \
 	c-exp.h \
@@ -1452,6 +1446,7 @@ HFILES_NO_SRCDIR = \
 	f-exp.h \
 	filename-seen-cache.h \
 	filesystem.h \
+	find-memory-region.h \
 	finish-thread-state.h \
 	f-lang.h \
 	frame-base.h \
@@ -1526,6 +1521,7 @@ HFILES_NO_SRCDIR = \
 	memrange.h \
 	memtag.h \
 	microblaze-tdep.h \
+	microblaze-linux-tdep.h \
 	mi/mi-cmd-break.h \
 	mi/mi-cmds.h \
 	mi/mi-common.h \
@@ -1543,10 +1539,13 @@ HFILES_NO_SRCDIR = \
 	mn10300-tdep.h \
 	moxie-tdep.h \
 	namespace.h \
+	nat/aarch64-fpmr-linux.h \
+	nat/aarch64-gcs-linux.h \
 	nat/aarch64-hw-point.h \
 	nat/aarch64-linux.h \
 	nat/aarch64-linux-hw-point.h \
 	nat/aarch64-mte-linux-ptrace.h \
+	nat/aarch64-pauth-linux.h \
 	nat/aarch64-scalable-linux-ptrace.h \
 	nat/aarch64-scalable-linux-sigcontext.h \
 	nat/amd64-linux.h \
@@ -1610,7 +1609,6 @@ HFILES_NO_SRCDIR = \
 	progspace-and-thread.h \
 	progspace.h \
 	prologue-value.h \
-	psymtab.h \
 	python/py-color.h \
 	python/py-event.h \
 	python/py-events.h \
@@ -1622,6 +1620,7 @@ HFILES_NO_SRCDIR = \
 	python/py-stopevent.h \
 	python/python.h \
 	python/python-internal.h \
+	python/python-limited-api-missing.h \
 	python/py-uiout.h \
 	quick-symbol.h \
 	ravenscar-thread.h \
@@ -1698,7 +1697,6 @@ HFILES_NO_SRCDIR = \
 	tid-parse.h \
 	tilegx-tdep.h \
 	top.h \
-	tracectf.h \
 	tracefile.h \
 	tracepoint.h \
 	trad-frame.h \
@@ -1796,6 +1794,8 @@ ALLDEPFILES = \
 	alpha-netbsd-tdep.c \
 	alpha-obsd-tdep.c \
 	alpha-tdep.c \
+	amd-dbgapi-mingw-hdep.c \
+	amd-dbgapi-posix-hdep.c \
 	amd-dbgapi-target.c \
 	amd64-bsd-nat.c \
 	amd64-darwin-tdep.c \
@@ -1892,6 +1892,7 @@ ALLDEPFILES = \
 	m68k-linux-nat.c \
 	m68k-linux-tdep.c \
 	m68k-tdep.c \
+	microblaze-linux-nat.c \
 	microblaze-linux-tdep.c \
 	microblaze-tdep.c \
 	mingw-hdep.c \
@@ -2006,7 +2007,6 @@ TAGFILES_WITH_SRCDIR = $(HFILES_WITH_SRCDIR)
 # Files that are used to support certain debuginfo formats
 DWARF2_SRCS = \
 	dwarf2/abbrev.c \
-	dwarf2/abbrev-table-cache.c \
 	dwarf2/ada-imported.c \
 	dwarf2/aranges.c \
 	dwarf2/attribute.c \
@@ -2104,10 +2104,8 @@ $(CONFIG_DEP_SUBDIR):
 # Python files need special flags.
 python/%.o: INTERNAL_CFLAGS += $(PYTHON_CFLAGS)
 
-# Rules for compiling .c files in the various source subdirectories.
-%.o: $(srcdir)/gdbtk/generic/%.c
-	$(COMPILE) $(all_gdbtk_cflags) $<
-	$(POSTCOMPILE)
+# Insight UI needs special flags.
+gdbtk/generic/%.o: INTERNAL_CFLAGS += $(all_gdbtk_cflags)
 
 installcheck:
 
@@ -2337,6 +2335,7 @@ uninstall: force $(CONFIG_UNINSTALL)
 # computing the list of source files from the list of object files.
 
 INIT_FILES_FILTER_OUT = \
+	gdbres.o \
 	init.o \
 	version.o \
 	xml-builtin.o \
@@ -2718,7 +2717,7 @@ po/$(PACKAGE).pot: force
 	-test -d po || mkdir po
 	sh -e $(srcdir)/po/gdbtext $(XGETTEXT) $(PACKAGE) . $(srcdir) \
 	  $(srcdir)/../gdbsupport $(srcdir)/../gdbserver \
-	  $(addprefix $(srcdir)/,$(CONFIG_SRC_SUBDIR))
+	  $(addprefix $(srcdir)/,$(filter-out gdbtk/generic, $(CONFIG_SRC_SUBDIR)))
 
 
 #
@@ -2831,10 +2830,10 @@ clean-gdbtk:
 	rm -f insight$(EXEEXT)
 
 # Removing the old gdb first works better if it is running, at least on SunOS.
-insight$(EXEEXT): gdbtk-main.o libgdb.a $(CDEPS) $(TDEPLIBS)
-	rm -f insight$(EXEEXT)
+insight$(EXEEXT): gdbtk/generic/gdbtk-main.o $(LIBGDB_OBS) $(CDEPS) $(TDEPLIBS)
+	$(SILENCE) rm -f insight$(EXEEXT)
 	$(ECHO_CXXLD) $(CC_LD) $(INTERNAL_LDFLAGS) $(WIN32LDAPP) \
-		-o insight$(EXEEXT) gdbtk-main.o libgdb.a \
+		-o insight$(EXEEXT) gdbtk/generic/gdbtk-main.o $(LIBGDB_OBS) \
 		$(TDEPLIBS) $(TUI_LIBRARY) $(CLIBS) $(LOADLIBES)
 
 gdbres.o: $(srcdir)/gdbtk/gdb.rc $(srcdir)/gdbtk/gdbtool.ico
@@ -2869,7 +2868,7 @@ endif
 
 # A list of all the objects we might care about in this build, for
 # dependency tracking.
-all_object_files = gdb.o $(LIBGDB_OBS) gdbtk-main.o
+all_object_files = gdb.o $(LIBGDB_OBS) gdbtk/generic/gdbtk-main.o
 
 # All the .deps files to include.
 all_deps_files = $(foreach dep,$(patsubst %.o,%.Po,$(all_object_files)),\

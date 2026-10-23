@@ -848,6 +848,9 @@ static int optimize = 0;
  */
 static int optimize_for_space = 0;
 
+/* Disabled optimizations.  */
+static int optimize_for_disabled_optimizations = 0;
+
 /* Register prefix used for error message.  */
 static const char *register_prefix = "%";
 
@@ -1403,8 +1406,8 @@ gotrel[] =
     { STRING_COMMA_LEN ("GOTPLT"),   { _dummy_first_bfd_reloc_code_real,
 				       BFD_RELOC_X86_64_GOTPLT64 },
     OPERAND_TYPE_IMM64_DISP64, true },
-    { STRING_COMMA_LEN ("GOTOFF"),   { BFD_RELOC_386_GOTOFF,
-				       BFD_RELOC_X86_64_GOTOFF64 },
+    { STRING_COMMA_LEN ("GOTOFF"),   { BFD_RELOC_32_GOTOFF,
+				       BFD_RELOC_64_GOTOFF },
     OPERAND_TYPE_IMM64_DISP64, true },
     { STRING_COMMA_LEN ("GOTPCREL"), { _dummy_first_bfd_reloc_code_real,
 				       BFD_RELOC_X86_64_GOTPCREL },
@@ -3773,6 +3776,8 @@ i386_print_statistics (FILE *file)
 void
 i386_md_end (void)
 {
+  if (!ENABLE_LEAK_CHECK)
+    return;
   htab_delete (op_hash);
   htab_delete (reg_hash);
   GOT_symbol = NULL;
@@ -3930,6 +3935,7 @@ const type_names[] =
   { { .bitfield = { .class = RegSIMD, .zmmword = 1 } }, "rZMM" },
   { { .bitfield = { .class = RegSIMD, .tmmword = 1 } }, "rTMM" },
   { { .bitfield = { .class = RegMask } }, "Mask reg" },
+  { { .bitfield = { .class = RegBND } }, "rBND" },
 };
 
 static void
@@ -3971,7 +3977,7 @@ _reloc (unsigned int size,
 	  case BFD_RELOC_X86_64_GOT32:
 	    return BFD_RELOC_X86_64_GOT64;
 	  case BFD_RELOC_X86_64_GOTPC32:
-	    other = BFD_RELOC_X86_64_GOTPC64;
+	    other = BFD_RELOC_64_GOT_PCREL;
 	    break;
 	  case BFD_RELOC_X86_64_GOTPCREL:
 	    other = BFD_RELOC_X86_64_GOTPCREL64;
@@ -4097,7 +4103,7 @@ tc_i386_fix_adjustable (fixS *fixP)
      for size relocations.  */
   if (fixP->fx_r_type == BFD_RELOC_SIZE32
       || fixP->fx_r_type == BFD_RELOC_SIZE64
-      || fixP->fx_r_type == BFD_RELOC_386_GOTOFF
+      || fixP->fx_r_type == BFD_RELOC_32_GOTOFF
       || fixP->fx_r_type == BFD_RELOC_386_GOT32
       || fixP->fx_r_type == BFD_RELOC_386_GOT32X
       || fixP->fx_r_type == BFD_RELOC_386_TLS_GD
@@ -4127,7 +4133,7 @@ tc_i386_fix_adjustable (fixS *fixP)
       || fixP->fx_r_type == BFD_RELOC_X86_64_CODE_6_GOTTPOFF
       || fixP->fx_r_type == BFD_RELOC_X86_64_TPOFF32
       || fixP->fx_r_type == BFD_RELOC_X86_64_TPOFF64
-      || fixP->fx_r_type == BFD_RELOC_X86_64_GOTOFF64
+      || fixP->fx_r_type == BFD_RELOC_64_GOTOFF
       || fixP->fx_r_type == BFD_RELOC_X86_64_GOT64
       || fixP->fx_r_type == BFD_RELOC_X86_64_GOTPC32_TLSDESC
       || fixP->fx_r_type == BFD_RELOC_X86_64_CODE_4_GOTPC32_TLSDESC
@@ -5174,6 +5180,28 @@ optimize_encoding (void)
       i.seg[0] = NULL;
     }
 
+  if (optimize_for_disabled_optimizations
+      && i.tm.mnem_off == MN_xchg
+      && i.reg_operands == 2
+      && i.op[0].regs == i.op[1].regs)
+    {
+      /* Optimize: -O:
+	   xchg %rN, %rN     -> mov %rN, %rN
+       */
+      i.tm.base_opcode = pp.dir_encoding == dir_encoding_load ? 0x8a : 0x88;
+    }
+
+  if (i.tm.mnem_off == MN_xadd
+      && i.reg_operands == 2
+      && i.op[0].regs == i.op[1].regs)
+    {
+      /* Optimize: -O:
+	   xadd %rN, %rN     -> add %rN, %rN
+       */
+      i.tm.opcode_space = SPACE_BASE;
+      i.tm.base_opcode = 0x00;
+    }
+
   if (((i.tm.opcode_space == SPACE_0F
         && (i.tm.base_opcode | 1) == 0xbf
         && (i.types[0].bitfield.byte
@@ -5800,6 +5828,7 @@ optimize_encoding (void)
 	   && i.tm.opcode_modifier.vex
 	   && !(i.op[0].regs->reg_flags & RegRex)
 	   && i.op[0].regs->reg_type.bitfield.xmmword
+	   && i.op[1].regs->reg_type.bitfield.xmmword
 	   && pp.encoding != encoding_vex3)
     {
       /* Optimize: -Os:
@@ -13078,13 +13107,13 @@ output_disp (fragS *insn_start_frag, offsetT insn_start_off)
 		{
 		  if (!object_64bit)
 		    {
-		      reloc_type = BFD_RELOC_386_GOTPC;
+		      reloc_type = BFD_RELOC_32_GOT_PCREL;
 		      i.has_gotpc_tls_reloc = true;
 		      i.op[n].disps->X_add_number +=
 			encoding_length (insn_start_frag, insn_start_off, p);
 		    }
 		  else if (reloc_type == BFD_RELOC_64)
-		    reloc_type = BFD_RELOC_X86_64_GOTPC64;
+		    reloc_type = BFD_RELOC_64_GOT_PCREL;
 		  else
 		    /* Don't do the adjustment for x86-64, as there
 		       the pcrel addressing is relative to the _next_
@@ -13312,11 +13341,11 @@ output_imm (fragS *insn_start_frag, offsetT insn_start_off)
 			      == O_subtract))))
 		{
 		  if (!object_64bit)
-		    reloc_type = BFD_RELOC_386_GOTPC;
+		    reloc_type = BFD_RELOC_32_GOT_PCREL;
 		  else if (size == 4)
 		    reloc_type = BFD_RELOC_X86_64_GOTPC32;
 		  else if (size == 8)
-		    reloc_type = BFD_RELOC_X86_64_GOTPC64;
+		    reloc_type = BFD_RELOC_64_GOT_PCREL;
 		  i.has_gotpc_tls_reloc = true;
 		  i.op[n].imms->X_add_number +=
 		    encoding_length (insn_start_frag, insn_start_off, p);
@@ -13566,6 +13595,7 @@ s_insn (int dummy ATTRIBUTE_UNUSED)
     {
   bad:
       *saved_ilp = saved_char;
+      input_line_pointer = saved_ilp;
       ignore_rest_of_line ();
       i.tm.mnem_off = 0;
       memset (&pp, 0, sizeof (pp));
@@ -15076,22 +15106,35 @@ i386_finalize_displacement (segT exp_seg ATTRIBUTE_UNUSED, expressionS *exp,
   /* We do this to make sure that the section symbol is in
      the symbol table.  We will ultimately change the relocation
      to be relative to the beginning of the section.  */
-  if (i.reloc[this_operand] == BFD_RELOC_386_GOTOFF
+  if (i.reloc[this_operand] == BFD_RELOC_32_GOTOFF
       || i.reloc[this_operand] == BFD_RELOC_X86_64_GOTPCREL
-      || i.reloc[this_operand] == BFD_RELOC_X86_64_GOTOFF64)
+      || i.reloc[this_operand] == BFD_RELOC_64_GOTOFF)
     {
-      if (exp->X_op != O_symbol)
+      if (exp->X_op != O_symbol
+	  && exp->X_op != O_add
+	  && exp->X_op != O_subtract)
 	goto inv_disp;
 
       if (S_IS_LOCAL (exp->X_add_symbol)
 	  && S_GET_SEGMENT (exp->X_add_symbol) != undefined_section
 	  && S_GET_SEGMENT (exp->X_add_symbol) != expr_section)
 	section_symbol (S_GET_SEGMENT (exp->X_add_symbol));
+
+      if (exp->X_op != O_symbol)
+	{
+	  if (S_IS_LOCAL (exp->X_op_symbol)
+	      && S_GET_SEGMENT (exp->X_op_symbol) != undefined_section
+	      && S_GET_SEGMENT (exp->X_op_symbol) != expr_section)
+	    section_symbol (S_GET_SEGMENT (exp->X_op_symbol));
+
+	  exp->X_add_symbol = make_expr_symbol (exp);
+	}
+
       exp->X_op = O_subtract;
       exp->X_op_symbol = GOT_symbol;
       if (i.reloc[this_operand] == BFD_RELOC_X86_64_GOTPCREL)
 	i.reloc[this_operand] = BFD_RELOC_32_PCREL;
-      else if (i.reloc[this_operand] == BFD_RELOC_X86_64_GOTOFF64)
+      else if (i.reloc[this_operand] == BFD_RELOC_64_GOTOFF)
 	i.reloc[this_operand] = BFD_RELOC_64;
       else
 	i.reloc[this_operand] = BFD_RELOC_32;
@@ -15422,7 +15465,7 @@ static INLINE bool starts_memory_operand (char c)
 {
   return ISDIGIT (c)
 	 || is_name_beginner (c)
-	 || strchr ("([\"+-!~", c);
+	 || (c && strchr ("([\"+-!~", c));
 }
 
 /* Parse OPERAND_STRING into the i386_insn structure I.  Returns zero
@@ -17059,19 +17102,13 @@ parse_register (const char *reg_string, char **end_op)
       char *save = input_line_pointer;
       char *buf = xstrdup (reg_string), *name;
       symbolS *symbolP;
+      offsetT off;
 
       input_line_pointer = buf;
       get_symbol_name (&name);
       symbolP = symbol_find (name);
-      while (symbolP && symbol_equated_p (symbolP))
-	{
-	  const expressionS *e = symbol_get_value_expression(symbolP);
-
-	  if (e->X_add_number)
-	    break;
-	  symbolP = e->X_add_symbol;
-	}
-      if (symbolP && S_GET_SEGMENT (symbolP) == reg_section)
+      symbolP = symbol_equated_to (symbolP, &off);
+      if (symbolP && off == 0 && S_GET_SEGMENT (symbolP) == reg_section)
 	{
 	  const expressionS *e = symbol_get_value_expression (symbolP);
 
@@ -18417,9 +18454,9 @@ i386_validate_fix (fixS *fixp)
 	  else
 	    {
 	      if (!object_64bit)
-		fixp->fx_r_type = BFD_RELOC_386_GOTOFF;
+		fixp->fx_r_type = BFD_RELOC_32_GOTOFF;
 	      else
-		fixp->fx_r_type = BFD_RELOC_X86_64_GOTOFF64;
+		fixp->fx_r_type = BFD_RELOC_64_GOTOFF;
 	    }
 	  fixp->fx_subsy = 0;
 	}
@@ -18523,8 +18560,8 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
     case BFD_RELOC_386_PLT32:
     case BFD_RELOC_386_GOT32:
     case BFD_RELOC_386_GOT32X:
-    case BFD_RELOC_386_GOTOFF:
-    case BFD_RELOC_386_GOTPC:
+    case BFD_RELOC_32_GOTOFF:
+    case BFD_RELOC_32_GOT_PCREL:
     case BFD_RELOC_386_TLS_GD:
     case BFD_RELOC_386_TLS_LDM:
     case BFD_RELOC_386_TLS_LDO_32:
@@ -18545,11 +18582,11 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
     case BFD_RELOC_X86_64_CODE_6_GOTTPOFF:
     case BFD_RELOC_X86_64_TPOFF32:
     case BFD_RELOC_X86_64_TPOFF64:
-    case BFD_RELOC_X86_64_GOTOFF64:
+    case BFD_RELOC_64_GOTOFF:
     case BFD_RELOC_X86_64_GOTPC32:
     case BFD_RELOC_X86_64_GOT64:
     case BFD_RELOC_X86_64_GOTPCREL64:
-    case BFD_RELOC_X86_64_GOTPC64:
+    case BFD_RELOC_64_GOT_PCREL:
     case BFD_RELOC_X86_64_GOTPLT64:
     case BFD_RELOC_64_PLTOFF:
     case BFD_RELOC_X86_64_GOTPC32_TLSDESC:
@@ -18621,7 +18658,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
       && fixp->fx_addsy == GOT_symbol)
     {
       if (!object_64bit)
-	code = BFD_RELOC_386_GOTPC;
+	code = BFD_RELOC_32_GOT_PCREL;
       else
 	code = BFD_RELOC_X86_64_GOTPC32;
     }
@@ -18629,7 +18666,7 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
       && GOT_symbol
       && fixp->fx_addsy == GOT_symbol)
     {
-      code = BFD_RELOC_X86_64_GOTPC64;
+      code = BFD_RELOC_64_GOT_PCREL;
     }
 
   rel = notes_alloc (sizeof (arelent));
@@ -18660,10 +18697,10 @@ tc_gen_reloc (asection *section ATTRIBUTE_UNUSED, fixS *fixp)
 	  case BFD_RELOC_X86_64_DTPOFF64:
 	  case BFD_RELOC_X86_64_TPOFF64:
 	  case BFD_RELOC_64_PCREL:
-	  case BFD_RELOC_X86_64_GOTOFF64:
+	  case BFD_RELOC_64_GOTOFF:
 	  case BFD_RELOC_X86_64_GOT64:
 	  case BFD_RELOC_X86_64_GOTPCREL64:
-	  case BFD_RELOC_X86_64_GOTPC64:
+	  case BFD_RELOC_64_GOT_PCREL:
 	  case BFD_RELOC_X86_64_GOTPLT64:
 	  case BFD_RELOC_64_PLTOFF:
 	    as_bad_where (fixp->fx_file, fixp->fx_line,

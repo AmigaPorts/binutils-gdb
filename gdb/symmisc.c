@@ -63,12 +63,12 @@ print_objfile_statistics (void)
 	if (objfile.per_bfd->n_minsyms > 0)
 	  gdb_printf (_("  Number of \"minimal\" symbols read: %d\n"),
 		      objfile.per_bfd->n_minsyms);
-	if (OBJSTAT ((&objfile), n_syms) > 0)
+	if (objfile.n_syms > 0)
 	  gdb_printf (_("  Number of \"full\" symbols read: %d\n"),
-		      OBJSTAT ((&objfile), n_syms));
-	if (OBJSTAT ((&objfile), n_types) > 0)
+		      objfile.n_syms);
+	if (objfile.n_types > 0)
 	  gdb_printf (_("  Number of \"types\" defined: %d\n"),
-		      OBJSTAT ((&objfile), n_types));
+		      objfile.n_types);
 
 	i = linetables = 0;
 	for (compunit_symtab &cu : objfile.compunits ())
@@ -90,9 +90,6 @@ print_objfile_statistics (void)
 
 	objfile.print_stats (false);
 
-	if (OBJSTAT ((&objfile), sz_strtab) > 0)
-	  gdb_printf (_("  Space used by string tables: %d\n"),
-		      OBJSTAT ((&objfile), sz_strtab));
 	gdb_printf (_("  Total memory used for objfile obstack: %s\n"),
 		    pulongest (obstack_memory_used (&objfile
 						    .objfile_obstack)));
@@ -138,7 +135,7 @@ dump_objfile (struct objfile *objfile)
 		      styled_string (file_name_style.style (),
 				     symtab_to_filename_for_display (symtab)),
 		      host_address_to_string (symtab));
-	  if (symtab->compunit ()->objfile () != objfile)
+	  if (symtab->compunit ().objfile () != objfile)
 	    gdb_printf (_(", NOT ON CHAIN!"));
 	  gdb_printf ("\n");
 	}
@@ -247,7 +244,7 @@ dump_msymbols (struct objfile *objfile, struct ui_file *outfile)
 static void
 dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
 {
-  struct objfile *objfile = symtab->compunit ()->objfile ();
+  struct objfile *objfile = symtab->compunit ().objfile ();
   struct gdbarch *gdbarch = objfile->arch ();
   const struct linetable *l;
   int depth;
@@ -257,10 +254,10 @@ dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
 			     symtab_to_filename_for_display (symtab)),
 	      host_address_to_string (symtab));
 
-  if (symtab->compunit ()->dirname () != NULL)
+  if (symtab->compunit ().dirname () != NULL)
     gdb_printf (outfile, _("Compilation directory is %ps\n"),
 		styled_string (file_name_style.style (),
-			       symtab->compunit ()->dirname ()));
+			       symtab->compunit ().dirname ()));
   gdb_printf (outfile, _("Read from object file %ps (%s)\n"),
 	      styled_string (file_name_style.style (),
 			     objfile_name (objfile)),
@@ -291,7 +288,7 @@ dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
   if (is_main_symtab_of_compunit_symtab (symtab))
     {
       gdb_printf (outfile, _("\nBlockvector:\n\n"));
-      const blockvector *bv = symtab->compunit ()->blockvector ();
+      const blockvector *bv = symtab->compunit ().blockvector ();
       for (int i = 0; i < bv->num_blocks (); i++)
 	{
 	  const block *b = bv->block (i);
@@ -345,9 +342,9 @@ dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
     }
   else
     {
-      compunit_symtab *compunit = symtab->compunit ();
+      compunit_symtab &compunit = symtab->compunit ();
       const char *compunit_filename
-	= symtab_to_filename_for_display (compunit->primary_filetab ());
+	= symtab_to_filename_for_display (compunit.primary_filetab ());
 
       gdb_printf (outfile,
 		  _("\nBlockvector same as owning compunit: %ps\n\n"),
@@ -359,24 +356,16 @@ dump_symtab_1 (struct symtab *symtab, struct ui_file *outfile)
      compunit_symtabs included by this one. */
   if (is_main_symtab_of_compunit_symtab (symtab))
     {
-      struct compunit_symtab *cust = symtab->compunit ();
+      compunit_symtab &cust = symtab->compunit ();
 
-      if (cust->user != nullptr)
-	{
-	  const char *addr
-	    = host_address_to_string (cust->user->primary_filetab ());
-	  gdb_printf (outfile, _("Compunit user: %s\n"), addr);
-	}
-      if (cust->includes != nullptr)
-	for (int i = 0; ; ++i)
-	  {
-	    struct compunit_symtab *include = cust->includes[i];
-	    if (include == nullptr)
-	      break;
-	    const char *addr
-	      = host_address_to_string (include->primary_filetab ());
-	    gdb_printf (outfile, _("Compunit include: %s\n"), addr);
-	  }
+      if (cust.user != nullptr)
+	gdb_printf (outfile, _("Compunit user: %s\n"),
+		    host_address_to_string (cust.user->primary_filetab ()));
+
+
+      for (compunit_symtab *include : cust.includes)
+	gdb_printf (outfile, _("Compunit include: %s\n"),
+		    host_address_to_string (include->primary_filetab ()));
     }
 }
 
@@ -411,25 +400,25 @@ maintenance_print_symbols (const char *args, int from_tty)
 
   for (i = 0; argv != NULL && argv[i] != NULL; ++i)
     {
-      if (strcmp (argv[i], "-pc") == 0)
+      if (streq (argv[i], "-pc"))
 	{
 	  if (argv[i + 1] == NULL)
 	    error (_("Missing pc value"));
 	  address_arg = argv[++i];
 	}
-      else if (strcmp (argv[i], "-source") == 0)
+      else if (streq (argv[i], "-source"))
 	{
 	  if (argv[i + 1] == NULL)
 	    error (_("Missing source file"));
 	  source_arg = argv[++i];
 	}
-      else if (strcmp (argv[i], "-objfile") == 0)
+      else if (streq (argv[i], "-objfile"))
 	{
 	  if (argv[i + 1] == NULL)
 	    error (_("Missing objfile name"));
 	  objfile_arg = argv[++i];
 	}
-      else if (strcmp (argv[i], "--") == 0)
+      else if (streq (argv[i], "--"))
 	{
 	  /* End of options.  */
 	  ++i;
@@ -507,7 +496,8 @@ maintenance_print_symbols (const char *args, int from_tty)
 	}
 
       if (source_arg != NULL && !found)
-	error (_("No symtab for source file: %s"), source_arg);
+	error (_("No symtab for source file: %ps"),
+	       styled_string (file_name_style.style (), source_arg));
     }
 }
 
@@ -691,13 +681,13 @@ maintenance_print_msymbols (const char *args, int from_tty)
 
   for (i = 0; argv != NULL && argv[i] != NULL; ++i)
     {
-      if (strcmp (argv[i], "-objfile") == 0)
+      if (streq (argv[i], "-objfile"))
 	{
 	  if (argv[i + 1] == NULL)
 	    error (_("Missing objfile name"));
 	  objfile_arg = argv[++i];
 	}
-      else if (strcmp (argv[i], "--") == 0)
+      else if (streq (argv[i], "--"))
 	{
 	  /* End of options.  */
 	  ++i;
@@ -816,21 +806,15 @@ maintenance_info_symtabs (const char *regexp, int from_tty)
 				    cust.user != nullptr
 				    ? host_address_to_string (cust.user)
 				    : "(null)");
-			if (cust.includes != nullptr)
+			if (!cust.includes.empty ())
 			  {
 			    gdb_printf (_("    ( includes\n"));
-			    for (int i = 0; ; ++i)
-			      {
-				struct compunit_symtab *include
-				  = cust.includes[i];
-				if (include == nullptr)
-				  break;
-				const char *addr
-				  = host_address_to_string (include);
-				gdb_printf ("      (%s %s)\n",
-					    "(struct compunit_symtab *)",
-					    addr);
-			      }
+
+			    for (compunit_symtab *include : cust.includes)
+			      gdb_printf ("      (%s %s)\n",
+					  "(struct compunit_symtab *)",
+					  host_address_to_string (include));
+
 			    gdb_printf ("    )\n");
 			  }
 			printed_compunit_symtab_start = 1;
@@ -994,14 +978,14 @@ maintenance_print_one_line_table (struct symtab *symtab, void *data)
   const struct linetable *linetable;
   struct objfile *objfile;
 
-  objfile = symtab->compunit ()->objfile ();
+  objfile = symtab->compunit ().objfile ();
   gdb_printf (_("objfile: %ps ((struct objfile *) %s)\n"),
 	      styled_string (file_name_style.style (),
 			     objfile_name (objfile)),
 	      host_address_to_string (objfile));
   gdb_printf (_("compunit_symtab: %s ((struct compunit_symtab *) %s)\n"),
-	      symtab->compunit ()->name,
-	      host_address_to_string (symtab->compunit ()));
+	      symtab->compunit ().name,
+	      host_address_to_string (&symtab->compunit ()));
   gdb_printf (_("symtab: %ps ((struct symtab *) %s)\n"),
 	      styled_string (file_name_style.style (),
 			     symtab_to_fullname (symtab)),

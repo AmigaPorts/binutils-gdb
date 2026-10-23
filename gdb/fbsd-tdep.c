@@ -496,10 +496,7 @@ static const registry<gdbarch>::key<fbsd_gdbarch_data>
 static struct fbsd_gdbarch_data *
 get_fbsd_gdbarch_data (struct gdbarch *gdbarch)
 {
-  struct fbsd_gdbarch_data *result = fbsd_gdbarch_data_handle.get (gdbarch);
-  if (result == nullptr)
-    result = fbsd_gdbarch_data_handle.emplace (gdbarch);
-  return result;
+  return &fbsd_gdbarch_data_handle.try_emplace (gdbarch);
 }
 
 struct fbsd_pspace_data
@@ -524,13 +521,7 @@ static const registry<program_space>::key<fbsd_pspace_data>
 static struct fbsd_pspace_data *
 get_fbsd_pspace_data (struct program_space *pspace)
 {
-  struct fbsd_pspace_data *data;
-
-  data = fbsd_pspace_data_handle.get (pspace);
-  if (data == NULL)
-    data = fbsd_pspace_data_handle.emplace (pspace);
-
-  return data;
+  return &fbsd_pspace_data_handle.try_emplace (pspace);
 }
 
 /* This is how we want PTIDs from core files to be printed.  */
@@ -582,7 +573,7 @@ fbsd_core_thread_name (struct gdbarch *gdbarch, bfd &cbfd,
 		 as its thread name instead of an empty name if a name
 		 has not been set explicitly.  Return a NULL name in
 		 that case.  */
-	      if (strcmp (buf, elf_tdata (&cbfd)->core->program) != 0)
+	      if (!streq (buf, elf_tdata (&cbfd)->core->program))
 		return buf;
 	    }
 	}
@@ -714,7 +705,7 @@ fbsd_make_corefile_notes (struct gdbarch *gdbarch, bfd *obfd, int *note_size)
     signalled_thr = curr_thr;
   else
     {
-      signalled_thr = iterate_over_threads (find_signalled_thread);
+      signalled_thr = find_thread (find_signalled_thread);
       if (signalled_thr == NULL)
 	signalled_thr = curr_thr;
     }
@@ -1591,12 +1582,11 @@ fbsd_get_siginfo_type (struct gdbarch *gdbarch)
     return fbsd_gdbarch_data->siginfo_type;
 
   type_allocator alloc (gdbarch);
-  int_type = init_integer_type (alloc, gdbarch_int_bit (gdbarch),
-				0, "int");
-  int32_type = init_integer_type (alloc, 32, 0, "int32_t");
-  uint32_type = init_integer_type (alloc, 32, 1, "uint32_t");
-  long_type = init_integer_type (alloc, gdbarch_long_bit (gdbarch),
-				 0, "long");
+  const struct builtin_type *builtin_types = builtin_type (gdbarch);
+  int_type = builtin_types->builtin_int;
+  int32_type = builtin_types->builtin_int32;
+  uint32_type = builtin_types->builtin_uint32;
+  long_type = builtin_types->builtin_long;
   void_ptr_type = lookup_pointer_type (builtin_type (gdbarch)->builtin_void);
 
   /* union sigval */
@@ -2483,7 +2473,7 @@ fbsd_corefile_parse_exec_context (struct gdbarch *gdbarch, bfd *cbfd)
 
 /* Return the address range of the vDSO for the current inferior.  */
 
-static int
+static bool
 fbsd_vsyscall_range (struct gdbarch *gdbarch, struct mem_range *range)
 {
   struct fbsd_pspace_data *data = get_fbsd_pspace_data (current_program_space);
@@ -2497,10 +2487,10 @@ fbsd_vsyscall_range (struct gdbarch *gdbarch, struct mem_range *range)
     }
 
   if (data->vdso_range_p < 0)
-    return 0;
+    return false;
 
   *range = data->vdso_range;
-  return 1;
+  return true;
 }
 
 /* To be called from GDB_OSABI_FREEBSD handlers. */

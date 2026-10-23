@@ -114,15 +114,21 @@ _bfd_ecoff_bfd_free_cached_info (bfd *abfd)
 {
   struct ecoff_tdata *tdata;
 
-  if ((bfd_get_format (abfd) == bfd_object
-       || bfd_get_format (abfd) == bfd_core)
+  if (bfd_get_format (abfd) == bfd_object
       && (tdata = ecoff_data (abfd)) != NULL)
     {
-      while (tdata->mips_refhi_list != NULL)
+      for (asection *sec = abfd->sections; sec != NULL; sec = sec->next)
 	{
-	  struct mips_hi *ref = tdata->mips_refhi_list;
-	  tdata->mips_refhi_list = ref->next;
-	  free (ref);
+	  struct ecoff_section_tdata *sdata = ecoff_section_data (sec);
+	  if (sdata != NULL)
+	    {
+	      while (sdata->mips_refhi_list != NULL)
+		{
+		  struct mips_hi *ref = sdata->mips_refhi_list;
+		  sdata->mips_refhi_list = ref->next;
+		  free (ref);
+		}
+	    }
 	}
       _bfd_ecoff_free_ecoff_debug_info (&tdata->debug_info);
     }
@@ -650,7 +656,7 @@ _bfd_ecoff_slurp_symbolic_info (bfd *abfd,
   fraw_src = (char *) debug->external_fdr;
   /* PR 17512: file: 3372-1243-0.004.  */
   if (fraw_src == NULL && internal_symhdr->ifdMax > 0)
-    return false;
+    goto err;
   fraw_end = fraw_src + internal_symhdr->ifdMax * external_fdr_size;
   for (; fraw_src < fraw_end; fraw_src += external_fdr_size, fdr_ptr++)
     (*backend->debug_swap.swap_fdr_in) (abfd, (void *) fraw_src, fdr_ptr);
@@ -2928,6 +2934,8 @@ _bfd_ecoff_slurp_armap (bfd *abfd)
   char *stringbase;
   bfd_size_type amt;
 
+  BFD_ASSERT (!bfd_is_fake_archive (abfd));
+
   /* Get the name of the first element.  */
   i = bfd_read (nextname, 16, abfd);
   if (i == 0)
@@ -3065,13 +3073,13 @@ _bfd_ecoff_slurp_armap (bfd *abfd)
       if (name_offset > stringsize)
 	goto error_malformed;
       symdef_ptr->name = stringbase + name_offset;
-      symdef_ptr->file_offset = file_offset;
+      symdef_ptr->u.file_offset = file_offset;
       ++symdef_ptr;
     }
 
-  ardata->first_file_filepos = bfd_tell (abfd);
+  ardata->first_file.file_offset = bfd_tell (abfd);
   /* Pad to an even boundary.  */
-  ardata->first_file_filepos += ardata->first_file_filepos % 2;
+  ardata->first_file.file_offset += ardata->first_file.file_offset % 2;
   abfd->has_armap = true;
   return true;
 
@@ -3606,11 +3614,14 @@ ecoff_link_add_archive_symbols (bfd *abfd, struct bfd_link_info *info)
 
   if (! bfd_has_map (abfd))
     {
+      bfd *first_one = bfd_openr_next_archived_file (abfd, NULL);
+
       /* An empty archive is a special case.  */
-      if (bfd_openr_next_archived_file (abfd, NULL) == NULL)
+      if (first_one == NULL)
 	return true;
-      bfd_set_error (bfd_error_no_armap);
-      return false;
+
+      if (!_bfd_make_armap (abfd, first_one))
+	return false;
     }
 
   /* If we don't have any raw data for this archive, as can happen on

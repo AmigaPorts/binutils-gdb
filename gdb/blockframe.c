@@ -116,14 +116,10 @@ struct symbol *
 get_frame_function (const frame_info_ptr &frame)
 {
   const struct block *bl = get_frame_block (frame, 0);
+  if (bl == nullptr)
+    return nullptr;
 
-  if (bl == NULL)
-    return NULL;
-
-  while (bl->function () == NULL && bl->superblock () != NULL)
-    bl = bl->superblock ();
-
-  return bl->function ();
+  return bl->containing_function ();
 }
 
 
@@ -148,6 +144,14 @@ struct symbol *
 find_symbol_for_pc (CORE_ADDR pc)
 {
   return find_symbol_for_pc_sect (pc, find_pc_mapped_section (pc));
+}
+
+/* See symtab.h.  */
+
+struct symbol *
+find_symbol_for_pc_maybe_inline (CORE_ADDR pc)
+{
+  return find_symbol_for_pc_sect_maybe_inline (pc, find_pc_mapped_section (pc));
 }
 
 /* See symtab.h.  */

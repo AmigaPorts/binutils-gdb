@@ -224,18 +224,29 @@ write_dependency_file (void)
 
   fclose (out);
 }
+
+static void
+free_dependency_files (void)
+{
+  struct dependency_file *dep, *next;
+
+  for (dep = dependency_files; dep != NULL; dep = next)
+    {
+      next = dep->next;
+      free (dep->name);
+      free (dep);
+    }
+  dependency_files = dependency_files_tail = NULL;
+}
 
 static void
 ld_cleanup (void)
 {
-  bfd *ibfd, *inext;
   if (link_info.output_bfd)
     bfd_close_all_done (link_info.output_bfd);
-  for (ibfd = link_info.input_bfds; ibfd; ibfd = inext)
-    {
-      inext = ibfd->link.next;
-      bfd_close_all_done (ibfd);
-    }
+
+  lang_cleanup ();
+
   /* Note - we do not call ld_plugin_start (PHASE_PLUGINS) here as this
      function is only called when the linker is exiting - ie after any
      stats may have been reported, and potentially in the middle of a
@@ -794,6 +805,8 @@ main (int argc, char **argv)
   link_info.start_stop_gc = false;
   link_info.start_stop_visibility = STV_PROTECTED;
 
+  input_flags.link_mapless = true;
+
   ldfile_add_arch ("");
   emulation = get_emulation (argc, argv);
   ldemul_choose_mode (emulation);
@@ -1016,6 +1029,7 @@ main (int argc, char **argv)
 
   if (config.dependency_file != NULL)
     write_dependency_file ();
+  free_dependency_files ();
 
   /* Even if we're producing relocatable output, some non-fatal errors should
      be reported in the exit status.  (What non-fatal errors, if any, do we
@@ -1373,14 +1387,14 @@ static bool
 add_archive_element (struct bfd_link_info *info,
 		     bfd *abfd,
 		     const char *name,
-		     bfd **subsbfd ATTRIBUTE_UNUSED)
+		     bfd **subsbfd)
 {
   lang_input_statement_type *input;
   lang_input_statement_type *parent;
   lang_input_statement_type orig_input;
 
-  input = (lang_input_statement_type *)
-      xcalloc (1, sizeof (lang_input_statement_type));
+  input = stat_alloc (sizeof (*input));
+  memset (input, 0, sizeof (*input));
   input->header.type = lang_input_statement_enum;
   input->filename = bfd_get_filename (abfd);
   input->local_sym_name = bfd_get_filename (abfd);
@@ -1425,7 +1439,6 @@ add_archive_element (struct bfd_link_info *info,
       /* We have already loaded this element, and are attempting to
 	 load it again.  This can happen when the archive map doesn't
 	 match actual symbols defined by the element.  */
-      free (input);
       bfd_set_error (bfd_error_malformed_archive);
       return false;
     }

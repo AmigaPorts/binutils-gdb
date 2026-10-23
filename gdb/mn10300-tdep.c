@@ -134,6 +134,7 @@ mn10300_use_struct_convention (struct type *type)
 {
   /* Structures bigger than a pair of words can't be returned in
      registers.  */
+  type = check_typedef (type);
   if (type->length () > 8)
     return 1;
 
@@ -158,9 +159,6 @@ mn10300_use_struct_convention (struct type *type)
 	 the only field of a struct or union.  */
     case TYPE_CODE_ARRAY:
       return 1;
-
-    case TYPE_CODE_TYPEDEF:
-      return mn10300_use_struct_convention (check_typedef (type));
 
     default:
       return 0;
@@ -310,7 +308,7 @@ mn10300_register_type (struct gdbarch *gdbarch, int reg)
    one, so we defined it ourselves.  */
 constexpr gdb_byte mn10300_break_insn[] = {0xff};
 
-typedef BP_MANIPULATION (mn10300_break_insn) mn10300_breakpoint;
+using mn10300_breakpoint = BP_MANIPULATION (mn10300_break_insn);
 
 /* Model the semantics of pushing a register onto the stack.  This
    is a helper function for mn10300_analyze_prologue, below.  */
@@ -1368,7 +1366,7 @@ mn10300_gdbarch_init (struct gdbarch_info info,
     }
 
   /* By default, chars are unsigned.  */
-  set_gdbarch_char_signed (gdbarch, 0);
+  set_gdbarch_char_signed (gdbarch, false);
 
   /* Registers.  */
   set_gdbarch_num_regs (gdbarch, num_regs);

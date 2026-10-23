@@ -31,6 +31,7 @@ dwarf2_cu::dwarf2_cu (dwarf2_per_cu *per_cu, dwarf2_per_objfile *per_objfile)
   : per_cu (per_cu),
     per_objfile (per_objfile),
     m_mark (false),
+    queued (false),
     has_loclist (false),
     m_checked_producer (false),
     m_producer_is_gxx_lt_4_6 (false),
@@ -53,6 +54,17 @@ dwarf2_cu::dwarf2_cu (dwarf2_per_cu *per_cu, dwarf2_per_objfile *per_objfile)
     m_producer_is_ggo (false),
     processing_has_namespace_info (false)
 {
+}
+
+/* See cu.h.  */
+
+const dwarf2_section_info &
+dwarf2_cu::section () const
+{
+  if (this->dwo_unit != nullptr)
+    return *this->dwo_unit->section;
+  else
+    return *this->per_cu->section ();
 }
 
 /* See cu.h.  */
@@ -177,7 +189,7 @@ dwarf2_cu::get_builder ()
 void
 dwarf2_cu::set_producer (const char *producer)
 {
-  gdb_assert (m_producer == nullptr || strcmp (producer, m_producer) == 0);
+  gdb_assert (m_producer == nullptr || streq (producer, m_producer));
   m_producer = producer;
 
   int major, minor;

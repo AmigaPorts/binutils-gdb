@@ -219,7 +219,7 @@ static loongarch_reloc_howto_type loongarch_howto_table[] =
 	 complain_overflow_dont,	  /* complain_on_overflow */
 	 bfd_elf_generic_reloc,		  /* special_function */
 	 "R_LARCH_TLS_DTPREL32",	  /* name */
-	 true,				  /* partial_inplace */
+	 false,				  /* partial_inplace */
 	 0,				  /* src_mask */
 	 ALL_ONES,			  /* dst_mask */
 	 false,				  /* pcrel_offset */
@@ -236,7 +236,7 @@ static loongarch_reloc_howto_type loongarch_howto_table[] =
 	 complain_overflow_dont,	  /* complain_on_overflow */
 	 bfd_elf_generic_reloc,		  /* special_function */
 	 "R_LARCH_TLS_DTPREL64",	  /* name */
-	 true,				  /* partial_inplace */
+	 false,				  /* partial_inplace */
 	 0,				  /* src_mask */
 	 ALL_ONES,			  /* dst_mask */
 	 false,				  /* pcrel_offset */
@@ -1389,7 +1389,7 @@ static loongarch_reloc_howto_type loongarch_howto_table[] =
 	 0,					/* src_mask */
 	 0xffffffff,				/* dst_mask */
 	 true,					/* pcrel_offset */
-	 BFD_RELOC_LARCH_32_PCREL,		/* bfd_reloc_code_real_type */
+	 BFD_RELOC_32_PCREL,			/* bfd_reloc_code_real_type */
 	 reloc_sign_bits,			/* adjust_reloc_bits */
 	 NULL),					/* larch_reloc_type_name */
 
@@ -1581,7 +1581,7 @@ static loongarch_reloc_howto_type loongarch_howto_table[] =
 	 0,					/* src_mask */
 	 0xffffffffffffffff,			/* dst_mask */
 	 true,					/* pcrel_offset */
-	 BFD_RELOC_LARCH_64_PCREL,		/* bfd_reloc_code_real_type */
+	 BFD_RELOC_64_PCREL,			/* bfd_reloc_code_real_type */
 	 NULL,					/* adjust_reloc_bits */
 	 NULL),					/* larch_reloc_type_name */
 
@@ -1642,7 +1642,7 @@ static loongarch_reloc_howto_type loongarch_howto_table[] =
   /* TLS_DESC64 LARGE PCREL.  */
   LOONGARCH_HOWTO (R_LARCH_TLS_DESC64_PC_LO20, /* type (113).  */
 	32,				       /* rightshift.  */
-	8,				       /* size.  */
+	4,				       /* size.  */
 	20,				       /* bitsize.  */
 	true,				       /* pc_relative.  */
 	5,				       /* bitpos.  */
@@ -1659,7 +1659,7 @@ static loongarch_reloc_howto_type loongarch_howto_table[] =
 
   LOONGARCH_HOWTO (R_LARCH_TLS_DESC64_PC_HI12, /* type (114).  */
 	52,				       /* rightshift.  */
-	8,				       /* size.  */
+	4,				       /* size.  */
 	12,				       /* bitsize.  */
 	true,				       /* pc_relative.  */
 	10,				       /* bitpos.  */
@@ -1712,7 +1712,7 @@ static loongarch_reloc_howto_type loongarch_howto_table[] =
   /* TLS_DESC64 LARGE ABS.  */
   LOONGARCH_HOWTO (R_LARCH_TLS_DESC64_LO20,    /* type (117).  */
 	32,				       /* rightshift.  */
-	8,				       /* size.  */
+	4,				       /* size.  */
 	20,				       /* bitsize.  */
 	false,				       /* pc_relative.  */
 	5,				       /* bitpos.  */
@@ -1729,7 +1729,7 @@ static loongarch_reloc_howto_type loongarch_howto_table[] =
 
   LOONGARCH_HOWTO (R_LARCH_TLS_DESC64_HI12,    /* type (118).  */
 	52,				       /* rightshift.  */
-	8,				       /* size.  */
+	4,				       /* size.  */
 	12,				       /* bitsize.  */
 	false,				       /* pc_relative.  */
 	10,				       /* bitpos.  */
@@ -2144,10 +2144,10 @@ loongarch_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
   BFD_ASSERT (ARRAY_SIZE (loongarch_howto_table) == R_LARCH_count);
 
   /* Fast search for new reloc types.  */
-  if (BFD_RELOC_LARCH_B16 <= code && code < BFD_RELOC_LARCH_RELAX)
+  if (BFD_RELOC_LARCH_B16 <= code && code <= BFD_RELOC_LARCH_TLS_GD_HI20)
     {
-      BFD_ASSERT (BFD_RELOC_LARCH_RELAX - BFD_RELOC_LARCH_B16
-		  == R_LARCH_RELAX - R_LARCH_B16);
+      BFD_ASSERT (BFD_RELOC_LARCH_TLS_GD_HI20 - BFD_RELOC_LARCH_B16
+		  == R_LARCH_TLS_GD_HI20 - R_LARCH_B16);
       loongarch_reloc_howto_type *ht;
       ht = &loongarch_howto_table[code - BFD_RELOC_LARCH_B16 + R_LARCH_B16];
       BFD_ASSERT (ht->bfd_type == code);
@@ -2409,9 +2409,13 @@ loongarch_elf_add_sub_reloc_uleb128 (bfd *abfd,
 				  input_section, octets))
     return bfd_reloc_outofrange;
 
-  unsigned int len = 0;
-  bfd_byte *p = data + reloc_entry->address;
-  bfd_vma old_value = _bfd_read_unsigned_leb128 (abfd, p, &len);
+  bfd_byte *contents = data;
+  bfd_byte *p = contents + octets;
+  bfd_byte *endp = contents + input_section->size;
+  bfd_vma old_value = _bfd_safe_read_leb128 (abfd, &p, false, endp);
+  endp = p;
+  p = contents + octets;
+  size_t len = endp - p;
 
   switch (howto->type)
     {
@@ -2437,7 +2441,7 @@ loongarch_elf_add_sub_reloc_uleb128 (bfd *abfd,
    LEN is the uleb128 value length.
    Return a pointer to the byte following the last byte that was written.  */
 bfd_byte *
-loongarch_write_unsigned_leb128 (bfd_byte *p, unsigned int len, bfd_vma value)
+loongarch_write_unsigned_leb128 (bfd_byte *p, size_t len, bfd_vma value)
 {
   bfd_byte c;
   do

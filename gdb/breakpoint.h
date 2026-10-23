@@ -406,8 +406,7 @@ public:
   /* True if this is a permanent breakpoint.  There is a breakpoint
      instruction hard-wired into the target's code.  Don't try to
      write another breakpoint instruction on top of it, or restore its
-     value.  Step over it using the architecture's
-     gdbarch_skip_permanent_breakpoint method.  */
+     value.  Step over it.  */
   bool permanent = false;
 
   /* True if this is not the first breakpoint in the list
@@ -1085,6 +1084,10 @@ struct watchpoint : public breakpoint
 
 extern bool is_breakpoint (const struct breakpoint *bpt);
 
+/* Return true if BPT is of any hardware watchpoint kind.  */
+
+extern bool is_hardware_watchpoint (const struct breakpoint *bpt);
+
 /* Return true if BPT is of any watchpoint kind, hardware or
    software.  */
 
@@ -1532,7 +1535,7 @@ struct breakpoint_deleter
   }
 };
 
-typedef std::unique_ptr<struct breakpoint, breakpoint_deleter> breakpoint_up;
+using breakpoint_up = std::unique_ptr<struct breakpoint, breakpoint_deleter>;
 
 extern breakpoint_up set_momentary_breakpoint
   (struct gdbarch *, struct symtab_and_line, struct frame_id, enum bptype);

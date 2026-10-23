@@ -622,8 +622,7 @@ static const struct msp430_reloc_map msp430_reloc_map[] =
   {BFD_RELOC_16,		   R_MSP430_16_BYTE},
   {BFD_RELOC_MSP430_16_PCREL,	   R_MSP430_16_PCREL},
   {BFD_RELOC_MSP430_16,		   R_MSP430_16},
-  {BFD_RELOC_MSP430_16_PCREL_BYTE, R_MSP430_16_PCREL_BYTE},
-  {BFD_RELOC_MSP430_16_BYTE,	   R_MSP430_16_BYTE},
+  {BFD_RELOC_16_PCREL,  	   R_MSP430_16_PCREL_BYTE},
   {BFD_RELOC_MSP430_2X_PCREL,	   R_MSP430_2X_PCREL},
   {BFD_RELOC_MSP430_RL_PCREL,	   R_MSP430_RL_PCREL},
   {BFD_RELOC_8,			   R_MSP430_8},
@@ -771,7 +770,7 @@ elf32_msp430_check_relocs (bfd * abfd, struct bfd_link_info * info,
   if (bfd_link_relocatable (info))
     return true;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
 
   rel_end = relocs + sec->reloc_count;
@@ -893,13 +892,16 @@ msp430_final_link_relocate (reloc_howto_type *	   howto,
       bfd_byte *endp, *p;
       unsigned int val = relocation;
 
-      _bfd_read_unsigned_leb128 (input_bfd, contents + rel->r_offset, &len);
+      p = contents + rel->r_offset;
+      endp = contents + input_section->size;
+      _bfd_safe_read_leb128 (input_bfd, &p, false, endp);
 
       /* Clean the contents value to zero.  Do not reduce the length.  */
+      endp = p - 1;
       p = contents + rel->r_offset;
-      endp = (p + len) - 1;
+      len = endp + 1 - p;
       memset (p, 0x80, len - 1);
-      *(endp) = 0;
+      *endp = 0;
 
       /* Get the length of the new uleb128 value.  */
       do
@@ -1412,8 +1414,7 @@ msp430_final_link_relocate (reloc_howto_type *	   howto,
 /* Relocate an MSP430 ELF section.  */
 
 static int
-elf32_msp430_relocate_section (bfd * output_bfd ATTRIBUTE_UNUSED,
-			       struct bfd_link_info * info,
+elf32_msp430_relocate_section (struct bfd_link_info * info,
 			       bfd * input_bfd,
 			       asection * input_section,
 			       bfd_byte * contents,
@@ -1426,7 +1427,7 @@ elf32_msp430_relocate_section (bfd * output_bfd ATTRIBUTE_UNUSED,
   Elf_Internal_Rela *rel;
   Elf_Internal_Rela *relend;
 
-  symtab_hdr = &elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
   relend = relocs + input_section->reloc_count;
 
@@ -1458,7 +1459,8 @@ elf32_msp430_relocate_section (bfd * output_bfd ATTRIBUTE_UNUSED,
 	{
 	  sym = local_syms + r_symndx;
 	  sec = local_sections[r_symndx];
-	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, &sec, rel);
+	  relocation = _bfd_elf_rela_local_sym (info->output_bfd,
+						sym, &sec, rel);
 
 	  name = bfd_elf_string_from_elf_section
 	      (input_bfd, symtab_hdr->sh_link, sym->st_name);
@@ -1726,7 +1728,7 @@ msp430_elf_symbol_address_p (bfd * abfd,
   sec_shndx = _bfd_elf_section_from_bfd_section (abfd, sec);
 
   /* Examine all the local symbols.  */
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   for (isymend = isym + symtab_hdr->sh_info; isym < isymend; isym++)
     if (isym->st_shndx == sec_shndx && isym->st_value == addr)
       return true;
@@ -1767,7 +1769,7 @@ msp430_elf_relax_adjust_locals (bfd * abfd, asection * sec, bfd_vma addr,
     return true;
 
   irelend = irel + sec->reloc_count;
-  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   isym = (Elf_Internal_Sym *) symtab_hdr->contents;
 
   for (;irel < irelend; irel++)
@@ -1822,7 +1824,7 @@ msp430_elf_relax_delete_bytes (bfd * abfd, asection * sec, bfd_vma addr,
   sec->size -= count;
 
   /* Adjust all the relocs.  */
-  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   isym = (Elf_Internal_Sym *) symtab_hdr->contents;
   for (; irel < irelend; irel++)
     {
@@ -1835,7 +1837,7 @@ msp430_elf_relax_delete_bytes (bfd * abfd, asection * sec, bfd_vma addr,
     msp430_elf_relax_adjust_locals (abfd,p,addr,count,sec_shndx,toaddr);
 
   /* Adjust the local symbols defined in this section.  */
-  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   isym = (Elf_Internal_Sym *) symtab_hdr->contents;
   for (isymend = isym + symtab_hdr->sh_info; isym < isymend; isym++)
     {
@@ -1962,7 +1964,7 @@ msp430_elf_relax_add_words (bfd * abfd, asection * sec, bfd_vma addr,
 				    sec_shndx, sec_end);
 
   /* Adjust the global symbols affected by the move.  */
-  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   isym = (Elf_Internal_Sym *) symtab_hdr->contents;
   for (isymend = isym + symtab_hdr->sh_info; isym < isymend; isym++)
     if (isym->st_shndx == sec_shndx
@@ -2025,7 +2027,7 @@ msp430_elf_relax_section (bfd * abfd, asection * sec,
     printf ("Relaxing %s (%p), output_offset: 0x%lx sec size: 0x%lx\n",
 	    sec->name, sec, (long) sec->output_offset, (long) sec->size);
 
-  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
 
   /* Get a copy of the native relocations.  */
   internal_relocs =

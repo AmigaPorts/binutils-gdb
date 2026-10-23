@@ -182,6 +182,16 @@ vwarning (const char *string, va_list args)
     }
 }
 
+/* See common-exceptions.h.  */
+
+std::string
+vformat_exception (const char *fmt, va_list args)
+{
+  string_file text (true);
+  text.vprintf (fmt, args);
+  return text.release ();
+}
+
 /* Print an error message and return to command level.
    The first argument STRING is the error message, used as a fprintf string,
    and the remaining args are passed as arguments to it.  */
@@ -189,7 +199,9 @@ vwarning (const char *string, va_list args)
 void
 verror (const char *string, va_list args)
 {
-  throw_verror (GENERIC_ERROR, string, args);
+  string_file text (true);
+  text.vprintf (string, args);
+  throw gdb_exception_error (GENERIC_ERROR, text.release ());
 }
 
 /* Emit a message and abort.  */
@@ -202,7 +214,7 @@ abort_with_message (const char *msg)
   else
     gdb_puts (msg, gdb_stderr);
 
-  abort ();		/* ARI: abort */
+  abort ();
 }
 
 /* Dump core trying to increase the core soft limit to hard limit first.  */
@@ -221,7 +233,7 @@ dump_core (void)
      a backtrace to the console here.  */
   signal (SIGABRT, SIG_DFL);
 
-  abort ();		/* ARI: abort */
+  abort ();
 }
 
 /* Check whether GDB will be able to dump core using the dump_core
@@ -371,7 +383,7 @@ internal_vproblem (struct internal_problem *problem,
 	   does not fix this problem.  This is the solution suggested
 	   at http://gcc.gnu.org/bugzilla/show_bug.cgi?id=25509.  */
 	if (write (STDERR_FILENO, msg, sizeof (msg)) != sizeof (msg))
-	  abort (); /* ARI: abort */
+	  abort ();
 	exit (1);
       }
   }
@@ -1359,7 +1371,7 @@ maintenance_info_screen (const char *args, int from_tty)
     = rl_variable_value ("horizontal-scroll-mode");
   bool force_horizontal_scroll_mode
     = (horizontal_scroll_mode_value != nullptr
-       && strcmp (horizontal_scroll_mode_value, "on") == 0);
+       && streq (horizontal_scroll_mode_value, "on"));
 
   const char *mode = nullptr;
   const char *reason = nullptr;
@@ -1483,7 +1495,7 @@ pager_file::prompt_for_continue ()
     }
 
   /* Now we have to do this again, so that GDB will know that it doesn't
-     need to save the ---Type <return>--- line at the top of the screen.  */
+     need to save the ---Type <RET>--- line at the top of the screen.  */
   reinitialize_more_filter ();
   pagination_disabled_for_command = disable_pagination;
 
@@ -1640,7 +1652,8 @@ pager_file::check_for_overfull_line (const unsigned int lines_allowed)
 	 this loop, so we must continue to check it here.  */
       if (pagination_enabled
 	  && !pagination_disabled_for_command
-	  && lines_printed >= lines_allowed)
+	  && lines_printed >= lines_allowed
+	  && m_stream->can_page ())
 	{
 	  prompt_for_continue ();
 	  did_paginate = true;
@@ -1670,6 +1683,13 @@ pager_file::check_for_overfull_line (const unsigned int lines_allowed)
       else if (did_paginate)
 	this->emit_style_escape (save_style);
     }
+}
+
+void
+pager_file::vprintf (const char *format, va_list args)
+{
+  ui_out_flags flags = disallow_ui_out_field;
+  cli_ui_out (this, flags).vmessage (m_applied_style, format, args);
 }
 
 void
@@ -1713,7 +1733,8 @@ pager_file::puts (const char *linebuffer)
 	 it here.  */
       if (pagination_enabled
 	  && !pagination_disabled_for_command
-	  && lines_printed >= lines_allowed)
+	  && lines_printed >= lines_allowed
+	  && m_stream->can_page ())
 	prompt_for_continue ();
 
       while (*linebuffer != '\0' && *linebuffer != '\n')
@@ -1838,7 +1859,7 @@ static void
 test_pager ()
 {
   string_file *strfile = new string_file ();
-  pager_file pager (strfile);
+  pager_file pager { ui_file_up (strfile) };
 
   /* Make sure the pager is disabled.  */
   scoped_restore save_enabled
@@ -1921,22 +1942,20 @@ fputs_highlighted (const char *str, const compiled_regex &highlight,
       size_t n_highlight = pmatch.rm_eo - pmatch.rm_so;
 
       /* Output the part before pmatch with current style.  */
-      while (pmatch.rm_so > 0)
+      if (pmatch.rm_so > 0)
 	{
-	  gdb_putc (*str, stream);
-	  pmatch.rm_so--;
-	  str++;
+	  stream->write (str, pmatch.rm_so);
+	  str += pmatch.rm_so;
 	}
 
       /* Output pmatch with the highlight style.  */
-      stream->emit_style_escape (highlight_style.style ());
-      while (n_highlight > 0)
+      if (n_highlight > 0)
 	{
-	  gdb_putc (*str, stream);
-	  n_highlight--;
-	  str++;
+	  stream->emit_style_escape (highlight_style.style ());
+	  stream->write (str, n_highlight);
+	  str += n_highlight;
+	  stream->emit_style_escape (ui_file_style ());
 	}
-      stream->emit_style_escape (ui_file_style ());
     }
 
   /* Output the trailing part of STR not matching HIGHLIGHT.  */
@@ -2918,7 +2937,9 @@ strncmp_iw_with_mode_tests ()
 	       "\tfoo\t<\tbar\t<\tbaz\t<\tquxi\t>\t>\t>\t(int)", NORMAL);
   CHECK_MATCH ("foo<bar<baz<quxi>>>(int)",
 	       " \tfoo \t< \tbar \t< \tbaz \t< \tquxi \t> \t> \t> \t( \tint \t)", NORMAL);
-  CHECK_MATCH ("foo<bar<baz>>::foo(quxi &)", "fo", NORMAL);
+  CHECK_MATCH ("foo<bar<baz>>::foo(quxi &)",
+	       "fo", /* codespell:ignore.  */
+	       NORMAL);
   CHECK_MATCH ("foo<bar<baz>>::foo(quxi &)", "foo", NORMAL);
   CHECK_MATCH ("foo<bar<baz>>::foo(quxi &)", "foo<bar<baz>>::", NORMAL);
   CHECK_MATCH ("foo<bar<baz>>::foo(quxi &)", "foo<bar<baz> >::foo", NORMAL);
@@ -3334,7 +3355,7 @@ gdb_realpath_check_trailer (const char *input, const char *trailer)
   size_t trail_len = strlen (trailer);
 
   SELF_CHECK (len >= trail_len
-	      && strcmp (result.get () + len - trail_len, trailer) == 0);
+	      && streq (result.get () + len - trail_len, trailer));
 }
 
 static void
@@ -3376,9 +3397,9 @@ gdb_argv_as_array_view_test ()
     gdb::array_view<char *> view = argv.as_array_view ();
 
     SELF_CHECK (view.size () == 3);
-    SELF_CHECK (strcmp (view[0], "une") == 0);
-    SELF_CHECK (strcmp (view[1], "bonne") == 0);
-    SELF_CHECK (strcmp (view[2], "50") == 0);
+    SELF_CHECK (streq (view[0], "une"));
+    SELF_CHECK (streq (view[1], "bonne"));
+    SELF_CHECK (streq (view[2], "50"));
   }
 }
 
@@ -3486,8 +3507,8 @@ wait_to_die_with_timeout (pid_t pid, int *status, int timeout)
 
 #endif /* HAVE_WAITPID */
 
-/* Provide fnmatch compatible function for matching of host files.
-   FNM_NOESCAPE must be set in FLAGS.
+/* Provide fnmatch compatible function for FNM_FILE_NAME matching of host files.
+   Both FNM_FILE_NAME and FNM_NOESCAPE must be set in FLAGS.
 
    It handles correctly HAVE_DOS_BASED_FILE_SYSTEM and
    HAVE_CASE_INSENSITIVE_FILE_SYSTEM.  */
@@ -3495,6 +3516,8 @@ wait_to_die_with_timeout (pid_t pid, int *status, int timeout)
 int
 gdb_filename_fnmatch (const char *pattern, const char *string, int flags)
 {
+  gdb_assert ((flags & FNM_FILE_NAME) != 0);
+
   /* It is unclear how '\' escaping vs. directory separator should coexist.  */
   gdb_assert ((flags & FNM_NOESCAPE) != 0);
 
@@ -3716,11 +3739,110 @@ extract_single_filename_arg (const char *args)
   std::string filename = extract_string_maybe_quoted (&args);
   args = skip_spaces (args);
   if (*args != '\0')
-    error (_("Junk after filename \"%s\": %s"), filename.c_str (), args);
+    error (_("Junk after filename \"%ps\": %s"),
+	   styled_string (file_name_style.style (), filename.c_str ()),
+	   args);
   if (!filename.empty ())
     filename = gdb_tilde_expand (filename.c_str ());
   return filename;
 }
+
+/* See utils.h.  */
+
+unsigned char
+c_unctrl (unsigned char c)
+{
+  if (!c_iscntrl (c))
+    return c;
+
+  unsigned char res = c;
+  if (res >= 0x40)
+    {
+      /* Map 0x7f (^?) to 0x3f (?).  */
+      res -= 0x40;
+    }
+  else
+    {
+      /* Map 0x03 (^C) to 0x43 (C).  */
+      res += 0x40;
+    }
+
+  return res;
+}
+
+/* See utils.h.  */
+
+unsigned char
+c_ctrl (unsigned char c)
+{
+  unsigned char res = c;
+  if (res < 0x40)
+    {
+      /* Map 0x3f (?) to 0x7f (^?).  */
+      res += 0x40;
+    }
+  else
+    {
+      res = c_toupper (res);
+
+      /* Map 0x43 (C) to 0x03 (^C).  */
+      res -= 0x40;
+    }
+
+  return c_iscntrl (res) ? res : c;
+}
+
+#if GDB_SELF_TEST
+static void
+test_c_ctrl_unctrl ()
+{
+  /* Basic check.  */
+  SELF_CHECK (c_ctrl ('C') == 0x03);
+  SELF_CHECK (c_ctrl ('c') == 0x03);
+  SELF_CHECK (c_unctrl (0x03) == 'C');
+
+  /* Function c_iscntrl considers ^? to be a control character, but for some
+     reason, readline's CTRL_CHAR doesn't, so CTRL/UNCTRL don't handle it.
+     Check that c_ctrl/c_unctrl do handle it.  */
+  SELF_CHECK (c_ctrl ('?') == 0x7f);
+  SELF_CHECK (c_unctrl (0x7f) == '?');
+
+  /* Consistency check.
+
+     The ctype.h function iscntrl has an int parameter, and defined behavior
+     for inputs [0, 255] and EOF.  Consequently, iscntrl has undefined
+     behavior when called with a negative signed char argument (with the
+     possible exception of EOF, which is a negative int constant).  That
+     extends to chars on platforms where char == signed char.  Consequently,
+     to write portable code, iscntrl char and signed char arguments need to be
+     cast to unsigned char.
+
+     The c-ctype.h variant c_iscntrl sidesteps this problem by having defined
+     behavior for inputs [-128, 255] and not bothering about EOF.
+
+     The functions c_ctrl/c_unctrl sidestep this issue by using parameter
+     type unsigned char instead of int.
+
+     So, testing input values [0..255] tests all relevant behavior of
+     c_ctrl/c_unctrl.  However, we designed these functions to be compatible
+     with c_iscntrl, so we test for all valid inputs of that function.  */
+  for (int i = -128; i < 256; i++)
+    {
+      unsigned char ch = i;
+      unsigned char unctrl_ch = c_unctrl (ch);
+      if (!c_iscntrl (i))
+	{
+	  SELF_CHECK (unctrl_ch == ch);
+	  continue;
+	}
+
+      SELF_CHECK (!c_iscntrl (unctrl_ch));
+      SELF_CHECK (!c_islower (unctrl_ch));
+      SELF_CHECK (c_ctrl (unctrl_ch) == ch);
+      SELF_CHECK (c_ctrl (c_tolower (unctrl_ch)) == ch);
+    }
+}
+#endif
 
 #if GDB_SELF_TEST
 static void
@@ -3823,5 +3945,6 @@ When set, debugging messages will be marked with seconds and microseconds."),
   selftests::register_test ("pager", test_pager);
   selftests::register_test ("assign_set_return_if_changed",
 			    test_assign_set_return_if_changed);
+  selftests::register_test ("c_ctrl_unctrl", test_c_ctrl_unctrl);
 #endif
 }

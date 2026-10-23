@@ -496,9 +496,22 @@ linkage_name_str (const lookup_name_info &lookup_name)
 /* See minsyms.h.  */
 
 void
-iterate_over_minimal_symbols
-    (struct objfile *objf, const lookup_name_info &lookup_name,
-     gdb::function_view<bool (struct minimal_symbol *)> callback)
+for_each_minimal_symbol (struct objfile *objf, const lookup_name_info &name,
+			 for_each_minimal_symbol_callback_ftype callback)
+{
+  find_minimal_symbol (objf, name,
+		       [&] (struct minimal_symbol *msym)
+			 {
+			   callback (msym);
+			   return false;
+			 });
+}
+
+/* See minsyms.h.  */
+
+minimal_symbol *
+find_minimal_symbol (struct objfile *objf, const lookup_name_info &lookup_name,
+		     find_minimal_symbol_callback_ftype callback)
 {
   /* The first pass is over the ordinary hash table.  */
     {
@@ -515,7 +528,7 @@ iterate_over_minimal_symbols
 	{
 	  if (mangled_cmp (iter->linkage_name (), name) == 0)
 	    if (callback (iter))
-	      return;
+	      return iter;
 	}
     }
 
@@ -539,8 +552,10 @@ iterate_over_minimal_symbols
 	   iter = iter->demangled_hash_next)
 	if (name_match (iter->search_name (), lookup_name, NULL))
 	  if (callback (iter))
-	    return;
+	    return iter;
     }
+
+  return nullptr;
 }
 
 /* See minsyms.h.  */
@@ -557,7 +572,7 @@ lookup_minimal_symbol_linkage (const char *name, struct objfile *objf,
 	   msymbol != NULL;
 	   msymbol = msymbol->hash_next)
 	{
-	  if (strcmp (msymbol->linkage_name (), name) == 0
+	  if (streq (msymbol->linkage_name (), name)
 	      && (msymbol->type () == mst_data
 		  || msymbol->type () == mst_bss
 		  || (match_static_type
@@ -611,10 +626,10 @@ lookup_minimal_symbol_text (program_space *pspace, const char *name,
 	 msymbol != NULL && found_symbol.minsym == NULL;
 	 msymbol = msymbol->hash_next)
       {
-	if (strcmp (msymbol->linkage_name (), name) == 0 &&
-	    (msymbol->type () == mst_text
-	     || msymbol->type () == mst_text_gnu_ifunc
-	     || msymbol->type () == mst_file_text))
+	if (streq (msymbol->linkage_name (), name)
+	    && (msymbol->type () == mst_text
+		|| msymbol->type () == mst_text_gnu_ifunc
+		|| msymbol->type () == mst_file_text))
 	  {
 	    switch (msymbol->type ())
 	      {
@@ -678,7 +693,7 @@ lookup_minimal_symbol_by_pc_name (CORE_ADDR pc, const char *name,
 	       msymbol = msymbol->hash_next)
 	    {
 	      if (msymbol->value_address (&objfile) == pc
-		  && strcmp (msymbol->linkage_name (), name) == 0)
+		  && streq (msymbol->linkage_name (), name))
 		return msymbol;
 	    }
 	}
@@ -1080,38 +1095,6 @@ minimal_symbol_reader::minimal_symbol_reader (struct objfile *obj)
 {
 }
 
-/* See minsyms.h.  */
-
-void
-minimal_symbol_reader::record (const char *name, unrelocated_addr address,
-			       enum minimal_symbol_type ms_type)
-{
-  int section;
-
-  switch (ms_type)
-    {
-    case mst_text:
-    case mst_text_gnu_ifunc:
-    case mst_file_text:
-    case mst_solib_trampoline:
-      section = SECT_OFF_TEXT (m_objfile);
-      break;
-    case mst_data:
-    case mst_data_gnu_ifunc:
-    case mst_file_data:
-      section = SECT_OFF_DATA (m_objfile);
-      break;
-    case mst_bss:
-    case mst_file_bss:
-      section = SECT_OFF_BSS (m_objfile);
-      break;
-    default:
-      section = -1;
-    }
-
-  record_with_info (name, address, ms_type, section);
-}
-
 /* Convert an enumerator of type minimal_symbol_type to its string
    representation.  */
 
@@ -1261,12 +1244,12 @@ compact_minimal_symbols (struct minimal_symbol *msymbol, int mcount,
       copyfrom = copyto = msymbol;
       while (copyfrom < msymbol + mcount - 1)
 	{
-	  if (copyfrom->unrelocated_address ()
-	      == (copyfrom + 1)->unrelocated_address ()
+	  if ((copyfrom->unrelocated_address ()
+	       == (copyfrom + 1)->unrelocated_address ())
 	      && (copyfrom->section_index ()
 		  == (copyfrom + 1)->section_index ())
-	      && strcmp (copyfrom->linkage_name (),
-			 (copyfrom + 1)->linkage_name ()) == 0)
+	      && streq (copyfrom->linkage_name (),
+			(copyfrom + 1)->linkage_name ()))
 	    {
 	      if ((copyfrom + 1)->type () == mst_unknown)
 		(copyfrom + 1)->set_type (copyfrom->type ());
@@ -1530,8 +1513,8 @@ find_solib_trampoline_target (const frame_info_ptr &frame, CORE_ADDR pc)
 		   || msymbol->type () == mst_text_gnu_ifunc
 		   || msymbol->type () == mst_data
 		   || msymbol->type () == mst_data_gnu_ifunc)
-		  && strcmp (msymbol->linkage_name (),
-			     tsymbol->linkage_name ()) == 0)
+		  && streq (msymbol->linkage_name (),
+			    tsymbol->linkage_name ()))
 		{
 		  CORE_ADDR func;
 

@@ -128,7 +128,7 @@ c_print_type_1 (struct type *type,
 		  || code == TYPE_CODE_METHODPTR
 		  || TYPE_IS_REFERENCE (type))))
 	gdb_puts (" ", stream);
-      need_post_space = (varstring != NULL && strcmp (varstring, "") != 0);
+      need_post_space = (varstring != NULL && !streq (varstring, ""));
       c_type_print_varspec_prefix (type, stream, show, 0, need_post_space,
 				   language, flags, podata);
     }
@@ -181,8 +181,7 @@ c_print_typedef (struct type *type,
   gdb_printf (stream, "typedef ");
   type_print (type, "", stream, -1);
   if ((new_symbol->type ())->name () == 0
-      || strcmp ((new_symbol->type ())->name (),
-		 new_symbol->linkage_name ()) != 0
+      || !streq ((new_symbol->type ())->name (), new_symbol->linkage_name ())
       || new_symbol->type ()->code () == TYPE_CODE_TYPEDEF)
     gdb_printf (stream, " %s", new_symbol->print_name ());
   gdb_printf (stream, ";");
@@ -245,7 +244,7 @@ cp_type_print_derivation_info (struct ui_file *stream,
 /* Print the C++ method arguments ARGS to the file STREAM.  */
 
 static void
-cp_type_print_method_args (struct type *mtype, const char *prefix,
+cp_type_print_method_args (struct type *mtype,
 			   const char *varstring, int staticp,
 			   struct ui_file *stream,
 			   enum language language,
@@ -256,8 +255,6 @@ cp_type_print_method_args (struct type *mtype, const char *prefix,
   int varargs = mtype->has_varargs ();
   int i;
 
-  fprintf_symbol (stream, prefix,
-		  language_cplus, DMGL_ANSI);
   fprintf_symbol (stream, varstring,
 		  language_cplus, DMGL_ANSI);
   gdb_puts ("(", stream);
@@ -1100,13 +1097,10 @@ c_type_print_base_struct_union (struct type *type, struct ui_file *stream,
 	  int j, len2 = TYPE_FN_FIELDLIST_LENGTH (type, i);
 	  const char *method_name = TYPE_FN_FIELDLIST_NAME (type, i);
 	  const char *name = type->name ();
-	  int is_constructor = name && strcmp (method_name,
-					       name) == 0;
+	  int is_constructor = name != nullptr && streq (method_name, name);
 
 	  for (j = 0; j < len2; j++)
 	    {
-	      const char *mangled_name;
-	      gdb::unique_xmalloc_ptr<char> mangled_name_holder;
 	      const char *physname = TYPE_FN_FIELD_PHYSNAME (f, j);
 	      int is_full_physname_constructor =
 		TYPE_FN_FIELD_CONSTRUCTOR (f, j)
@@ -1151,14 +1145,8 @@ c_type_print_base_struct_union (struct type *type, struct ui_file *stream,
 
 		  gdb_puts (" ", stream);
 		}
-	      if (TYPE_FN_FIELD_STUB (f, j))
-		{
-		  /* Build something we can demangle.  */
-		  mangled_name_holder.reset (gdb_mangle_name (type, i, j));
-		  mangled_name = mangled_name_holder.get ();
-		}
-	      else
-		mangled_name = TYPE_FN_FIELD_PHYSNAME (f, j);
+
+	      const char *mangled_name = TYPE_FN_FIELD_PHYSNAME (f, j);
 
 	      gdb::unique_xmalloc_ptr<char> demangled_name
 		= gdb_demangle (mangled_name,
@@ -1170,22 +1158,14 @@ c_type_print_base_struct_union (struct type *type, struct ui_file *stream,
 		     arguments, the demangling will fail.
 		     Let's try to reconstruct the function
 		     signature from the symbol information.  */
-		  if (!TYPE_FN_FIELD_STUB (f, j))
-		    {
-		      int staticp = TYPE_FN_FIELD_STATIC_P (f, j);
-		      struct type *mtype = TYPE_FN_FIELD_TYPE (f, j);
+		  int staticp = TYPE_FN_FIELD_STATIC_P (f, j);
+		  struct type *mtype = TYPE_FN_FIELD_TYPE (f, j);
 
-		      cp_type_print_method_args (mtype,
-						 "",
-						 method_name,
-						 staticp,
-						 stream, language,
-						 &local_flags);
-		    }
-		  else
-		    fprintf_styled (stream, metadata_style.style (),
-				    _("<badly mangled name '%s'>"),
-				    mangled_name);
+		  cp_type_print_method_args (mtype,
+					     method_name,
+					     staticp,
+					     stream, language,
+					     &local_flags);
 		}
 	      else
 		{
@@ -1529,7 +1509,7 @@ c_type_print_base_1 (struct type *type, struct ui_file *stream,
       break;
 
     case TYPE_CODE_ERROR:
-      gdb_printf (stream, "%s", TYPE_ERROR_NAME (type));
+      gdb_printf (stream, "%s", type->error_name ());
       break;
 
     case TYPE_CODE_RANGE:

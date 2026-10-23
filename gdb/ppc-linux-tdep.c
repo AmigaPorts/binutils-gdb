@@ -341,8 +341,8 @@ ppc_linux_ilp32_svr4_solib_ops::in_dynsym_resolve_code (CORE_ADDR pc) const
   if (sym.minsym == nullptr)
     return false;
 
-  return (strcmp (sym.minsym->linkage_name (), "__glink") == 0
-	  || strcmp (sym.minsym->linkage_name (), "__glink_PLTresolve") == 0);
+  return (streq (sym.minsym->linkage_name (), "__glink")
+	  || streq (sym.minsym->linkage_name (), "__glink_PLTresolve"));
 }
 
 /* Follow PLT stub to actual routine.
@@ -574,7 +574,7 @@ static const struct regset ppc32_linux_vsxregset = {
   regcache_collect_regset
 };
 
-/* Program Priorty Register regmap.  */
+/* Program Priority Register regmap.  */
 
 static const struct regcache_map_entry ppc32_regmap_ppr[] =
   {
@@ -582,7 +582,7 @@ static const struct regcache_map_entry ppc32_regmap_ppr[] =
       { 0 }
   };
 
-/* Program Priorty Register regset.  */
+/* Program Priority Register regset.  */
 
 const struct regset ppc32_linux_pprregset = {
   ppc32_regmap_ppr,
@@ -1565,9 +1565,6 @@ ppc_linux_record_signal (struct gdbarch *gdbarch, struct regcache *regcache,
   if (record_full_arch_list_add_mem (sp, SIGNAL_FRAMESIZE + sizeof_rt_sigframe))
     return -1;
 
-  if (record_full_arch_list_add_end ())
-    return -1;
-
   return 0;
 }
 
@@ -1707,7 +1704,7 @@ ppc_elfv2_skip_entrypoint (struct gdbarch *gdbarch, CORE_ADDR pc)
 /* Implementation of `gdbarch_stap_is_single_operand', as defined in
    gdbarch.h.  */
 
-static int
+static bool
 ppc_stap_is_single_operand (struct gdbarch *gdbarch, const char *s)
 {
   return (*s == 'i' /* Literal number.  */
@@ -2009,14 +2006,14 @@ ppc_floatformat_for_type (struct gdbarch *gdbarch,
 {
   if (len == 128 && name)
     {
-      if (strcmp (name, "__float128") == 0
-	  || strcmp (name, "_Float128") == 0
-	  || strcmp (name, "_Float64x") == 0
-	  || strcmp (name, "complex _Float128") == 0
-	  || strcmp (name, "complex _Float64x") == 0)
+      if (streq (name, "__float128")
+	  || streq (name, "_Float128")
+	  || streq (name, "_Float64x")
+	  || streq (name, "complex _Float128")
+	  || streq (name, "complex _Float64x"))
 	return floatformats_ieee_quad;
 
-      if (strcmp (name, "__ibm128") == 0)
+      if (streq (name, "__ibm128"))
 	return floatformats_ibm_long_double;
     }
 
@@ -2033,8 +2030,8 @@ linux_dwarf2_omit_typedef_p (struct type *target_type,
     {
       if ((target_type->code () == TYPE_CODE_FLT
 	   || target_type->code () == TYPE_CODE_COMPLEX)
-	  && (strcmp (name, "long double") == 0
-	      || strcmp (name, "complex long double") == 0))
+	  && (streq (name, "long double")
+	      || streq (name, "complex long double")))
 	{
 	  /* IEEE 128-bit floating point and IBM long double are two
 	     encodings for 128-bit values.  The DWARF debug data can't
@@ -2064,7 +2061,7 @@ linux_dwarf2_omit_typedef_p (struct type *target_type,
 static const char *
 ppc64le_gnu_triplet_regexp (struct gdbarch *gdbarch)
 {
-  return "p(ower)?pc64le";
+  return "p(ower)?pc64le"; /* codespell:ignore.  */
 }
 
 /* Specify the powerpc64 target triplet.
@@ -2076,7 +2073,7 @@ ppc64le_gnu_triplet_regexp (struct gdbarch *gdbarch)
 static const char *
 ppc64_gnu_triplet_regexp (struct gdbarch *gdbarch)
 {
-  return "p(ower)?pc64";
+  return "p(ower)?pc64"; /* codespell:ignore.  */
 }
 
 /* Implement the linux_gcc_target_options method.  */

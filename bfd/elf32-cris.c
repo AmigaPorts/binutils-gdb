@@ -408,7 +408,7 @@ static const struct cris_reloc_map cris_reloc_map [] =
   { BFD_RELOC_CRIS_32_GOTPLT,	R_CRIS_32_GOTPLT },
   { BFD_RELOC_CRIS_32_GOTREL,	R_CRIS_32_GOTREL },
   { BFD_RELOC_CRIS_32_PLT_GOTREL, R_CRIS_32_PLT_GOTREL },
-  { BFD_RELOC_CRIS_32_PLT_PCREL, R_CRIS_32_PLT_PCREL },
+  { BFD_RELOC_32_PLT_PCREL,	R_CRIS_32_PLT_PCREL },
   { BFD_RELOC_CRIS_32_GOT_GD,	R_CRIS_32_GOT_GD },
   { BFD_RELOC_CRIS_16_GOT_GD,	R_CRIS_16_GOT_GD },
   { BFD_RELOC_CRIS_32_GD,	R_CRIS_32_GD },
@@ -968,8 +968,7 @@ static int additional_relocation_error_msg_count = 10;
    copied, for further comments.  */
 
 static int
-cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
-			   struct bfd_link_info *info,
+cris_elf_relocate_section (struct bfd_link_info *info,
 			   bfd *input_bfd,
 			   asection *input_section,
 			   bfd_byte *contents,
@@ -995,7 +994,7 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
   dynobj = htab->root.dynobj;
   local_got_offsets = elf_local_got_offsets (input_bfd);
-  symtab_hdr = & elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
   relend     = relocs + input_section->reloc_count;
 
@@ -1039,7 +1038,8 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 	{
 	  sym = local_syms + r_symndx;
 	  sec = local_sections [r_symndx];
-	  relocation = _bfd_elf_rela_local_sym (output_bfd, sym, &sec, rel);
+	  relocation = _bfd_elf_rela_local_sym (info->output_bfd,
+						sym, &sec, rel);
 
 	  symname = (bfd_elf_string_from_elf_section
 		     (input_bfd, symtab_hdr->sh_link, sym->st_name));
@@ -1109,7 +1109,7 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		      || r_type == R_CRIS_32_PCREL))
 		relocation = 0;
 	      else if (!bfd_link_relocatable (info) && unresolved_reloc
-		       && (_bfd_elf_section_offset (output_bfd, info,
+		       && (_bfd_elf_section_offset (info->output_bfd, info,
 						    input_section,
 						    rel->r_offset)
 			   != (bfd_vma) -1))
@@ -1255,7 +1255,7 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		      off &= ~1;
 		    else
 		      {
-			bfd_put_32 (output_bfd, relocation,
+			bfd_put_32 (info->output_bfd, relocation,
 				    sgot->contents + off);
 			h->got.offset |= 1;
 		      }
@@ -1275,7 +1275,8 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		  off &= ~1;
 		else
 		  {
-		    bfd_put_32 (output_bfd, relocation, sgot->contents + off);
+		    bfd_put_32 (info->output_bfd, relocation,
+				sgot->contents + off);
 
 		    if (bfd_link_pic (info))
 		      {
@@ -1292,7 +1293,8 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 			outrel.r_addend = relocation;
 			loc = srelgot->contents;
 			loc += srelgot->reloc_count++ * sizeof (Elf32_External_Rela);
-			bfd_elf32_swap_reloca_out (output_bfd, &outrel, loc);
+			bfd_elf32_swap_reloca_out (info->output_bfd,
+						   &outrel, loc);
 		      }
 
 		    local_got_offsets[r_symndx] |= 1;
@@ -1457,26 +1459,22 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		 are copied into the output file to be resolved at run
 		 time.  */
 
+	      sreloc = elf_section_data (input_section)->sreloc;
+	      /* The section should have been created in cris_elf_check_relocs,
+		 but that function will not be called for objects which fail in
+		 cris_elf_merge_private_bfd_data.  */
 	      if (sreloc == NULL)
 		{
-		  sreloc = _bfd_elf_get_dynamic_reloc_section
-		    (dynobj, input_section, /*rela?*/ true);
-		  /* The section should have been created in cris_elf_check_relocs,
-		     but that function will not be called for objects which fail in
-		     cris_elf_merge_private_bfd_data.  */
-		  if (sreloc == NULL)
-		    {
-		      bfd_set_error (bfd_error_bad_value);
-		      return false;
-		    }
+		  bfd_set_error (bfd_error_bad_value);
+		  return false;
 		}
 
 	      skip = false;
 	      relocate = false;
 
 	      outrel.r_offset =
-		_bfd_elf_section_offset (output_bfd, info, input_section,
-					 rel->r_offset);
+		_bfd_elf_section_offset (info->output_bfd, info,
+					 input_section, rel->r_offset);
 	      if (outrel.r_offset == (bfd_vma) -1)
 		skip = true;
 	      else if (outrel.r_offset == (bfd_vma) -2
@@ -1550,7 +1548,7 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
 	      loc = sreloc->contents;
 	      loc += sreloc->reloc_count++ * sizeof (Elf32_External_Rela);
-	      bfd_elf32_swap_reloca_out (output_bfd, &outrel, loc);
+	      bfd_elf32_swap_reloca_out (info->output_bfd, &outrel, loc);
 
 	      /* This reloc will be computed at runtime, so there's no
 		 need to do anything now, except for R_CRIS_32 relocations
@@ -1618,20 +1616,20 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		  loc = srelgot->contents;
 		  loc += srelgot->reloc_count++ * sizeof (Elf32_External_Rela);
 
-		  bfd_put_32 (output_bfd, (bfd_vma) 0, sgotplt->contents + 12);
-		  bfd_put_32 (output_bfd, (bfd_vma) 0, sgotplt->contents + 16);
+		  bfd_put_32 (info->output_bfd, 0, sgotplt->contents + 12);
+		  bfd_put_32 (info->output_bfd, 0, sgotplt->contents + 16);
 		  outrel.r_offset = (sgotplt->output_section->vma
 				     + sgotplt->output_offset
 				     + 12);
 		  outrel.r_info = ELF32_R_INFO (0, R_CRIS_DTPMOD);
 		  outrel.r_addend = 0;
-		  bfd_elf32_swap_reloca_out (output_bfd, &outrel, loc);
+		  bfd_elf32_swap_reloca_out (info->output_bfd, &outrel, loc);
 		}
 	      else
 		{
 		  /* For an executable, the GOT entry contents is known.  */
-		  bfd_put_32 (output_bfd, (bfd_vma) 1, sgotplt->contents + 12);
-		  bfd_put_32 (output_bfd, (bfd_vma) 0, sgotplt->contents + 16);
+		  bfd_put_32 (info->output_bfd, 1, sgotplt->contents + 12);
+		  bfd_put_32 (info->output_bfd, 0, sgotplt->contents + 16);
 		}
 
 	      /* Reverse the sign to mark that we've emitted the
@@ -1713,8 +1711,9 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		  else
 		    local_got_offsets[r_symndx] |= 2;
 
-		  bfd_put_32 (output_bfd, 1, sgot->contents + off);
-		  bfd_put_32 (output_bfd, relocation, sgot->contents + off + 4);
+		  bfd_put_32 (info->output_bfd, 1, sgot->contents + off);
+		  bfd_put_32 (info->output_bfd, relocation,
+			      sgot->contents + off + 4);
 		}
 	      else
 		off &= ~3;
@@ -1754,8 +1753,8 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		  /* Clear the target contents of the GOT (just as a
 		     gesture; it's already cleared on allocation): this
 		     relocation is not like the other dynrelocs.  */
-		  bfd_put_32 (output_bfd, 0, sgot->contents + off);
-		  bfd_put_32 (output_bfd, 0, sgot->contents + off + 4);
+		  bfd_put_32 (info->output_bfd, 0, sgot->contents + off);
+		  bfd_put_32 (info->output_bfd, 0, sgot->contents + off + 4);
 
 		  srelgot = htab->root.srelgot;
 		  BFD_ASSERT (srelgot != NULL);
@@ -1783,7 +1782,7 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
 		  /* NULL if we had an error.  */
 		  if (srelgot->contents != NULL)
-		    bfd_elf32_swap_reloca_out (output_bfd, &outrel, loc);
+		    bfd_elf32_swap_reloca_out (info->output_bfd, &outrel, loc);
 		}
 	      else
 		off &= ~3;
@@ -1858,7 +1857,8 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		  else
 		    local_got_offsets[r_symndx] |= 1;
 
-		  bfd_put_32 (output_bfd, relocation, sgot->contents + off);
+		  bfd_put_32 (info->output_bfd, relocation,
+			      sgot->contents + off);
 		}
 	      else
 		off &= ~3;
@@ -1908,7 +1908,8 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 
 		  /* Just "define" the initial contents in some
 		     semi-logical way.  */
-		  bfd_put_32 (output_bfd, relocation, sgot->contents + off);
+		  bfd_put_32 (info->output_bfd, relocation,
+			      sgot->contents + off);
 
 		  outrel.r_offset = (sgot->output_section->vma
 				     + sgot->output_offset
@@ -1918,7 +1919,7 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
 		  loc += srelgot->reloc_count++ * sizeof (Elf32_External_Rela);
 		  /* NULL if we had an error.  */
 		  if (srelgot->contents != NULL)
-		    bfd_elf32_swap_reloca_out (output_bfd, &outrel, loc);
+		    bfd_elf32_swap_reloca_out (info->output_bfd, &outrel, loc);
 		}
 	      else
 		off &= ~3;
@@ -2060,8 +2061,7 @@ cris_elf_relocate_section (bfd *output_bfd ATTRIBUTE_UNUSED,
    dynamic sections here.  */
 
 static bool
-elf_cris_finish_dynamic_symbol (bfd *output_bfd,
-				struct bfd_link_info *info,
+elf_cris_finish_dynamic_symbol (struct bfd_link_info *info,
 				struct elf_link_hash_entry *h,
 				Elf_Internal_Sym *sym)
 {
@@ -2084,7 +2084,7 @@ elf_cris_finish_dynamic_symbol (bfd *output_bfd,
   htab = elf_cris_hash_table (info);
 
   /* Adjust the various PLT entry offsets.  */
-  if (bfd_get_mach (output_bfd) == bfd_mach_cris_v32)
+  if (bfd_get_mach (info->output_bfd) == bfd_mach_cris_v32)
     {
       plt_off2 = 14;
       plt_off3 = 20;
@@ -2152,14 +2152,14 @@ elf_cris_finish_dynamic_symbol (bfd *output_bfd,
 		  plt_entry_size);
 
 	  /* We need to enter the absolute address of the GOT entry here.  */
-	  bfd_put_32 (output_bfd, got_base + got_offset,
+	  bfd_put_32 (info->output_bfd, got_base + got_offset,
 		      splt->contents + h->plt.offset + plt_off1);
 	}
       else
 	{
 	  memcpy (splt->contents + h->plt.offset, plt_pic_entry,
 		  plt_entry_size);
-	  bfd_put_32 (output_bfd, got_offset,
+	  bfd_put_32 (info->output_bfd, got_offset,
 		      splt->contents + h->plt.offset + plt_off1);
 	}
 
@@ -2168,18 +2168,18 @@ elf_cris_finish_dynamic_symbol (bfd *output_bfd,
       if (has_gotplt)
 	{
 	  /* Fill in the offset to the reloc table.  */
-	  bfd_put_32 (output_bfd,
+	  bfd_put_32 (info->output_bfd,
 		      rela_plt_index * sizeof (Elf32_External_Rela),
 		      splt->contents + h->plt.offset + plt_off2);
 
 	  /* Fill in the offset to the first PLT entry, where to "jump".  */
-	  bfd_put_32 (output_bfd,
+	  bfd_put_32 (info->output_bfd,
 		      - (h->plt.offset + plt_off3 + plt_off3_value_bias),
 		      splt->contents + h->plt.offset + plt_off3);
 
 	  /* Fill in the entry in the global offset table with the address of
 	     the relocating stub.  */
-	  bfd_put_32 (output_bfd,
+	  bfd_put_32 (info->output_bfd,
 		      (splt->output_section->vma
 		       + splt->output_offset
 		       + h->plt.offset
@@ -2193,7 +2193,7 @@ elf_cris_finish_dynamic_symbol (bfd *output_bfd,
 	  rela.r_info = ELF32_R_INFO (h->dynindx, R_CRIS_JUMP_SLOT);
 	  rela.r_addend = 0;
 	  loc = srela->contents + rela_plt_index * sizeof (Elf32_External_Rela);
-	  bfd_elf32_swap_reloca_out (output_bfd, &rela, loc);
+	  bfd_elf32_swap_reloca_out (info->output_bfd, &rela, loc);
 	}
 
       if (!h->def_regular)
@@ -2256,18 +2256,18 @@ elf_cris_finish_dynamic_symbol (bfd *output_bfd,
 	      && h->def_regular))
 	{
 	  rela.r_info = ELF32_R_INFO (0, R_CRIS_RELATIVE);
-	  rela.r_addend = bfd_get_signed_32 (output_bfd, where);
+	  rela.r_addend = bfd_get_signed_32 (info->output_bfd, where);
 	}
       else
 	{
-	  bfd_put_32 (output_bfd, (bfd_vma) 0, where);
+	  bfd_put_32 (info->output_bfd, (bfd_vma) 0, where);
 	  rela.r_info = ELF32_R_INFO (h->dynindx, R_CRIS_GLOB_DAT);
 	  rela.r_addend = 0;
 	}
 
       loc = srela->contents;
       loc += srela->reloc_count++ * sizeof (Elf32_External_Rela);
-      bfd_elf32_swap_reloca_out (output_bfd, &rela, loc);
+      bfd_elf32_swap_reloca_out (info->output_bfd, &rela, loc);
     }
 
   if (h->needs_copy)
@@ -2293,7 +2293,7 @@ elf_cris_finish_dynamic_symbol (bfd *output_bfd,
       rela.r_info = ELF32_R_INFO (h->dynindx, R_CRIS_COPY);
       rela.r_addend = 0;
       loc = s->contents + s->reloc_count++ * sizeof (Elf32_External_Rela);
-      bfd_elf32_swap_reloca_out (output_bfd, &rela, loc);
+      bfd_elf32_swap_reloca_out (info->output_bfd, &rela, loc);
     }
 
   /* Mark _DYNAMIC and _GLOBAL_OFFSET_TABLE_ as absolute.  */
@@ -2309,8 +2309,7 @@ elf_cris_finish_dynamic_symbol (bfd *output_bfd,
    computed.  */
 
 static bool
-elf_cris_finish_dynamic_sections (bfd *output_bfd,
-				  struct bfd_link_info *info,
+elf_cris_finish_dynamic_sections (struct bfd_link_info *info,
 				  bfd_byte *buf ATTRIBUTE_UNUSED)
 {
   bfd *dynobj;
@@ -2347,7 +2346,7 @@ elf_cris_finish_dynamic_sections (bfd *output_bfd,
 
 	    case DT_PLTGOT:
 	      dyn.d_un.d_ptr = sgot->output_section->vma + sgot->output_offset;
-	      bfd_elf32_swap_dyn_out (output_bfd, &dyn, dyncon);
+	      bfd_elf32_swap_dyn_out (info->output_bfd, &dyn, dyncon);
 	      break;
 
 	    case DT_JMPREL:
@@ -2356,7 +2355,7 @@ elf_cris_finish_dynamic_sections (bfd *output_bfd,
 	      s = elf_hash_table (info)->srelplt;
 	      dyn.d_un.d_ptr = s != NULL ? (s->output_section->vma
 					    + s->output_offset) : 0;
-	      bfd_elf32_swap_dyn_out (output_bfd, &dyn, dyncon);
+	      bfd_elf32_swap_dyn_out (info->output_bfd, &dyn, dyncon);
 	      break;
 
 	    case DT_PLTRELSZ:
@@ -2365,7 +2364,7 @@ elf_cris_finish_dynamic_sections (bfd *output_bfd,
 		dyn.d_un.d_val = 0;
 	      else
 		dyn.d_un.d_val = s->size;
-	      bfd_elf32_swap_dyn_out (output_bfd, &dyn, dyncon);
+	      bfd_elf32_swap_dyn_out (info->output_bfd, &dyn, dyncon);
 	      break;
 	    }
 	}
@@ -2373,7 +2372,7 @@ elf_cris_finish_dynamic_sections (bfd *output_bfd,
       /* Fill in the first entry in the procedure linkage table.  */
       if (splt->size > 0)
 	{
-	  if (bfd_get_mach (output_bfd) == bfd_mach_cris_v32)
+	  if (bfd_get_mach (info->output_bfd) == bfd_mach_cris_v32)
 	    {
 	      if (bfd_link_pic (info))
 		memcpy (splt->contents, elf_cris_pic_plt0_entry_v32,
@@ -2382,7 +2381,7 @@ elf_cris_finish_dynamic_sections (bfd *output_bfd,
 		{
 		  memcpy (splt->contents, elf_cris_plt0_entry_v32,
 			  PLT_ENTRY_SIZE_V32);
-		  bfd_put_32 (output_bfd,
+		  bfd_put_32 (info->output_bfd,
 			      sgot->output_section->vma
 			      + sgot->output_offset + 4,
 			      splt->contents + 4);
@@ -2400,11 +2399,11 @@ elf_cris_finish_dynamic_sections (bfd *output_bfd,
 		{
 		  memcpy (splt->contents, elf_cris_plt0_entry,
 			  PLT_ENTRY_SIZE);
-		  bfd_put_32 (output_bfd,
+		  bfd_put_32 (info->output_bfd,
 			      sgot->output_section->vma
 			      + sgot->output_offset + 4,
 			      splt->contents + 6);
-		  bfd_put_32 (output_bfd,
+		  bfd_put_32 (info->output_bfd,
 			      sgot->output_section->vma
 			      + sgot->output_offset + 8,
 			      splt->contents + 14);
@@ -2420,13 +2419,13 @@ elf_cris_finish_dynamic_sections (bfd *output_bfd,
   if (sgot->size > 0)
     {
       if (sdyn == NULL)
-	bfd_put_32 (output_bfd, (bfd_vma) 0, sgot->contents);
+	bfd_put_32 (info->output_bfd, 0, sgot->contents);
       else
-	bfd_put_32 (output_bfd,
+	bfd_put_32 (info->output_bfd,
 		    sdyn->output_section->vma + sdyn->output_offset,
 		    sgot->contents);
-      bfd_put_32 (output_bfd, (bfd_vma) 0, sgot->contents + 4);
-      bfd_put_32 (output_bfd, (bfd_vma) 0, sgot->contents + 8);
+      bfd_put_32 (info->output_bfd, 0, sgot->contents + 4);
+      bfd_put_32 (info->output_bfd, 0, sgot->contents + 8);
     }
 
   elf_section_data (sgot->output_section)->this_hdr.sh_entsize = 4;
@@ -2680,7 +2679,7 @@ elf_cris_adjust_dynamic_symbol (struct bfd_link_info *info,
 		      && !h->def_regular)));
 
   plt_entry_size
-    = (bfd_get_mach (dynobj) == bfd_mach_cris_v32
+    = (bfd_get_mach (info->output_bfd) == bfd_mach_cris_v32
        ? PLT_ENTRY_SIZE_V32 : PLT_ENTRY_SIZE);
 
   /* If this is a function, put it in the procedure linkage table.  We
@@ -2967,7 +2966,7 @@ cris_elf_check_relocs (bfd *abfd,
     return false;
 
   dynobj = elf_hash_table (info)->dynobj;
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
   local_got_refcounts = elf_local_got_refcounts (abfd);
 
@@ -3037,22 +3036,7 @@ cris_elf_check_relocs (bfd *abfd,
 	case R_CRIS_16_GOTPLT:
 	case R_CRIS_32_GOTPLT:
 	  if (dynobj == NULL)
-	    {
-	      elf_hash_table (info)->dynobj = dynobj = abfd;
-
-	      /* We could handle this if we can get a handle on the
-		 output bfd in elf_cris_adjust_dynamic_symbol.  Failing
-		 that, we must insist on dynobj being a specific mach.  */
-	      if (bfd_get_mach (dynobj) == bfd_mach_cris_v10_v32)
-		{
-		  _bfd_error_handler
-		    /* xgettext:c-format */
-		    (_("%pB, section %pA: v10/v32 compatible object"
-		       " must not contain a PIC relocation"),
-		     abfd, sec);
-		  return false;
-		}
-	    }
+	    elf_hash_table (info)->dynobj = dynobj = abfd;
 
 	  if (sgot == NULL)
 	    {
@@ -3507,8 +3491,7 @@ cris_elf_check_relocs (bfd *abfd,
 /* Set the sizes of the dynamic sections.  */
 
 static bool
-elf_cris_late_size_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
-			     struct bfd_link_info *info)
+elf_cris_late_size_sections (struct bfd_link_info *info)
 {
   struct elf_cris_link_hash_table * htab;
   bfd *dynobj;
@@ -3650,7 +3633,7 @@ elf_cris_late_size_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
       s->alloced = 1;
     }
 
-  return _bfd_elf_add_dynamic_tags (output_bfd, info, relocs);
+  return _bfd_elf_add_dynamic_tags (info, relocs);
 }
 
 /* This function is called via elf_cris_link_hash_traverse if we are
@@ -3678,11 +3661,7 @@ elf_cris_discard_excess_dso_dynamics (struct elf_cris_link_hash_entry *h,
     {
       for (s = h->pcrel_relocs_copied; s != NULL; s = s->next)
 	{
-	  asection *sreloc
-	    = _bfd_elf_get_dynamic_reloc_section (elf_hash_table (info)
-						  ->dynobj,
-						  s->section,
-						  /*rela?*/ true);
+	  asection *sreloc = elf_section_data (s->section)->sreloc;
 	  sreloc->size -= s->count * sizeof (Elf32_External_Rela);
 	}
       return true;
@@ -3994,8 +3973,7 @@ elf_cris_reloc_type_class (const struct bfd_link_info *info ATTRIBUTE_UNUSED,
    machinery.  */
 
 static bfd_vma
-elf_cris_got_elt_size (bfd *abfd ATTRIBUTE_UNUSED,
-		       struct bfd_link_info *info ATTRIBUTE_UNUSED,
+elf_cris_got_elt_size (struct bfd_link_info *info ATTRIBUTE_UNUSED,
 		       struct elf_link_hash_entry *hr,
 		       bfd *ibfd,
 		       unsigned long symndx)
@@ -4007,7 +3985,7 @@ elf_cris_got_elt_size (bfd *abfd ATTRIBUTE_UNUSED,
      entries.  */
   if (h == NULL)
     {
-      Elf_Internal_Shdr *symtab_hdr = &elf_tdata (ibfd)->symtab_hdr;
+      Elf_Internal_Shdr *symtab_hdr = &elf_symtab_hdr (ibfd);
       bfd_signed_vma *local_got_refcounts = elf_local_got_refcounts (ibfd);
 
       BFD_ASSERT (local_got_refcounts != NULL);

@@ -31,7 +31,7 @@ static reloc_howto_type * m32c_reloc_type_lookup
 static bool m32c_info_to_howto_rela
   (bfd *, arelent *, Elf_Internal_Rela *);
 static int m32c_elf_relocate_section
-  (bfd *, struct bfd_link_info *, bfd *, asection *, bfd_byte *, Elf_Internal_Rela *, Elf_Internal_Sym *, asection **);
+  (struct bfd_link_info *, bfd *, asection *, bfd_byte *, Elf_Internal_Rela *, Elf_Internal_Sym *, asection **);
 static bool m32c_elf_check_relocs
   (bfd *, struct bfd_link_info *, asection *, const Elf_Internal_Rela *);
 static bool m32c_elf_relax_delete_bytes (bfd *, asection *, bfd_vma, int);
@@ -390,8 +390,7 @@ static bfd_reloc_status_type m32c_apply_reloc_24 (bfd *abfd ATTRIBUTE_UNUSED,
 
 static int
 m32c_elf_relocate_section
-    (bfd *		     output_bfd ATTRIBUTE_UNUSED,
-     struct bfd_link_info *  info,
+    (struct bfd_link_info *  info,
      bfd *		     input_bfd,
      asection *		     input_section,
      bfd_byte *		     contents,
@@ -405,7 +404,7 @@ m32c_elf_relocate_section
   Elf_Internal_Rela *		relend;
   asection *splt;
 
-  symtab_hdr = & elf_tdata (input_bfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (input_bfd);
   sym_hashes = elf_sym_hashes (input_bfd);
   relend     = relocs + input_section->reloc_count;
 
@@ -668,7 +667,7 @@ m32c_elf_check_relocs
   if (bfd_link_relocatable (info))
     return true;
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   sym_hashes = elf_sym_hashes (abfd);
   local_plt_offsets = elf_local_got_offsets (abfd);
   splt = NULL;
@@ -750,8 +749,7 @@ m32c_elf_check_relocs
 /* This must exist if dynobj is ever set.  */
 
 static bool
-m32c_elf_finish_dynamic_sections (bfd *abfd ATTRIBUTE_UNUSED,
-				  struct bfd_link_info *info,
+m32c_elf_finish_dynamic_sections (struct bfd_link_info *info,
 				  bfd_byte *buf ATTRIBUTE_UNUSED)
 {
   bfd *dynobj = elf_hash_table (info)->dynobj;
@@ -775,8 +773,7 @@ m32c_elf_finish_dynamic_sections (bfd *abfd ATTRIBUTE_UNUSED,
 }
 
 static bool
-m32c_elf_early_size_sections (bfd *output_bfd ATTRIBUTE_UNUSED,
-			      struct bfd_link_info *info)
+m32c_elf_early_size_sections (struct bfd_link_info *info)
 {
   bfd *dynobj;
   asection *splt;
@@ -979,7 +976,7 @@ dump_symtab (bfd * abfd, void *internal_syms, void *external_syms)
       free_external = 1;
     }
 
-  symtab_hdr = &elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   locsymcount = symtab_hdr->sh_size / get_elf_backend_data(abfd)->s->sizeof_sym;
   if (free_internal)
     isymbuf = bfd_elf_get_elf_syms (abfd, symtab_hdr,
@@ -1188,7 +1185,7 @@ m32c_elf_relax_plt_section (asection *splt,
       if (! local_plt_offsets)
 	continue;
 
-      symtab_hdr = &elf_tdata (ibfd)->symtab_hdr;
+      symtab_hdr = &elf_symtab_hdr (ibfd);
       if (symtab_hdr->sh_info != 0)
 	{
 	  isymbuf = (Elf_Internal_Sym *) symtab_hdr->contents;
@@ -1255,7 +1252,7 @@ m32c_elf_relax_plt_section (asection *splt,
       for (ibfd = info->input_bfds; ibfd ; ibfd = ibfd->link.next)
 	{
 	  bfd_vma *local_plt_offsets = elf_local_got_offsets (ibfd);
-	  unsigned int nlocals = elf_tdata (ibfd)->symtab_hdr.sh_info;
+	  unsigned int nlocals = elf_symtab_hdr (ibfd).sh_info;
 	  unsigned int idx;
 
 	  if (! local_plt_offsets)
@@ -2034,7 +2031,7 @@ m32c_elf_relax_delete_bytes (bfd *abfd,
     }
 
   /* Adjust the local symbols defined in this section.  */
-  symtab_hdr = & elf_tdata (abfd)->symtab_hdr;
+  symtab_hdr = &elf_symtab_hdr (abfd);
   intsyms = (Elf_Internal_Sym *) symtab_hdr->contents;
   isym = intsyms;
   isymend = isym + symtab_hdr->sh_info;

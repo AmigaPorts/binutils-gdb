@@ -1114,19 +1114,19 @@ ctf_link_deduplicating_per_cu (ctf_dict_t *fp)
       uint32_t noutputs;
       uint32_t *parents;
 
-      if ((ninputs = ctf_link_deduplicating_count_inputs (fp, in,
-							  &only_input)) == -1)
+      ninputs = ctf_link_deduplicating_count_inputs (fp, in, &only_input);
+      if (ninputs == -1)
 	goto err_open_inputs;
 
       /* CU mapping with no inputs?  Skip.  */
       if (ninputs == 0)
 	continue;
 
-      if (labs ((long int) ninputs) > 0xfffffffe)
+      if ((size_t) ninputs > 0xfffffffe)
 	{
 	  ctf_set_errno (fp, EFBIG);
 	  ctf_err_warn (fp, 0, 0, _("too many inputs in deduplicating "
-				    "link: %li"), (long int) ninputs);
+				    "link: %lu"), (long unsigned) ninputs);
 	  goto err_open_inputs;
 	}
 
@@ -1187,10 +1187,7 @@ ctf_link_deduplicating_per_cu (ctf_dict_t *fp)
 
       if ((inputs = ctf_link_deduplicating_open_inputs (fp, in, ninputs,
 							&parents)) == NULL)
-	{
-	  ctf_next_destroy (i);
-	  goto err_open_inputs;
-	}
+	goto err_open_inputs;
 
       if ((out = ctf_create (&err)) == NULL)
 	{
@@ -1649,7 +1646,7 @@ ctf_link_shuffle_syms (ctf_dict_t *fp)
   ctf_in_flight_dynsym_t *did, *nid;
   ctf_next_t *i = NULL;
   int err = ENOMEM;
-  void *name_, *sym_;
+  void *sym_;
 
   if (fp->ctf_stypes > 0)
     return ctf_set_errno (fp, ECTF_RDONLY);
@@ -1733,9 +1730,8 @@ ctf_link_shuffle_syms (ctf_dict_t *fp)
 				   sizeof (ctf_link_sym_t *))) == NULL)
     goto err;
 
-  while ((err = ctf_dynhash_next (fp->ctf_dynsyms, &i, &name_, &sym_)) == 0)
+  while ((err = ctf_dynhash_next (fp->ctf_dynsyms, &i, NULL, &sym_)) == 0)
     {
-      const char *name = (const char *) name;
       ctf_link_sym_t *symp = (ctf_link_sym_t *) sym_;
 
       if (!ctf_assert (fp, symp->st_symidx <= fp->ctf_dynsymmax))

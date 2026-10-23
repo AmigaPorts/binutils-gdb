@@ -262,7 +262,7 @@ mi_cmd_stack_list_locals (const char *command, const char *const *argv,
     error (_("-stack-list-locals: Usage: [--no-frame-filters] "
 	     "[--skip-unavailable] PRINT_VALUES"));
 
-  frame = get_selected_frame (NULL);
+  frame = get_selected_frame ();
   print_value = mi_parse_print_values (argv[oind]);
 
    if (! raw_arg && frame_filters)
@@ -456,7 +456,7 @@ mi_cmd_stack_list_variables (const char *command, const char *const *argv,
     error (_("-stack-list-variables: Usage: [--no-frame-filters] " \
 	     "[--skip-unavailable] PRINT_VALUES"));
 
-   frame = get_selected_frame (NULL);
+   frame = get_selected_frame ();
    print_value = mi_parse_print_values (argv[oind]);
 
    if (! raw_arg && frame_filters)
@@ -633,34 +633,25 @@ list_args_or_locals (const frame_print_options &fp_opts,
 	    }
 	  if (print_me)
 	    {
-	      struct symbol *sym2;
 	      struct frame_arg arg, entryarg;
 
-	      if (sym->is_argument ())
-		sym2 = (lookup_symbol_search_name
-			(sym->search_name (),
-			 block, SEARCH_VAR_DOMAIN).symbol);
-	      else
-		sym2 = sym;
-	      gdb_assert (sym2 != NULL);
-
-	      arg.sym = sym2;
+	      arg.sym = sym;
 	      arg.entry_kind = print_entry_values_no;
-	      entryarg.sym = sym2;
+	      entryarg.sym = sym;
 	      entryarg.entry_kind = print_entry_values_no;
 
 	      switch (values)
 		{
 		case PRINT_SIMPLE_VALUES:
-		  if (!mi_simple_type_p (sym2->type ()))
+		  if (!mi_simple_type_p (sym->type ()))
 		    break;
 		  [[fallthrough]];
 
 		case PRINT_ALL_VALUES:
 		  if (sym->is_argument ())
-		    read_frame_arg (fp_opts, sym2, fi, &arg, &entryarg);
+		    read_frame_arg (fp_opts, sym, fi, &arg, &entryarg);
 		  else
-		    read_frame_local (sym2, fi, &arg);
+		    read_frame_local (sym, fi, &arg);
 		  break;
 		}
 
@@ -771,5 +762,5 @@ mi_cmd_stack_info_frame (const char *command, const char *const *argv,
     error (_("-stack-info-frame: No arguments allowed"));
 
   print_frame_info (user_frame_print_options,
-		    get_selected_frame (NULL), 1, LOC_AND_ADDRESS, 0, 1);
+		    get_selected_frame (), 1, LOC_AND_ADDRESS, 0, 1);
 }

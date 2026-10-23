@@ -212,18 +212,18 @@ arc_linux_is_sigtramp (const frame_info_ptr &this_frame)
   if (!safe_frame_unwind_memory (this_frame, pc, {buf, insns_sz}))
     {
       /* Failed to unwind frame.  */
-      return FALSE;
+      return false;
     }
 
   /* Is that code the sigtramp instruction sequence?  */
   if (memcmp (buf, arc_sigtramp_insns, insns_sz) == 0)
-    return TRUE;
+    return true;
 
   /* No - look one instruction earlier in the code...  */
   if (!safe_frame_unwind_memory (this_frame, pc - 4, {buf, insns_sz}))
     {
       /* Failed to unwind frame.  */
-      return FALSE;
+      return false;
     }
 
   return (memcmp (buf, arc_sigtramp_insns, insns_sz) == 0);
@@ -270,7 +270,7 @@ arc_linux_sigcontext_addr (const frame_info_ptr &this_frame)
 
 /* Implement the "cannot_fetch_register" gdbarch method.  */
 
-static int
+static bool
 arc_linux_cannot_fetch_register (struct gdbarch *gdbarch, int regnum)
 {
   /* Assume that register is readable if it is unknown.  */
@@ -290,7 +290,7 @@ arc_linux_cannot_fetch_register (struct gdbarch *gdbarch, int regnum)
 
 /* Implement the "cannot_store_register" gdbarch method.  */
 
-static int
+static bool
 arc_linux_cannot_store_register (struct gdbarch *gdbarch, int regnum)
 {
   /* Assume that register is writable if it is unknown.  */
@@ -336,6 +336,8 @@ arc_linux_sw_breakpoint_from_kind (struct gdbarch *gdbarch,
 	  ? arc_linux_trap_s_be
 	  : arc_linux_trap_s_le);
 }
+
+/* codespell:ignore-begin.  Ignore SCOND.  */
 
 /* Check for an atomic sequence of instructions beginning with an
    LLOCK instruction and ending with a SCOND instruction.
@@ -408,6 +410,8 @@ handle_atomic_sequence (arc_instruction insn, disassemble_info *di)
 
   return next_pcs;
 }
+
+/* codespell:ignore-end.  */
 
 /* Implement the "software_single_step" gdbarch method.  */
 

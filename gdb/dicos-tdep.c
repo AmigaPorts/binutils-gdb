@@ -32,11 +32,11 @@ dicos_init_abi (struct gdbarch *gdbarch)
   /* Every process, although has its own address space, sees the same
      list of shared libraries.  There's no "main executable" in DICOS,
      so this accounts for all code.  */
-  set_gdbarch_has_global_solist (gdbarch, 1);
+  set_gdbarch_has_global_solist (gdbarch, true);
 
   /* The DICOS breakpoint API takes care of magically making
      breakpoints visible to all inferiors.  */
-  set_gdbarch_has_global_breakpoints (gdbarch, 1);
+  set_gdbarch_has_global_breakpoints (gdbarch, true);
 
   /* There's no (standard definition of) entry point or a guaranteed
      text location with a symbol where to place the call dummy, so we
@@ -80,7 +80,7 @@ dicos_load_module_p (bfd *abfd, int header_size)
     {
       if (sym->name != NULL
 	  && symname[0] == sym->name[0]
-	  && strcmp (symname + 1, sym->name + 1) == 0)
+	  && streq (symname + 1, sym->name + 1))
 	{
 	  ret = 1;
 	  break;

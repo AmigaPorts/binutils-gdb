@@ -13,10 +13,13 @@
 --  You should have received a copy of the GNU General Public License
 --  along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
+with Pck; use Pck;
+
 procedure Foo is
-   procedure P (S : String) is
+   procedure P (In_Val : String) is
+      S : String := In_Val;
    begin
-      null; -- BREAK
+      Do_Nothing (S); -- BREAK
    end P;
 begin
    P ((2 => 'a', 3 => 'b'));

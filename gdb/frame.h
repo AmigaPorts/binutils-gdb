@@ -125,6 +125,11 @@ extern bool frame_debug;
 #define FRAME_SCOPED_DEBUG_ENTER_EXIT \
   scoped_debug_enter_exit (frame_debug, "frame")
 
+/* Print "frame" start/end debug statements.  */
+
+#define FRAME_SCOPED_DEBUG_START_END(fmt, ...) \
+  scoped_debug_start_end (frame_debug, "frame", fmt, ##__VA_ARGS__)
+
 /* Construct a frame ID.  The first parameter is the frame's constant
    stack address (typically the outer-bound), and the second the
    frame's constant code address (typically the entry point).
@@ -690,7 +695,7 @@ const char *frame_stop_reason_string (const frame_info_ptr &);
    fetch/compute the value.  Instead just return the location of the
    value.  */
 extern void frame_register_unwind (const frame_info_ptr &frame, int regnum,
-				   int *optimizedp, int *unavailablep,
+				   bool *optimizedp, bool *unavailablep,
 				   enum lval_type *lvalp,
 				   CORE_ADDR *addrp, int *realnump,
 				   gdb::array_view<gdb_byte> value = {});
@@ -741,7 +746,7 @@ extern void put_frame_register (const frame_info_ptr &next_frame, int regnum,
 extern bool get_frame_register_bytes (const frame_info_ptr &next_frame,
 				      int regnum, CORE_ADDR offset,
 				      gdb::array_view<gdb_byte> buffer,
-				      int *optimizedp, int *unavailablep);
+				      bool *optimizedp, bool *unavailablep);
 
 /* Write bytes from BUFFER to one or multiple registers starting with REGNUM
    in NEXT_FRAME's previous frame, starting at OFFSET.  */

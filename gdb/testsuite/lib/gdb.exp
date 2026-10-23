@@ -17,8 +17,6 @@
 
 # tclint-disable redefined-builtin
 
-package require Tcl 8.6.2
-
 # Generic gdb subroutines that should work for any target.  If these
 # need to be modified for any target, it can be done with a variable
 # or by passing arguments.
@@ -28,6 +26,18 @@ if {$tool == ""} {
     send_error "`site.exp' not found, run `make site.exp'!\n"
     exit 2
 }
+
+# Add "convenience abbreviation" for positive decimals, without leading zeros.
+set positive {(?:[1-9][0-9]*)}
+
+# Dejagnu defines decimal as one of the "convenience abbreviations".
+# Override it with one that uses parentheses, which flushes incorrect uses
+# like "\[Inferior $decimal\]".
+set decimal {(?:[0-9]+)}
+
+# Dejagnu defines hex as one of the "convenience abbreviations".
+# Override it with one that uses parentheses.
+set hex {(?:0x[0-9A-Fa-f]+)}
 
 # Execute BODY, if COND wrapped in proc WRAP.
 # Instead of writing the verbose and repetitive:
@@ -156,11 +166,41 @@ proc load_lib { file } {
     return $result
 }
 
+# Tcl 9.0 changed the default channel encoding profile to "strict".
+# When runtest sets LC_ALL=C the system encoding is iso8859-1, so file
+# channels opened by DejaGNU (gdb.sum, gdb.log) and spawn channels
+# (for GDB and subprocesses) default to iso8859-1 with strict profile.
+# Writing non-Latin-1 characters in test names then raises EILSEQ, and
+# sending them to GDB truncates the command at the unrepresentable
+# character.
+#
+# Fix this by:
+# 1. Overriding open_logs to reconfigure gdb.sum to UTF-8 after
+#    DejaGNU opens it with the system (iso8859-1) encoding.  Only
+#    "-encoding utf-8" is needed here, not "-profile replace".  The
+#    test names written to gdb.sum are Unicode strings, and since
+#    UTF-8 can represent every Unicode character, the encode
+#    operation cannot fail.  This use of "fconfigure" lacks a Tcl
+#    version guard since "-encoding utf-8" works in both Tcl 8 and
+#    Tcl 9.  (Use of "-profile replace" requires a guard, as that
+#    option did not exist before Tcl 9.)
+# 2. Reconfiguring each new spawn channel to UTF-8 and to also use
+#    "-profile replace" in spawn_capture_tty_name, which wraps every
+#    spawn call.
+# 3. Likewise for gdb_stdin_log_init.
+
+rename open_logs saved_open_logs
+proc open_logs {} {
+    saved_open_logs
+    fconfigure $::sum_file -encoding utf-8
+}
+
 load_lib libgloss.exp
 load_lib cache.exp
 load_lib gdb-utils.exp
 load_lib memory.exp
 load_lib check-test-names.exp
+load_lib quotemeta.exp
 
 # The path to the GDB binary to test.
 global GDB
@@ -211,7 +251,7 @@ if {![info exists GCORE]} {
 }
 verbose "using GCORE = $GCORE" 2
 
-# Return 0 if the gcore scipt is missing.
+# Return 0 if the gcore script is missing.
 proc has_gcore_script {} {
     global GCORE
     if {$GCORE == ""} {
@@ -302,15 +342,15 @@ set pagination_prompt [string_to_regexp $pagination_prompt_str]
 # absolute path ie. "/foo/".
 set fullname_syntax_POSIX {/[^\n]*/}
 # The variable fullname_syntax_UNC is a regexp which matches a Windows
-# UNC path ie. "\\D\foo\".
-set fullname_syntax_UNC {\\\\[^\\]+\\[^\n]+\\}
+# UNC path ie. "//D/foo/".
+set fullname_syntax_UNC {//[^/]+/[^\n]+/}
 # The variable fullname_syntax_DOS_CASE is a regexp which matches a
 # particular DOS case that GDB most likely will output
-# ie. "\foo\", but don't match "\\.*\".
-set fullname_syntax_DOS_CASE {\\[^\\][^\n]*\\}
+# ie. "/foo/", but don't match "//.*/".
+set fullname_syntax_DOS_CASE {/[^/][^\n]*/}
 # The variable fullname_syntax_DOS is a regexp which matches a DOS path
-# ie. "a:\foo\" && "a:foo\".
-set fullname_syntax_DOS {[a-zA-Z]:[^\n]*\\}
+# ie. "a:/foo/" && "a:foo/".
+set fullname_syntax_DOS {[a-zA-Z]:[^\n]*/}
 # The variable fullname_syntax is a regexp which matches what GDB considers
 # an absolute path. It is currently debatable if the Windows style paths
 # "d:foo" and "\abc" should be considered valid as an absolute path.
@@ -328,9 +368,9 @@ if {![info exists env(EXEEXT)]} {
     set EXEEXT $env(EXEEXT)
 }
 
-set octal "\[0-7\]+"
+set octal {(?:[0-7]+)}
 
-set inferior_exited_re "(?:\\\[Inferior \[0-9\]+ \\(\[^\n\r\]*\\) exited)"
+set inferior_exited_re "(?:\\\[Inferior ${::decimal} \\(\[^\n\r\]*\\) exited)"
 
 # A regular expression that matches the first word of a thread
 # description after the thread number info 'info threads'
@@ -338,7 +378,7 @@ set tdlabel_re "(process|Thread|LWP)"
 
 # A regular expression that matches a value history number.
 # E.g., $1, $2, etc.
-set valnum_re "\\\$$decimal"
+set valnum_re [subst_vars {\$$decimal}]
 
 # A regular expression that matches a breakpoint hit with a breakpoint
 # having several code locations.
@@ -685,44 +725,58 @@ proc gdb_starti_cmd { {inferior_args {}} } {
 # Set a breakpoint using LINESPEC.
 #
 # If there is an additional argument it is a list of options; the supported
-# options are allow-pending, temporary, message, no-message and qualified.
+# options are -allow-pending, -temporary, -message, -no-message and -qualified.
 #
 # The result is 1 for success, 0 for failure.
 #
 # Note: The handling of message vs no-message is messed up, but it's based
 # on historical usage.  By default this function does not print passes,
 # only fails.
-# no-message: turns off printing of fails (and passes, but they're already off)
-# message: turns on printing of passes (and fails, but they're already on)
+# -no-message: turns off printing of fails (and passes, but they're already off)
+# -message: turns on printing of passes (and fails, but they're already on)
 
 proc gdb_breakpoint { linespec args } {
     global gdb_prompt
     global decimal
 
+    parse_args {
+	{allow-pending}
+	{temporary}
+	{qualified}
+	{message}
+	{no-message}
+    }
+
     set pending_response n
-    if {[lsearch -exact $args allow-pending] != -1} {
+
+    if {${allow-pending}} {
 	set pending_response y
     }
 
     set break_command "break"
     set break_message "Breakpoint"
-    if {[lsearch -exact $args temporary] != -1} {
+
+    if {$temporary} {
 	set break_command "tbreak"
 	set break_message "Temporary breakpoint"
     }
 
-    if {[lsearch -exact $args qualified] != -1} {
+    if {$qualified} {
 	append break_command " -qualified"
+    }
+
+    if {$message && ${no-message}} {
+	error "gdb_breakpoint: -message and -no-message are mutually exclusive"
     }
 
     set print_pass 0
     set print_fail 1
-    set no_message_loc [lsearch -exact $args no-message]
-    set message_loc [lsearch -exact $args message]
-    # The last one to appear in args wins.
-    if { $no_message_loc > $message_loc } {
+
+    if {${no-message}} {
 	set print_fail 0
-    } elseif { $message_loc > $no_message_loc } {
+    }
+
+    if {$message} {
 	set print_pass 1
     }
 
@@ -763,47 +817,72 @@ proc gdb_breakpoint { linespec args } {
 # just compare to "function" because it might be a fully qualified,
 # single quoted C++ function specifier.
 #
-# If there are additional arguments, pass them to gdb_breakpoint.
-# We recognize no-message/message ourselves as well as no-delete-brekpoints.
+# This proc recognizes the -no-message/-message, -no-delete-breakpoints
+# and -inferior-args options.  If there are additional arguments, pass
+# them to gdb_breakpoint.
 #
-# no-message is messed up here, like gdb_breakpoint: to preserve
+# -no-message is messed up here, like gdb_breakpoint: to preserve
 # historical usage fails are always printed by default.
-# no-message: turns off printing of fails (and passes, but they're already off)
-# message: turns on printing of passes (and fails, but they're already on)
+# -no-message: turns off printing of fails (and passes, but they're already off)
+# -message: turns on printing of passes (and fails, but they're already on)
 #
-# The 'no-delete-brekpoints' option stops this proc from deleting all
+# The -no-delete-breakpoints option stops this proc from deleting all
 # breakpoints.
+#
+# The -inferior-args option allows to specify arguments to pass to the
+# inferior.  For example, this would pass three arguments:
+#
+#     runto func -inferior-args "one two three"
 
 proc runto { linespec args } {
     global gdb_prompt
     global bkptno_numopt_re
     global decimal
 
-    if {[lsearch -exact $args no-delete-breakpoints] == -1} {
+    # Parse our own option only, forward the rest to gdb_breakpoint.
+    parse_some_args {
+	{no-delete-breakpoints}
+	{message}
+	{no-message}
+	{inferior-args ""}
+    }
+
+    if {!${no-delete-breakpoints}} {
 	delete_breakpoints
+    }
+
+    if {$message && ${no-message}} {
+	error "runto: -message and -no-message are mutually exclusive"
     }
 
     set print_pass 0
     set print_fail 1
-    set no_message_loc [lsearch -exact $args no-message]
-    set message_loc [lsearch -exact $args message]
-    # The last one to appear in args wins.
-    if { $no_message_loc > $message_loc } {
+
+    # Re-insert -message or -no-message into the args we pass to gdb_breakpoint,
+    # since it uses them as well.
+    set gdb_breakpoint_args $args
+
+    if {${no-message}} {
 	set print_fail 0
-    } elseif { $message_loc > $no_message_loc } {
+	lappend gdb_breakpoint_args -no-message
+    }
+
+    if {$message} {
 	set print_pass 1
+	lappend gdb_breakpoint_args -message
     }
 
     set test_name "runto: run to $linespec"
 
-    if {![gdb_breakpoint $linespec {*}$args]} {
+    if {![gdb_breakpoint $linespec {*}$gdb_breakpoint_args]} {
 	return 0
     }
 
-    gdb_run_cmd
+    gdb_run_cmd ${inferior-args}
 
     # the "at foo.c:36" output we get with -g.
     # the "in func" output we get without -g.
+    set opt_ansi_re "(:?\033\\\[.*m)?"
     gdb_expect {
 	-re "(?:Break|Temporary break).* at .*:.*$decimal.*$gdb_prompt $" {
 	    if { $print_pass } {
@@ -811,7 +890,7 @@ proc runto { linespec args } {
 	    }
 	    return 1
 	}
-	-re "(?:Breakpoint|Temporary breakpoint) $bkptno_numopt_re, \[0-9xa-f\]* in .*$gdb_prompt $" {
+	-re "(?:Breakpoint|Temporary breakpoint) $bkptno_numopt_re, ${opt_ansi_re}\[0-9xa-f\]*${opt_ansi_re} in .*$gdb_prompt $" {
 	    if { $print_pass } {
 		pass $test_name
 	    }
@@ -861,7 +940,7 @@ proc runto { linespec args } {
 # you don't want that then pass the 'no-delete-breakpoints' argument.
 
 proc runto_main { args } {
-    return [runto main qualified {*}$args]
+    return [runto main -qualified {*}$args]
 }
 
 ### Continue, and expect to hit a breakpoint.
@@ -1383,7 +1462,7 @@ proc gdb_test_multiple { command message args } {
 	    fail "$message"
 	    set result 1
 	}
-	-re "$inferior_exited_re with code \[0-9\]+.*$prompt_regexp" {
+	-re "$inferior_exited_re with code ${::decimal}.*$prompt_regexp" {
 	    if {![string match "" $message]} {
 		set errmsg "$message (the program exited)"
 	    } else {
@@ -2242,22 +2321,13 @@ gdb_caching_proc get_mount_point_map {} {
     return [list $sorted_win $sorted_unix]
 }
 
-# Normalize backward slashes to forward slashes.
-
-proc normalize_slashes {filename} {
-    return [string map {\\ /} $filename]
-}
-
 # Sanitize a host file name, without making it absolute or resolving
-# symlinks.  On native Windows, this normalizes slashes to forward
-# slashes, and makes sure that if the file name starts with a drive
-# letter, it is upper case.  On other systems, it just returns the
-# file name unmodified.
+# symlinks.  On native Windows, this makes sure that if the file name
+# starts with a drive letter, it is upper case.  On other systems, it
+# just returns the file name unmodified.
 
 proc host_file_sanitize {filename} {
     if {[ishost *-*-mingw*]} {
-	set filename [normalize_slashes $filename]
-
 	# If the file name starts with a drive letter, uppercase it.
 	if {[regexp {^([a-zA-Z]):(/.*)?} $filename -> drive rest]} {
 	    set filename "[string toupper $drive]:$rest"
@@ -2502,8 +2572,8 @@ proc default_gdb_exit {} {
 # but ran into a mess because of the many re-implementations of
 # gdb_load in config/*.exp.
 #
-# TODO: gdb.base/sepdebug.exp and gdb.stabs/weird.exp might be able to use
-# this if they can get more information set.
+# TODO: gdb.base/sepdebug.exp might be able to use this if it can get more
+# information set.
 
 proc gdb_file_cmd { arg {kill_flag 1} } {
     global gdb_prompt
@@ -2621,6 +2691,7 @@ proc gdb_file_cmd { arg {kill_flag 1} } {
 proc spawn_capture_tty_name { args } {
     set result [uplevel builtin_spawn $args]
     upvar spawn_out spawn_out
+    upvar spawn_id spawn_id
     if { [info exists spawn_out(slave,name)] } {
 	set ::last_spawn_tty_name $spawn_out(slave,name)
     } else {
@@ -2635,6 +2706,21 @@ proc spawn_capture_tty_name { args } {
 	# last_spawn_tty_name will already be unset, so, if we don't
 	# use -nocomplain here we would otherwise get an error.
 	unset -nocomplain ::last_spawn_tty_name
+    }
+    # Tcl 9.0 defaults spawn channels to iso8859-1/strict, which
+    # raises EILSEQ when non-Latin-1 characters (e.g. identifiers
+    # with UTF-8 letters) are written to or read from the channel.
+    # Use utf-8 instead.
+    #
+    # "catch" is used here because, unlike the other sites in this
+    # file where fconfigure is used, this use of fconfigure could
+    # attempt to modify channels which do not support these options.
+    # Those other sites use "fconfigure" on recently opened files
+    # where it will almost certainly work.  (And, for those other sites,
+    # if it doesn't work, we want to be notified of that fact via the
+    # normal Tcl error reporting mechanisms.)
+    if {[tcl_version_at_least 9 0 0]} {
+	catch {fconfigure $spawn_id -encoding utf-8 -profile replace}
     }
     return $result
 }
@@ -3503,7 +3589,7 @@ proc with_gdb_cwd { dir body } {
 	    exp_continue
 	}
 
-	-re "^\\\$$::decimal = 123\r\n" {
+	-re "^${::valnum_re} = 123\r\n" {
 	    set saw_result true
 	    exp_continue
 	}
@@ -5275,6 +5361,173 @@ gdb_caching_proc allow_aarch64_fpmr_tests {} {
     return $allow_fpmr_tests
 }
 
+# Run a test on the target to see if it supports AArch64 LRCPC3 (Load-Acquire
+# RCpc instructions) extensions.  Return 1 if so, 0 if it does not.  Note this
+# causes a restart of GDB.
+
+gdb_caching_proc allow_aarch64_lrcpc3_tests {} {
+    global srcdir subdir gdb_prompt inferior_exited_re
+
+    set me "allow_aarch64_lrcpc3_tests"
+
+    if { ![is_aarch64_target] } {
+	return 0
+    }
+
+    # Take the opportunity to check whether the toolchain knows about LRCPC3.
+    set compile_flags "{additional_flags=-march=armv8-a+rcpc3}"
+
+    # Compile a program that tests the LRCPC3 feature.
+    set src {
+	#include <stdbool.h>
+	#include <sys/auxv.h>
+
+	/* Feature check for LRCPC3.  */
+	#ifndef HWCAP2_LRCPC3
+	#define HWCAP2_LRCPC3 (1ULL << 46)
+	#endif
+
+	int main (void) {
+	    bool lrcpc3_supported = getauxval (AT_HWCAP2) & HWCAP2_LRCPC3;
+
+	    /* Return success if LRCPC3 is supported.  */
+	    return !lrcpc3_supported;
+	}
+    }
+
+    if {![gdb_simple_compile $me $src executable $compile_flags]} {
+	return 0
+    }
+
+    # Compilation succeeded so now run it via gdb.
+    clean_restart
+    gdb_load $obj
+    gdb_run_cmd
+    gdb_expect {
+    -re ".*$inferior_exited_re normally.*${gdb_prompt} $" {
+	    verbose -log "\n$me: lrcpc3 support detected"
+	    set allow_lrcpc3_tests 1
+	}
+	-re ".*$inferior_exited_re with code 01.*${gdb_prompt} $" {
+	    verbose -log "\n$me: lrcpc3 support not detected"
+	    set allow_lrcpc3_tests 0
+	}
+    }
+    gdb_exit
+    remote_file build delete $obj
+
+    verbose "$me:  returning $allow_lrcpc3_tests" 2
+    return $allow_lrcpc3_tests
+}
+
+# Run a test on the target to see if it supports the AArch64 CSSC feature.
+# Return 1 if so, 0 if it does not.  Note this causes a restart of GDB.
+
+gdb_caching_proc allow_aarch64_cssc_tests {} {
+    global srcdir subdir gdb_prompt inferior_exited_re
+
+    set me "allow_aarch64_cssc_tests"
+
+    if { ![is_aarch64_target]} {
+	return 0
+    }
+
+    set compile_flags "{additional_flags=-march=armv8-a+cssc}"
+
+    # Compile a test program reading CSSC.
+    set src {
+	int main() {
+	    asm volatile ("abs x0, x1" ::: "x0");
+	    return 0;
+	}
+    }
+
+    if {![gdb_simple_compile $me $src executable $compile_flags]} {
+	    return 0
+    }
+
+    # Compilation succeeded so now run it via gdb.
+    clean_restart
+    gdb_load $obj
+    gdb_run_cmd
+
+    gdb_expect {
+	-re ".*Illegal instruction.*${gdb_prompt} $" {
+	    verbose -log "\n$me cssc support not detected"
+	    set allow_cssc_tests 0
+	}
+	-re ".*$inferior_exited_re normally.*${gdb_prompt} $" {
+	    verbose -log "\n$me: cssc support detected"
+	    set allow_cssc_tests 1
+	}
+	default {
+	  warning "\n$me: default case taken"
+	    set allow_cssc_tests 0
+	}
+    }
+    gdb_exit
+    remote_file build delete $obj
+
+    verbose "$me:  returning $allow_cssc_tests" 2
+    return $allow_cssc_tests
+}
+
+# Run a test on the target to see if it supports the AArch64 LSE128 feature.
+# Return 1 if so, 0 if it does not.  Note this causes a restart of GDB.
+
+gdb_caching_proc allow_aarch64_lse128_tests {} {
+    global srcdir subdir gdb_prompt inferior_exited_re
+
+    set me "allow_aarch64_lse128_tests"
+
+    if { ![is_aarch64_target]} {
+	return 0
+    }
+
+    set compile_flags "{additional_flags=-march=armv8-a+lse128}"
+
+    # Compile a test program reading LSE128.
+    set src {
+    #include <stdint.h>
+
+    int main() {
+	    __attribute__((aligned(16))) uint64_t mem[2] = { 0x0, 0x1 };
+	    uint64_t *ptr = mem;
+	    __asm__ volatile ("ldclrp x0, x1, [%0]\n" :: "r"(ptr) : "x0", "x1", "memory");
+	    return 0;
+	}
+    }
+
+    if {![gdb_simple_compile $me $src executable $compile_flags]} {
+	    return 0
+    }
+
+    # Compilation succeeded so now run it via gdb.
+    clean_restart
+    gdb_load $obj
+    gdb_run_cmd
+
+    gdb_expect {
+	-re ".*Illegal instruction.*${gdb_prompt} $" {
+	    verbose -log "\n$me lse128 support not detected"
+	    set allow_lse128_tests 0
+	}
+	-re ".*$inferior_exited_re normally.*${gdb_prompt} $" {
+	    verbose -log "\n$me: lse128 support detected"
+	    set allow_lse128_tests 1
+	}
+	default {
+	  warning "\n$me: default case taken"
+	    set allow_lse128_tests 0
+	}
+    }
+    gdb_exit
+    remote_file build delete $obj
+
+    verbose "$me:  returning $allow_lse128_tests" 2
+    return $allow_lse128_tests
+}
+
 # Run a test on the target to see if it supports AArch64 MOPS (Memory
 # Operations) extensions.  Return 1 if so, 0 if it does not.  Note this
 # causes a restart of GDB.
@@ -5900,7 +6153,7 @@ proc test_compiler_info { {compiler ""} {language "c"} } {
 proc is_c_compiler_gcc {} {
     set compiler_info [test_compiler_info]
     set gcc_compiled false
-    regexp "^gcc-(\[0-9\]+)-" "$compiler_info" matchall gcc_compiled
+    regexp "^gcc-(${::decimal})-" "$compiler_info" matchall gcc_compiled
     return $gcc_compiled
 }
 
@@ -6116,6 +6369,10 @@ proc gdb_can_simple_compile_nodebug {name code {type object} {compile_flags ""}
 global gdb_saved_set_unbuffered_mode_obj
 set gdb_saved_set_unbuffered_mode_obj ""
 
+# The name of the set_unbuffered_mode_saved.o object.  Stored in a
+# global variable so it can be overridden in some cases.
+set gdb_saved_set_unbuffered_mode_obj_name set_unbuffered_mode_saved.o
+
 # Escape STR sufficiently for use on host commandline.
 
 proc escape_for_host { str } {
@@ -6189,6 +6446,7 @@ proc quote_for_host { args } {
 #     Fortran 90, Go or Rust.
 #   - debug: Build with debug information.
 #   - optimize: Build with optimization.
+#   - win32: Build a native Windows program.  Cygwin only.
 
 proc gdb_compile {source dest type options} {
     global GDB_TESTCASE_OPTIONS
@@ -6199,6 +6457,11 @@ proc gdb_compile {source dest type options} {
     global gdb_saved_set_unbuffered_mode_obj
 
     set outdir [file dirname $dest]
+
+    # Handle compiling native Windows programs when testing Cygwin.
+    if { [istarget *-*-cygwin*] && [lsearch -exact $options win32] != -1} {
+	return [gdb_compile_win32 $source $dest $type $options]
+    }
 
     # GDB doesn't support minimal symbols in AIX, so fail the compilation
     # if nodebug is requested for an AIX target.
@@ -6482,11 +6745,35 @@ proc gdb_compile {source dest type options} {
 	lappend new_options "early_flags=-fno-stack-protector"
     }
 
-    # hipcc defaults to -O2, so add -O0 to early flags for the hip language.
-    # If "optimize" is also requested, another -O flag (e.g. -O2) will be added
-    # to the flags, overriding this -O0.
     if {[lsearch -exact $options hip] != -1} {
-	lappend new_options "early_flags=-O0"
+	# The -g option enables an LLVM option that is essential for
+	# debugging (-mllvm -amdgpu-spill-cfi-saved-regs), but that
+	# unfortunately also affects code generation.  We don't want
+	# to hardcode -g here though, because some tests want to test
+	# debugging without debug info, and yet others want to compile
+	# their binary without debug info or with -gline-info-only,
+	# and then use the DWARF assembler to generate their own debug
+	# info.  Some features of the DWARF assembler rely on nodebug
+	# and debug binaries having the exact same generated code, so,
+	# explicitly compile with the LLVM option that -g would
+	# enable, and leave adding -g to the testcase, via the "debug"
+	# option, as normal.
+	#
+	# Disable -Wunused-command-line-argument to avoid warnings
+	# like:
+	#
+	#  clang: warning: argument unused during compilation: \
+	#    '-mllvm=-amdgpu-spill-cfi-saved-regs' [-Wunused-command-line-argument]
+	#
+	# These happen when we're compiling an executable _and_ all
+	# the input files are .o files, like: hipcc foo.o -o foo ...
+	#
+	# HIPCC defaults to -O2, so add -O0 to early flags for the HIP
+	# language.  If "optimize" is also requested, another -O flag
+	# (e.g. -O2) will be added to the flags, overriding this -O0.
+	lappend new_options "early_flags=-O0\
+			     -mllvm=-amdgpu-spill-cfi-saved-regs\
+			     -Wno-unused-command-line-argument"
     }
 
     # Because we link with libraries using their basename, we may need
@@ -6595,7 +6882,7 @@ proc gdb_compile {source dest type options} {
 	      || [istarget "*-*-*djgpp"]
 	      || [istarget "*-*-cygwin*"])} {
 	    # Force output to unbuffered mode, by linking in an object file
-	    # with a global contructor that calls setvbuf.
+	    # with a global constructor that calls setvbuf.
 	    #
 	    # Compile the special object separately for two reasons:
 	    #  1) Insulate it from $options.
@@ -6623,9 +6910,11 @@ proc gdb_compile {source dest type options} {
 		    return $result
 		}
 		if {[is_remote host]} {
-		    set gdb_saved_set_unbuffered_mode_obj set_unbuffered_mode_saved.o
+		    set gdb_saved_set_unbuffered_mode_obj \
+			$::gdb_saved_set_unbuffered_mode_obj_name
 		} else {
-		    set gdb_saved_set_unbuffered_mode_obj ${objdir}/set_unbuffered_mode_saved.o
+		    set gdb_saved_set_unbuffered_mode_obj \
+			${objdir}/$::gdb_saved_set_unbuffered_mode_obj_name
 		}
 		# Link a copy of the output object, because the
 		# original may be automatically deleted.
@@ -6989,6 +7278,38 @@ proc gdb_compile_objc {source dest type options} {
 proc gdb_compile_openmp {source dest type options} {
     lappend options "additional_flags=-fopenmp"
     return [gdb_compile $source $dest $type $options]
+}
+
+# Build a native Windows program from SOURCE.  See prefatory comment
+# for gdb_compile, above, for discussion of the parameters to this
+# proc.  This is meant to be used on Cygwin, to smoke test debugging
+# native Windows programs with the Cygwin native backend.
+
+proc gdb_compile_win32 {source dest type options} {
+    if {![istarget *-*-cygwin*]} {
+	error "cygwin procedure called on non-cygwin target"
+    }
+
+    save_vars {
+	::target_triplet
+	::CC_FOR_TARGET
+	::gdb_saved_set_unbuffered_mode_obj
+	::gdb_saved_set_unbuffered_mode_obj_name
+    } {
+	# So we trigger the set_unbuffered_mode_obj paths.
+	set ::target_triplet "x86_64-w64-mingw32"
+
+	# We need a Win32-specific compilation of the
+	# set_unbuffered_mode object.
+	set ::gdb_saved_set_unbuffered_mode_obj ""
+	set ::gdb_saved_set_unbuffered_mode_obj_name \
+	    set_unbuffered_mode_saved_win32.o
+
+	# Do this last, as this tries compiling internally.
+	set ::CC_FOR_TARGET [win32_cc_for_target]
+
+	return [gdb_compile $source $dest $type $options]
+    }
 }
 
 # Send a command to GDB.
@@ -8552,6 +8873,10 @@ proc gdb_get_line_number { text { file "" } } {
 	error "$message"
     }
 
+    if {[tcl_version_at_least 9 0 0]} {
+	fconfigure $fd -encoding utf-8 -profile replace
+    }
+
     set found -1
     for { set line 1 } { 1 } { incr line } {
 	if {[catch { set nchar [gets "$fd" body] } message]} {
@@ -9315,7 +9640,7 @@ proc build_executable_from_specs {testname executable options args} {
 }
 
 # Build executable named EXECUTABLE, from SOURCES.  If SOURCES are not
-# provided, uses $EXECUTABLE.c.  The TESTNAME paramer is the name of test
+# provided, uses $EXECUTABLE.c.  The TESTNAME parameter is the name of test
 # to pass to untested, if something is wrong.  OPTIONS are passed
 # to gdb_compile directly.
 proc build_executable { testname executable {sources ""} {options {debug}} } {
@@ -9418,7 +9743,7 @@ proc get_valueof { fmt exp default {test ""} } {
 
     set val ${default}
     gdb_test_multiple "print${fmt} ${exp}" "$test" {
-	-re -wrap "^\\$\[0-9\]* = (\[^\r\n\]*)" {
+	-re -wrap "^${::valnum_re} = (\[^\r\n\]*)" {
 	    set val $expect_out(1,string)
 	    pass "$test"
 	}
@@ -9467,7 +9792,7 @@ proc get_integer_valueof { exp default {test ""} } {
 
     set val ${default}
     gdb_test_multiple "print /d ${exp}" "$test" {
-	-re -wrap "^\\$\[0-9\]* = (\[-\]*\[0-9\]*).*" {
+	-re -wrap "^${::valnum_re} = (\[-\]*\[0-9\]*).*" {
 	    set val $expect_out(1,string)
 	    pass "$test"
 	}
@@ -9492,7 +9817,7 @@ proc get_hexadecimal_valueof { exp default {test ""} } {
 
     set val ${default}
     gdb_test_multiple "print /x ${exp}" $test {
-	-re "\\$\[0-9\]* = (0x\[0-9a-zA-Z\]+).*$gdb_prompt $" {
+	-re "${::valnum_re} = (0x\[0-9a-zA-Z\]+).*$gdb_prompt $" {
 	    set val $expect_out(1,string)
 	    pass "$test"
 	}
@@ -9536,7 +9861,7 @@ proc get_var_address { var } {
     # $6 = (int (*)()) 0x24 <function_bar>
 
     gdb_test_multiple "print &${var}" "get address of ${var}" {
-	-re "\\\$\[0-9\]+ = \\(.*\\) (0|$hex)( <${var}>)?\[\r\n\]+${gdb_prompt} $"
+	-re "${::valnum_re} = \\(.*\\) (0|$hex)( <${var}>)?\[\r\n\]+${gdb_prompt} $"
 	{
 	    pass "get address of ${var}"
 	    if { $expect_out(1,string) == "0" } {
@@ -9558,7 +9883,7 @@ proc get_current_frame_number {{test_name ""}} {
     }
     set frame_num -1
     gdb_test_multiple "frame" $test_name {
-	-re "#(\[0-9\]+) .*$gdb_prompt $" {
+	-re "#(${::decimal}) .*$gdb_prompt $" {
 	    set frame_num $expect_out(1,string)
 	}
     }
@@ -10403,6 +10728,11 @@ proc gdb_stdin_log_init { } {
     set logfile [standard_output_file_with_gdb_instance gdb.in]
     set in_file [open $logfile w]
 
+    if {[tcl_version_at_least 9 0 0]} {
+	# Tcl 9 strict profile: gdb.in must accept UTF-8 command strings.
+	fconfigure $in_file -encoding utf-8 -profile replace
+    }
+
     verbose -log ""
     verbose -log "Starting logfile: $logfile"
     verbose -log ""
@@ -10568,28 +10898,6 @@ proc have_index { objfile } {
     }
 }
 
-# Verify that partial symtab expansion for $filename has state $readin.
-
-proc verify_psymtab_expanded { filename readin } {
-    global gdb_prompt
-
-    set cmd "maint info psymtab"
-    set test "$cmd: $filename: $readin"
-    set re [multi_line \
-		"  \{ psymtab \[^\r\n\]*$filename\[^\r\n\]*" \
-		"    readin $readin" \
-		".*"]
-
-    gdb_test_multiple $cmd $test {
-	-re "$cmd\r\n$gdb_prompt $" {
-	    unsupported $gdb_test_name
-	}
-	-re -wrap $re {
-	    pass $gdb_test_name
-	}
-    }
-}
-
 # Add a .gdb_index section to PROGRAM.
 # PROGRAM is assumed to be the output of standard_output_file.
 # Returns the 0 if there is a failure, otherwise 1.
@@ -10669,7 +10977,7 @@ proc get_index_type { objfile { testname "" } } {
     return $index_type
 }
 
-# Add a .gdb_index section to PROGRAM, unless it alread has an index
+# Add a .gdb_index section to PROGRAM, unless it already has an index
 # (.gdb_index/.debug_names).  Gdb doesn't support building an index from a
 # program already using one.  Return 1 if a .gdb_index was added, return 0
 # if it already contained an index, and -1 if an error occurred.
@@ -10874,7 +11182,7 @@ gdb_caching_proc have_fvar_tracking {} {
 # Return 1 if linker supports -Ttext-segment, otherwise return 0.
 gdb_caching_proc linker_supports_Ttext_segment_flag {} {
     set me "linker_supports_Ttext_segment_flag"
-    set flags ldflags="-Wl,-Ttext-segment=0x7000000"
+    set flags ldflags=[quote_for_host -Wl,-Ttext-segment=0x7000000]
     set src { int main() { return 0; } }
     return [gdb_simple_compile $me $src executable $flags]
 }
@@ -10882,7 +11190,7 @@ gdb_caching_proc linker_supports_Ttext_segment_flag {} {
 # Return 1 if linker supports -Ttext, otherwise return 0.
 gdb_caching_proc linker_supports_Ttext_flag {} {
     set me "linker_supports_Ttext_flag"
-    set flags ldflags="-Wl,-Ttext=0x7000000"
+    set flags ldflags=[quote_for_host -Wl,-Ttext=0x7000000]
     set src { int main() { return 0; } }
     return [gdb_simple_compile $me $src executable $flags]
 }
@@ -10890,7 +11198,7 @@ gdb_caching_proc linker_supports_Ttext_flag {} {
 # Return 1 if linker supports --image-base, otherwise 0.
 gdb_caching_proc linker_supports_image_base_flag {} {
     set me "linker_supports_image_base_flag"
-    set flags ldflags="-Wl,--image-base=0x7000000"
+    set flags ldflags=[quote_for_host -Wl,--image-base=0x7000000]
     set src { int main() { return 0; } }
     return [gdb_simple_compile $me $src executable $flags]
 }
@@ -11149,7 +11457,7 @@ gdb_caching_proc has_hw_wp_support {} {
 	}
 	-re ".*$gdb_prompt $" {
 	    set has_hw_wp_support 0
-	    verbose -log "\n$me: Default, hardware watchpoint not deteced"
+	    verbose -log "\n$me: Default, hardware watchpoint not detected"
 	}
     }
 
@@ -11247,6 +11555,62 @@ gdb_caching_proc arm_cc_for_target {} {
 
 	    if { $output == "" && $status == 0} {
 		return $compiler
+	    }
+	}
+    }
+
+    return ""
+}
+
+# Return the compiler that can generate native Windows executables.
+# Used when testing basic native Windows support on Cygwin.  If
+# WIN32_CC_FOR_TARGET is set, use that.  If not, try a few common
+# compiler names, making sure that the executable they produce can
+# run.  Note, this assumes global state has been set to target native
+# Windows programs.  See gdb_compile_win32.
+
+gdb_caching_proc win32_cc_for_target {} {
+    if {[info exists ::WIN32_CC_FOR_TARGET]} {
+	# If the user specified the compiler explicitly, then don't
+	# check whether the resulting binary runs outside GDB.  Assume
+	# that it does, and if it turns out it doesn't, then the user
+	# should get loud FAILs, instead of UNSUPPORTED.
+	return $::WIN32_CC_FOR_TARGET
+    }
+
+    # Fallback to a few common compiler names.  Also confirm the
+    # produced binary actually runs on the system before declaring
+    # we've found the right compiler.
+
+    # Only one compiler for now.
+    set compilers {
+	x86_64-w64-mingw32-gcc
+    }
+
+    save_vars {
+	::CC_FOR_TARGET
+    } {
+	foreach compiler $compilers {
+	    if {![is_remote host] && [which $compiler] == 0} {
+		# Avoid "default_target_compile: Can't find
+		# $compiler." warning issued from gdb_compile.
+		continue
+	    }
+
+	    set ::CC_FOR_TARGET $compiler
+
+	    set src { int main() { return 0; } }
+	    if {[gdb_simple_compile win32-test-prog $src executable]} {
+		set target_obj [gdb_remote_download target $obj]
+		set result [remote_exec target $target_obj]
+		set status [lindex $result 0]
+		set output [lindex $result 1]
+
+		file delete $obj
+
+		if { $output == "" && $status == 0} {
+		    return $compiler
+		}
 	    }
 	}
     }
@@ -11520,6 +11884,9 @@ proc auto_lappend_include_files_1 {flags source {visited {}}} {
     if {[catch {open $source r} fh err]} {
 	error "Failed to open file '$source': $err"
     }
+    if {[tcl_version_at_least 9 0 0]} {
+	fconfigure $fh -encoding utf-8 -profile replace
+    }
     set contents [read $fh]
     close $fh
 
@@ -11625,7 +11992,7 @@ gdb_caching_proc root_user {} {
 	return 0
     }
 
-    regexp -all ".*uid=(\[0-9\]+).*" $output dummy uid
+    regexp -all ".*uid=(${::decimal}).*" $output dummy uid
 
     return [expr {$uid == 0}]
 }
@@ -11810,6 +12177,8 @@ proc dwz_version { } {
 proc dwz_version_at_least { ver } {
     return [version_compare [split $ver .] <= [dwz_version]]
 }
+
+require {tcl_version_at_least 8 6 2}
 
 # Always load compatibility stuff.
 load_lib future.exp

@@ -29,6 +29,9 @@ using namespace windows_nat;
 struct aarch64_windows_per_inferior : public windows_per_inferior
 {
   aarch64_debug_reg_state dr_state;
+
+  void fill_thread_context (windows_thread_info *th) override;
+  void invalidate_thread_context (windows_thread_info *th) override;
 };
 
 struct aarch64_windows_nat_target final
@@ -40,10 +43,8 @@ struct aarch64_windows_nat_target final
   void initialize_windows_arch (bool attaching) override;
   void cleanup_windows_arch () override;
 
-  void fill_thread_context (windows_thread_info *th) override;
-
   void thread_context_continue (windows_thread_info *th, int killed) override;
-  void thread_context_step (windows_thread_info *th) override;
+  void thread_context_step (windows_thread_info *th, bool step) override;
 
   void fetch_one_register (struct regcache *regcache,
 			   windows_thread_info *th, int r) override;
@@ -135,12 +136,17 @@ const int aarch64_mappings[] =
 std::vector<CORE_ADDR>
 aarch64_windows_nat_target::stopped_data_addresses ()
 {
-  if (aarch64_windows_process.siginfo_er.ExceptionCode != EXCEPTION_BREAKPOINT
-      || aarch64_windows_process.siginfo_er.NumberParameters != 2)
+  windows_thread_info *th = aarch64_windows_process.find_thread (inferior_ptid);
+  if (th == nullptr
+      || th->last_event.dwDebugEventCode != EXCEPTION_DEBUG_EVENT)
     return {};
 
-  const CORE_ADDR addr_trap
-    = (CORE_ADDR) aarch64_windows_process.siginfo_er.ExceptionInformation[1];
+  EXCEPTION_RECORD &er = th->last_event.u.Exception.ExceptionRecord;
+  if (er.ExceptionCode != EXCEPTION_BREAKPOINT
+      || er.NumberParameters != 2)
+    return {};
+
+  const CORE_ADDR addr_trap = (CORE_ADDR) er.ExceptionInformation[1];
 
   struct aarch64_debug_reg_state *state
     = aarch64_get_debug_reg_state (inferior_ptid.pid ());
@@ -174,15 +180,27 @@ aarch64_windows_nat_target::cleanup_windows_arch ()
   aarch64_remove_debug_reg_state (inferior_ptid.pid ());
 }
 
-/* See windows-nat.h.  */
+/* See nat/windows-nat.h.  */
 
 void
-aarch64_windows_nat_target::fill_thread_context (windows_thread_info *th)
+aarch64_windows_per_inferior::fill_thread_context (windows_thread_info *th)
 {
   CONTEXT *context = &th->context;
 
-  context->ContextFlags = WindowsContext<decltype(context)>::all;
-  CHECK (get_thread_context (th->h, context));
+  if (context->ContextFlags == 0)
+    {
+      context->ContextFlags = WindowsContext<decltype(context)>::all;
+      CHECK (get_thread_context (th->h, context));
+    }
+}
+
+/* See windows-nat.h.  */
+
+void
+aarch64_windows_per_inferior::invalidate_thread_context (windows_thread_info *th)
+{
+  CONTEXT *context = &th->context;
+  context->ContextFlags = 0;
 }
 
 /* See windows-nat.h.  */
@@ -228,9 +246,13 @@ aarch64_windows_nat_target::thread_context_continue (windows_thread_info *th,
 /* See windows-nat.h.  */
 
 void
-aarch64_windows_nat_target::thread_context_step (windows_thread_info *th)
+aarch64_windows_nat_target::thread_context_step (windows_thread_info *th,
+						 bool enable)
 {
-  th->context.Cpsr |= 0x200000;
+  if (enable)
+    th->context.Cpsr |= 0x200000;
+  else
+    th->context.Cpsr &= ~0x200000;
 }
 
 /* See windows-nat.h.  */
@@ -240,7 +262,6 @@ aarch64_windows_nat_target::fetch_one_register (struct regcache *regcache,
 						windows_thread_info *th, int r)
 {
   gdb_assert (r >= 0);
-  gdb_assert (!th->reload_context);
 
   char *context_ptr = (char *) &th->context;
   char *context_offset = context_ptr + aarch64_windows_process.mappings[r];
@@ -271,6 +292,7 @@ aarch64_windows_nat_target::store_one_register (const struct regcache *regcache,
 						windows_thread_info *th, int r)
 {
   gdb_assert (r >= 0);
+  gdb_assert (th->context.ContextFlags != 0);
 
   char *context_ptr = (char *) &th->context;
 
@@ -299,8 +321,7 @@ aarch64_notify_debug_reg_change (ptid_t ptid,
     = aarch64_get_debug_reg_state (inferior_ptid.pid ());
   aarch64_windows_process.dr_state = *state;
 
-  for (auto &th : aarch64_windows_process.thread_list)
-    th->debug_registers_changed = true;
+  windows_debug_registers_changed_all_threads ();
 }
 
 INIT_GDB_FILE (aarch64_windows_nat)

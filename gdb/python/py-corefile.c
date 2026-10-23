@@ -23,22 +23,17 @@
 #include "inferior.h"
 #include "gdbcore.h"
 #include "gdbsupport/rsp-low.h"
+#include "py-event.h"
 
 /* A gdb.Corefile object.  */
 
-struct corefile_object
+struct corefile_object : public gdbpy_dict_wrapper
 {
-  PyObject_HEAD
-
   /* The inferior this core file is attached to.  This will be set to NULL
      when the inferior is deleted, or if a different core file is loaded
      for the inferior.  When this is NULL the gdb.Corefile object is
      considered invalid.*/
   struct inferior *inferior;
-
-  /* Dictionary holding user-added attributes.  This is the __dict__
-     attribute of the object.  This is an owning reference.  */
-  PyObject *dict;
 
   /* A Tuple of gdb.CorefileMappedFile objects.  This tuple is only created
      the first time the user calls gdb.Corefile.mapped_files(), the result
@@ -51,10 +46,8 @@ extern PyTypeObject corefile_object_type;
 
 /* A gdb.CorefileMapped object.  */
 
-struct corefile_mapped_file_object
+struct corefile_mapped_file_object : public PyObject
 {
-  PyObject_HEAD
-
   /* The name of a file that was mapped when the core file was created.
      This is a 'str' object.  */
   PyObject *filename;
@@ -72,14 +65,14 @@ struct corefile_mapped_file_object
   bool is_main_exec_p;
 };
 
+static_assert (gdb::is_python_allocatable_v<corefile_mapped_file_object>);
+
 extern PyTypeObject corefile_mapped_file_object_type;
 
 /* A gdb.CorefileMappedFileRegion object.  */
 
-struct corefile_mapped_file_region_object
+struct corefile_mapped_file_region_object : public PyObject
 {
-  PyObject_HEAD
-
   /* The start and end addresses for this mapping, these are addresses
      within the inferior's address space.  */
   CORE_ADDR start;
@@ -88,6 +81,8 @@ struct corefile_mapped_file_region_object
   /* The offset within the mapped file for this mapping.  */
   ULONGEST file_offset;
 };
+
+static_assert (gdb::is_python_allocatable_v<corefile_mapped_file_region_object>);
 
 extern PyTypeObject corefile_mapped_file_region_object_type;
 
@@ -126,36 +121,35 @@ gdbpy_core_file_from_inferior (inferior *inf)
   gdb_assert (inf->pspace != nullptr);
 
   if (get_inferior_core_bfd (inf) == nullptr)
-    return gdbpy_ref<>::new_reference (Py_None);
+    return py_none ();
 
   PyObject *result = (PyObject *) cfpy_inferior_corefile_data_key.get (inf);
-  if (result == nullptr)
-    {
-      gdbpy_ref<corefile_object> object
-	(PyObject_New (corefile_object, &corefile_object_type));
-      if (object == nullptr)
-	return nullptr;
+  if (result != nullptr)
+    return gdbpy_ref<>::new_reference (result);
 
-      /* Ensure the 'inferior' field is set to NULL.  If the PyDict_New
-	 call fails then the gdb.Corefile will be discarded and
-	 cfpy_dealloc will be called, which requires that the 'inferior' be
-	 set to NULL.  */
-      object->inferior = nullptr;
-      object->mapped_files = nullptr;
-      object->dict = PyDict_New ();
-      if (object->dict == nullptr)
-	return nullptr;
+  gdbpy_ref<corefile_object> object
+    (PyObject_New (corefile_object, &corefile_object_type));
+  if (object == nullptr)
+    return nullptr;
 
-      /* Now that the gdb.Corefile has been successfully initialised and we
-	 know that it is going to be passed back to the user, move it out
-	 of the invalid state by setting the 'inferior' field to a non NULL
-	 value.  */
-      object->inferior = inf;
-      cfpy_inferior_corefile_data_key.set (inf, object.get ());
-      result = (PyObject *) object.release ();
-    }
+  /* Ensure the 'inferior' field is set to NULL.  If the PyDict_New call fails
+     then the gdb.Corefile will be discarded and cfpy_dealloc will be called,
+     which requires that the 'inferior' be set to NULL.  */
+  object->inferior = nullptr;
+  object->mapped_files = nullptr;
+  if (!object->allocate_dict ())
+    return nullptr;
 
-  return gdbpy_ref<>::new_reference (result);
+  /* Now that the gdb.Corefile has been successfully initialised and we know
+     that it is going to be passed back to the user, move it out of the invalid
+     state by setting the 'inferior' field to a non NULL value.  */
+  object->inferior = inf;
+
+  /* PyObject_New initializes the new object with a refcount of 1.  This counts
+     for the reference we are keeping in the inferior corefile data.  */
+  cfpy_inferior_corefile_data_key.set (inf, object.get ());
+
+  return gdbpy_ref<>::new_reference (object.release ());
 }
 
 /* Return true if OBJ is valid.  */
@@ -209,9 +203,9 @@ cfpy_is_valid (PyObject *self, PyObject *args)
   corefile_object *obj = (corefile_object *) self;
 
   if (!cfpy_corefile_object_is_valid (obj))
-    Py_RETURN_FALSE;
+    return py_false ().release ();
 
-  Py_RETURN_TRUE;
+  return py_true ().release ();
 }
 
 /* Implement gdb.Corefile.mapped_files ().  Return a List of
@@ -275,7 +269,7 @@ cfpy_mapped_files (PyObject *self, PyObject *args)
 	    return nullptr;
 	}
       else
-	build_id = gdbpy_ref<>::new_reference (Py_None);
+	build_id = py_none ();
 
       /* List to hold all the gdb.CorefileMappedFileRegion objects.  */
       gdbpy_ref<> regions (PyTuple_New (file.regions.size ()));
@@ -331,13 +325,47 @@ cfpy_mapped_files (PyObject *self, PyObject *args)
   return obj->mapped_files;
 }
 
-/* Callback from gdb::observers::core_file_changed.  The core file in
-   PSPACE has been changed.  */
+/* Emit a CorefileChangedEvent event, INF is the inferior in which the core
+   file changed.  Return 0 on success, or a negative value on error.  */
+
+static int
+emit_corefile_changed_event (inferior *inf)
+{
+  /* If there are no listeners then we are done.  */
+  if (evregpy_no_listeners_p (gdb_py_events.corefile_changed))
+    return 0;
+
+  gdbpy_ref<> event_obj
+    = create_event_object (&corefile_changed_event_object_type);
+  if (event_obj == nullptr)
+    return -1;
+
+  gdbpy_ref<inferior_object> inf_obj = inferior_to_inferior_object (inf);
+  if (inf_obj == nullptr
+      || evpy_add_attribute (event_obj.get (), "inferior",
+			     inf_obj.get ()) < 0)
+    return -1;
+
+  return evpy_emit_event (event_obj.get (), gdb_py_events.corefile_changed);
+}
+
+/* Callback from gdb::observers::core_file_changed.  The core file for
+   INF has been changed.  */
 
 static void
 cfpy_corefile_changed (inferior *inf)
 {
+  /* It's safe to do this even if Python is not initialized, but there
+     should be nothing to clear in that case.  */
   cfpy_inferior_corefile_data_key.clear (inf);
+
+  if (!gdb_python_initialized)
+    return;
+
+  gdbpy_enter enter_py;
+
+  if (emit_corefile_changed_event (inf) < 0)
+    gdbpy_print_stack ();
 }
 
 /* Called when a gdb.Corefile is destroyed.  */
@@ -372,7 +400,7 @@ cfpy_repr (PyObject *self)
   bfd *core_bfd = get_inferior_core_bfd (obj->inferior);
   gdb_assert (core_bfd != nullptr);
   return PyUnicode_FromFormat ("<%s inferior=%d filename='%s'>",
-			       Py_TYPE (self)->tp_name,
+			       gdbpy_py_obj_tp_name (self).c_str (),
 			       obj->inferior->num,
 			       bfd_get_filename (core_bfd));
 }
@@ -445,9 +473,9 @@ cfmf_is_main_exec (PyObject *self, void *closure)
     = (corefile_mapped_file_object *) self;
 
   if (obj->is_main_exec_p)
-    Py_RETURN_TRUE;
+    return py_true ().release ();
   else
-    Py_RETURN_FALSE;
+    return py_false ().release ();
 }
 
 
@@ -511,8 +539,7 @@ GDBPY_INITIALIZE_FILE (gdbpy_initialize_corefile);
 
 static gdb_PyGetSetDef corefile_getset[] =
 {
-  { "__dict__", gdb_py_generic_dict, nullptr,
-    "The __dict__ for the gdb.Corefile.", &corefile_object_type },
+  gdbpy_dict_wrapper_cfg_dict_getter ("corefile"),
   { "filename", cfpy_get_filename, nullptr,
     "The filename of a valid Corefile object.", nullptr },
   { nullptr }
@@ -548,8 +575,7 @@ PyTypeObject corefile_object_type =
   0,				  /*tp_hash */
   0,				  /*tp_call*/
   0,				  /*tp_str*/
-  0,				  /*tp_getattro*/
-  0,				  /*tp_setattro*/
+  gdbpy_dict_wrapper_getsetattro,
   0,				  /*tp_as_buffer*/
   Py_TPFLAGS_DEFAULT,		  /*tp_flags*/
   "GDB corefile object",	  /* tp_doc */
@@ -566,7 +592,7 @@ PyTypeObject corefile_object_type =
   0,				  /* tp_dict */
   0,				  /* tp_descr_get */
   0,				  /* tp_descr_set */
-  offsetof (corefile_object, dict), /* tp_dictoffset */
+  0,				  /* tp_dictoffset */
   0,				  /* tp_init */
   0,				  /* tp_alloc */
   0,				  /* tp_new */

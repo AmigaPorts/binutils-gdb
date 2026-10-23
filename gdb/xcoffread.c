@@ -28,12 +28,14 @@
 #include "xcoffread.h"
 
 #include "symtab.h"
+#include "minsyms.h"
 #include "gdbtypes.h"
 #include "symfile.h"
 #include "objfiles.h"
 #include "complaints.h"
 #include "dwarf2/sect-names.h"
 #include "dwarf2/public.h"
+#include "cli/cli-style.h"
 
 struct xcoff_symfile_info
 {
@@ -133,8 +135,9 @@ xcoff_find_toc_offset (objfile *objfile)
 
   /* Seek to symbol table location.  */
   if (bfd_seek (abfd, symtab_offset, SEEK_SET) < 0)
-    error (_("Error reading symbols from %s: %s"),
-	   objfile_name (objfile), bfd_errmsg (bfd_get_error ()));
+    error (_("Error reading symbols from %ps: %s"),
+	   styled_string (file_name_style.style (), objfile_name (objfile)),
+	   bfd_errmsg (bfd_get_error ()));
 
   unsigned int num_symbols = bfd_get_symcount (abfd);
   size_t size = coff_data (abfd)->local_symesz * num_symbols;
@@ -232,6 +235,87 @@ xcoff_get_toc_offset (objfile *objfile)
   return 0;
 }
 
+/* This function is used to read minimal symbols from the XCOFF STABS
+   symbol table. This function needs to be called when a library (like
+   libc) in AIX is compiled using xlc whose debug format is STABS.
+   When STABS debug information is not available, then in the backtrace
+   or other GDB features the STABS compiled functions like (printf)
+   will not be seen. Though we no longer support STABS debug, this
+   function records minimal symbol or information needed to show
+   such functions in backtrace.  */
+
+static void
+read_xcoff_minimal_symbols (objfile *objfile)
+{
+  bfd *abfd = objfile->obfd.get ();
+
+  gdb::array_view<asymbol *> symbol_table
+    = gdb_bfd_canonicalize_symtab (abfd, false);
+  /* Get the number of symbols we need.  */
+  int number_of_symbols = symbol_table.size ();
+
+  /* Return on error.  */
+  if (number_of_symbols == 0)
+    return;
+
+  minimal_symbol_reader reader (objfile);
+  for (int i = 0; i < number_of_symbols; i++)
+    {
+      asymbol *sym = symbol_table[i];
+      flagword sym_flags = sym->flags;
+      CORE_ADDR sym_value = bfd_asymbol_value (sym);
+      asection *sym_section = bfd_asymbol_section (sym);
+      enum minimal_symbol_type ms_type = mst_unknown;
+      const char *sym_name = bfd_asymbol_name (sym);
+
+      /* Skip undefined sections if any.  */
+      if (sym_section == bfd_und_section_ptr)
+	continue;
+
+      /* Skip undefined, special symbols and debugging symbols.  */
+      if (sym_flags & (BSF_DEBUGGING | BSF_SECTION_SYM))
+	continue;
+
+      /* We need to pass ms_type when we record. So find the symbol type.  */
+
+      /* If this is an object file.  */
+      if (sym_flags & BSF_OBJECT)
+	{
+	  /* Code section.  */
+	  if (sym_section && (bfd_section_flags (sym_section) & SEC_CODE))
+	    ms_type = mst_text;
+	  /* Data section.  */
+	  else if (sym_section && (bfd_section_flags (sym_section) & SEC_DATA))
+	    ms_type = mst_data;
+	  /* BSS section.  */
+	  else if (sym_section && (bfd_section_flags (sym_section) & SEC_ALLOC))
+	    ms_type = mst_bss;
+	  else
+	    ms_type = mst_unknown;
+	}
+      /* Check for symbols marked as functions explicitly.  */
+      else if (sym_flags & BSF_FUNCTION)
+	  ms_type = mst_text;
+      /* Section Based Guess. Code or Data or BSS. */
+      else if (sym_section)
+	{
+	  if (bfd_section_flags (sym_section) & SEC_CODE)
+	    ms_type = mst_text;
+	  else if (bfd_section_flags (sym_section) & SEC_DATA)
+	    ms_type = mst_data;
+	  else if (bfd_section_flags (sym_section) & SEC_ALLOC)
+	    ms_type = mst_bss;
+	}
+
+      /* Add the symbol if it's global or weak */
+      if ((sym_flags & (BSF_GLOBAL | BSF_WEAK)) && sym_name && *sym_name)
+	reader.record_with_info (sym_name, unrelocated_addr (sym_value), ms_type,
+				   gdb_bfd_section_index (abfd, sym_section));
+    }
+
+  reader.install ();
+}
+
 /* Read the XCOFF symbol table.  The only thing we are interested in is the TOC
    offset value.  */
 
@@ -239,6 +323,11 @@ static void
 xcoff_symfile_read (objfile *objfile, symfile_add_flags symfile_flags)
 {
   xcoff_find_toc_offset (objfile);
+
+  /* Read minimal symbols from the STABS symbol table of an XCOFF binary
+     This makes sure we see functions from libc given libraries link to
+     it and libc in AIX may not be DWARF compiled. . */
+  read_xcoff_minimal_symbols (objfile);
 
   /* DWARF2 sections.  */
   dwarf2_initialize_objfile (objfile, &dwarf2_xcoff_names);
@@ -262,20 +351,17 @@ xcoff_symfile_offsets (objfile *objfile, const section_addr_info &addrs)
   const char *first_section_name
     = bfd_section_name (objfile->sections_start[0].the_bfd_section);
 
-  if (objfile->sect_index_text == 0
-      && strcmp (first_section_name, ".text") != 0)
+  if (objfile->sect_index_text == 0 && !streq (first_section_name, ".text"))
     objfile->sect_index_text = -1;
 
-  if (objfile->sect_index_data == 0
-      && strcmp (first_section_name, ".data") != 0)
+  if (objfile->sect_index_data == 0 && !streq (first_section_name, ".data"))
     objfile->sect_index_data = -1;
 
-  if (objfile->sect_index_bss == 0
-      && strcmp (first_section_name, ".bss") != 0)
+  if (objfile->sect_index_bss == 0 && !streq (first_section_name, ".bss"))
     objfile->sect_index_bss = -1;
 
   if (objfile->sect_index_rodata == 0
-      && strcmp (first_section_name, ".rodata") != 0)
+      && !streq (first_section_name, ".rodata"))
     objfile->sect_index_rodata = -1;
 }
 

@@ -196,7 +196,7 @@ ftrace_function_switched (const struct btrace_function *bfun,
 
   /* If the minimal symbol changed, we certainly switched functions.  */
   if (mfun != NULL && msym != NULL
-      && strcmp (mfun->linkage_name (), msym->linkage_name ()) != 0)
+      && !streq (mfun->linkage_name (), msym->linkage_name ()))
     return 1;
 
   /* If the symbol changed, we certainly switched functions.  */
@@ -205,7 +205,7 @@ ftrace_function_switched (const struct btrace_function *bfun,
       const char *bfname, *fname;
 
       /* Check the function name.  */
-      if (strcmp (fun->linkage_name (), sym->linkage_name ()) != 0)
+      if (!streq (fun->linkage_name (), sym->linkage_name ()))
 	return 1;
 
       /* Check the location of those functions, as well.  */
@@ -604,7 +604,7 @@ ftrace_update_function (struct btrace_thread_info *btinfo,
 	       create a stack back trace with the same function names but
 	       different frame id's.  This will confuse stepping.  */
 	    fname = ftrace_print_function_name (bfun);
-	    if (strcmp (fname, "_dl_runtime_resolve") == 0)
+	    if (streq (fname, "_dl_runtime_resolve"))
 	      return ftrace_new_tailcall (btinfo, mfun, fun);
 
 	    return ftrace_new_return (btinfo, mfun, fun);
@@ -1283,7 +1283,7 @@ decode_interrupt_vector (const uint8_t vector)
 
   return nullptr;
 }
-#endif /* defined (LIBIPT_VERSION >= 0x201) */
+#endif /* (LIBIPT_VERSION >= 0x201) */
 
 /* Handle instruction decode events (libipt-v2).  */
 
@@ -1596,7 +1596,62 @@ handle_pt_insn_events (struct btrace_thread_info *btinfo,
 	    handle_pt_aux_insn (btinfo, aux_string, pc);
 	    break;
 	  }
-#endif /* defined (LIBIPT_VERSION >= 0x201) */
+#endif /* (LIBIPT_VERSION >= 0x201) */
+
+#if (LIBIPT_VERSION >= 0x202)
+	case ptev_trig:
+	  {
+	    std::string aux_string
+	      = (std::string (_("trig: trbv = "))
+		 + hex_string (event.variant.trig.trbv));
+
+	    if (event.variant.trig.mult != 0)
+	      aux_string += std::string (", mult");
+
+	    if (event.ip_suppressed == 0)
+	      {
+		pc = event.variant.trig.ip;
+		aux_string += (std::string (", ip = ") + hex_string (*pc));
+	      }
+
+	    if (event.variant.trig.icnt != 0)
+	      aux_string += (std::string (", icnt = ")
+			     + hex_string (event.variant.trig.icnt));
+
+	    handle_pt_aux_insn (btinfo, aux_string, pc);
+	    break;
+	  }
+
+	case ptev_swintr:
+	  {
+	    std::string aux_string
+	      = (std::string (_("swintr: vector = "))
+		 + hex_string (event.variant.swintr.vector));
+
+	    if (event.ip_suppressed == 0)
+	      {
+		pc = event.variant.swintr.ip;
+		aux_string += (std::string (", ip = ") + hex_string (*pc));
+	      }
+
+	    handle_pt_aux_insn (btinfo, aux_string, pc);
+	    break;
+	  }
+
+	case ptev_syscall:
+	  {
+	    std::string aux_string = std::string (_("syscall"));
+
+	    if (event.ip_suppressed == 0)
+	      {
+		pc = event.variant.syscall.ip;
+		aux_string += (std::string (": ip = ") + hex_string (*pc));
+	      }
+
+	    handle_pt_aux_insn (btinfo, aux_string, pc);
+	    break;
+	  }
+#endif /* (LIBIPT_VERSION >= 0x202) */
 	}
     }
 #endif /* defined (HAVE_PT_INSN_EVENT) */
@@ -3011,7 +3066,7 @@ pt_print_packet (const struct pt_packet *packet)
 		  packet->payload.ptw.payload,
 		  packet->payload.ptw.ip ? (" ip") : (""));
       break;
-#endif /* defined (LIBIPT_VERSION >= 0x200)  */
+#endif /* (LIBIPT_VERSION >= 0x200)  */
 
 #if (LIBIPT_VERSION >= 0x201)
     case ppt_cfe:
@@ -3024,7 +3079,21 @@ pt_print_packet (const struct pt_packet *packet)
       gdb_printf (("evd %u: 0x%" PRIx64 ""), packet->payload.evd.type,
 		  packet->payload.evd.payload);
       break;
-#endif /* defined (LIBIPT_VERSION >= 0x201)  */
+#endif /* (LIBIPT_VERSION >= 0x201)  */
+
+#if (LIBIPT_VERSION >= 0x202)
+    case ppt_trig:
+      if (packet->payload.trig.icntv == 0)
+	gdb_printf ("trig 0x%x%s%s", packet->payload.trig.trbv,
+		    (packet->payload.trig.ip != 0) ? " ip" : "",
+		    (packet->payload.trig.mult != 0) ? " mult" : "");
+      else
+	gdb_printf ("trig 0x%x%s%s icnt: %u", packet->payload.trig.trbv,
+		    (packet->payload.trig.ip != 0) ? " ip" : "",
+		    (packet->payload.trig.mult != 0) ? " mult" : "",
+		    packet->payload.trig.icnt);
+      break;
+#endif /* (LIBIPT_VERSION >= 0x202)  */
     }
 }
 
@@ -3316,7 +3385,7 @@ maint_btrace_packet_history_cmd (const char *arg, int from_tty)
       return;
     }
 
-  if (arg == NULL || *arg == 0 || strcmp (arg, "+") == 0)
+  if (arg == NULL || *arg == 0 || streq (arg, "+"))
     {
       from = to;
 
@@ -3324,7 +3393,7 @@ maint_btrace_packet_history_cmd (const char *arg, int from_tty)
 	size = end - from;
       to = from + size;
     }
-  else if (strcmp (arg, "-") == 0)
+  else if (streq (arg, "-"))
     {
       to = from;
 

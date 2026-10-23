@@ -451,9 +451,9 @@ whatis_exp (const char *exp, int show)
       type = val->type ();
     }
 
-  if (flags.print_offsets && is_dynamic_type (type))
+  if (flags.print_offsets && cannot_print_offsets (type))
     {
-      warning (_("ptype/o does not work with dynamic types; disabling '/o'"));
+      warning (_("ptype/o does not work with this dynamic type; disabling '/o'"));
       flags.print_offsets = 0;
     }
 
@@ -513,6 +513,18 @@ static void
 ptype_command (const char *type_name, int from_tty)
 {
   whatis_exp (type_name, 1);
+}
+
+/* Meant to be used in debug sessions, so don't export it in a header file.  */
+extern void ATTRIBUTE_UNUSED debug_type (struct type *type);
+
+/* Print TYPE.  */
+
+void ATTRIBUTE_UNUSED
+debug_type (struct type *type)
+{
+  type_print (type, "", gdb_stdlog, 1);
+  gdb_flush (gdb_stdlog);
 }
 
 /* Print integral scalar data VAL, of type TYPE, onto stdio stream STREAM.

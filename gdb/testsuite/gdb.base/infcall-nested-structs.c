@@ -35,7 +35,7 @@
 #include <string.h>
 #include "attributes.h"
 
-/* Useful abreviations.  */
+/* Useful abbreviations.  */
 typedef char tc;
 typedef short ts;
 typedef int ti;
@@ -411,7 +411,7 @@ int volatile v = 1;
 void __attribute__((noinline)) ATTRIBUTE_NOCLONE
 breakpt (void)
 {
-  v++;
+  v = v + 1;
 }
 
 int

@@ -353,18 +353,13 @@ struct language_defn
      The caller is responsible for iterating up through superblocks
      if desired.
 
-     For each one, call CALLBACK with the symbol.  If CALLBACK
-     returns false, the iteration ends at that point.
-
-     This field may not be NULL.  If the language does not need any
-     special processing here, 'iterate_over_symbols' should be
-     used as the definition.  */
-  virtual bool iterate_over_symbols
+     For each one, call CALLBACK with the symbol.  */
+  virtual void for_each_symbol
 	(const struct block *block, const lookup_name_info &name,
 	 domain_search_flags domain,
-	 gdb::function_view<symbol_found_callback_ftype> callback) const
+	 for_each_symbol_callback_ftype callback) const
   {
-    return ::iterate_over_symbols (block, name, domain, callback);
+    ::for_each_symbol (block, name, domain, callback);
   }
 
   /* Return a pointer to the function that should be used to match a
@@ -516,12 +511,6 @@ struct language_defn
 
   virtual int parser (struct parser_state *ps) const;
 
-  /* Print the character CH (of type CHTYPE) on STREAM as part of the
-     contents of a literal string whose delimiter is QUOTER.  */
-
-  virtual void emitchar (int ch, struct type *chtype,
-			 struct ui_file *stream, int quoter) const;
-
   virtual void printchar (int ch, struct type *chtype,
 			  struct ui_file * stream) const;
 
@@ -649,6 +638,18 @@ struct language_defn
 
   virtual const struct lang_varobj_ops *varobj_ops () const;
 
+  /* Normally a "static link" (a reference to an outer frame) is
+     represented by DW_AT_static_link in DWARF.  However, some
+     compilers do not emit this -- but do provide some
+     language-specific way to find the correct outer frame.  If the
+     ordinary search for a static link fails for a given frame, then
+     this method will be called for that frame's language.  It should
+     either return the correct outer instance, if one exists, or a
+     null frame if no such frame exists.  */
+
+  virtual frame_info_ptr follow_static_link (const frame_info_ptr &frame)
+    const;
+
 protected:
 
   /* This is the overridable part of the GET_SYMBOL_NAME_MATCHER method.
@@ -667,17 +668,11 @@ extern const struct language_defn *get_current_language ();
    always points to *some* valid struct; it can be used without checking
    it for validity.
 
-   The current language affects expression parsing and evaluation
-   (FIXME: it might be cleaner to make the evaluation-related stuff
-   separate exp_opcodes for each different set of semantics.  We
-   should at least think this through more clearly with respect to
-   what happens if the language is changed between parsing and
-   evaluation) and printing of things like types and arrays.  It does
-   *not* affect symbol-reading-- each source file in a symbol-file has
-   its own language and we should keep track of that regardless of the
-   language when symbols are read.  If we want some manual setting for
-   the language of symbol files (e.g. detecting when ".c" files are
-   C++), it should be a separate setting from the current_language.  */
+   The current language affects expression parsing and evaluation and
+   printing of things like types and values.  It does *not* affect
+   symbol-reading -- each source file in a symbol-file has its own
+   language and we should keep track of that regardless of the
+   language when symbols are read.  */
 
 #define current_language (get_current_language ())
 
@@ -772,17 +767,6 @@ extern void set_language (enum language lang);
 typedef void lazily_set_language_ftype ();
 extern void lazily_set_language (lazily_set_language_ftype *fun);
 
-
-/* Test a character to decide whether it can be printed in literal form
-   or needs to be printed in another representation.  For example,
-   in C the literal form of the character with octal value 141 is 'a'
-   and the "other representation" is '\141'.  The "other representation"
-   is program language dependent.  */
-
-#define PRINT_LITERAL_FORM(c)		\
-  ((c) >= 0x20				\
-   && ((c) < 0x7F || (c) >= 0xA0)	\
-   && (!sevenbit_strings || (c) < 0x80))
 
 /* Error messages */
 

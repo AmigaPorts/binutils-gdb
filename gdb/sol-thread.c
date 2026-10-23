@@ -451,7 +451,7 @@ sol_thread_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,
       if (rtnval.tid_p ())
 	{
 	  thread_info *thr = current_inferior ()->find_thread (rtnval);
-	  if (thr == NULL || thr->state == THREAD_EXITED)
+	  if (thr == NULL || thr->state () == THREAD_EXITED)
 	    {
 	      process_stratum_target *proc_target
 		= current_inferior ()->process_target ();
@@ -666,7 +666,7 @@ check_for_thread_db (void)
    the library gets mapped and the symbol table is read in.  */
 
 static void
-sol_thread_new_objfile (struct objfile *objfile)
+sol_thread_new_objfile (struct objfile &objfile)
 {
   check_for_thread_db ();
 }
@@ -998,7 +998,7 @@ sol_update_thread_list_callback (const td_thrhandle_t *th, void *ignored)
 
   ptid_t ptid = ptid_t (current_inferior ()->pid, 0, ti.ti_tid);
   thread_info *thr = current_inferior ()->find_thread (ptid);
-  if (thr == NULL || thr->state == THREAD_EXITED)
+  if (thr == NULL || thr->state () == THREAD_EXITED)
     {
       process_stratum_target *proc_target
 	= current_inferior ()->process_target ();
@@ -1012,7 +1012,7 @@ void
 sol_thread_target::update_thread_list ()
 {
   /* Delete dead threads.  */
-  prune_threads ();
+  prune_threads (current_inferior ()->process_target ());
 
   /* Find any new LWP's.  */
   beneath ()->update_thread_list ();
@@ -1119,14 +1119,14 @@ sol_thread_target::get_ada_task_ptid (long lwp, ULONGEST thread)
        };
 
   struct thread_info *thread_info
-    = iterate_over_threads (thread_db_find_thread_from_tid);
+    = find_thread (thread_db_find_thread_from_tid);
 
   if (thread_info == NULL)
     {
       /* The list of threads is probably not up to date.  Find any
 	 thread that is missing from the list, and try again.  */
       update_thread_list ();
-      thread_info = iterate_over_threads (thread_db_find_thread_from_tid);
+      thread_info = find_thread (thread_db_find_thread_from_tid);
     }
 
   gdb_assert (thread_info != NULL);

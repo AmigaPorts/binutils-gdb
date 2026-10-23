@@ -24,7 +24,7 @@
 standard_testfile .c charset-malloc.c
 
 if { [prepare_for_testing "failed to prepare" ${testfile} [list $srcfile $srcfile2]] } {
-    return -1
+    return
 }
 
 # Parse the output from a `show charset' command.  Return the host
@@ -158,7 +158,7 @@ gdb_expect {
 # is pointless.
 if {[llength [array names charsets]] < 3} {
     untested "fewer than 3 charsets"
-    return -1
+    return
 }
 
 send_gdb "set target-charset\n"
@@ -368,7 +368,7 @@ foreach target_charset $charset_subset {
     # gdb_test that requires us to use gdb_expect here.
     send_gdb "print $L'\\0'\n"
     gdb_expect {
-	-re "\\\$${decimal} = 0 $L'\\\\000'\[\r\n\]+$gdb_prompt $" {
+	-re "${::valnum_re} = 0 $L'\\\\000'\[\r\n\]+$gdb_prompt $" {
 	    pass "print the null character in ${target_charset}"
 	}
 	-re "$gdb_prompt $" {
@@ -398,7 +398,7 @@ foreach target_charset $charset_subset {
     set uppercase "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
     set lowercase "abcdefghijklmnopqrstuvwxyz"
     set digits "0123456789"
-    set octal_escape "\\\\\[0-9\]+"
+    set octal_escape "\\\\${::decimal}"
 
     send_gdb "print $var_name\n"
     # ${escapes}${uppercase}${lowercase}${digits}${octal}${octal}
@@ -509,7 +509,7 @@ gdb_test "print \"\\242\"" " = \"\\\\242\"" \
 
 gdb_test "print '\\x'" "\\\\x escape without a following hex digit"
 gdb_test "print '\\u'" "\\\\u escape without a following hex digit"
-gdb_test "print '\\9'" " = \[0-9\]+ '9'"
+gdb_test "print '\\9'" " = ${::decimal} '9'"
 
 # An octal escape can only be 3 digits.
 gdb_test "print \"\\1011\"" " = \"A1\""
@@ -539,7 +539,7 @@ proc test_wide_or_unicode {L name} {
 	"$L\"\\\\xffef\\\\146\"" \
 	"test multi-char escape sequence case for $name"
 
-    gdb_test "print $L'a'" "= \[0-9\]+ $L'a'" \
+    gdb_test "print $L'a'" "= ${::decimal} $L'a'" \
       "basic $name character"
 }
 
@@ -576,7 +576,7 @@ if {$wchar_ok && $ucs2_ok} {
 if {$wchar_ok && $ucs4_ok} {
     test_combination L wide U UTF-32
   # Regression test for a typedef to a typedef.
-  gdb_test "print myvar" "= \[0-9\]+ L'A'" \
+  gdb_test "print myvar" "= ${::decimal} L'A'" \
       "typedef to wchar_t"
 }
 if {$ucs2_ok && $ucs4_ok} {

@@ -450,7 +450,7 @@ xstormy16_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
    either on the `ret' instruction itself or after an instruction which
    destroys the function's stack frame.  */
 
-static int
+static bool
 xstormy16_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
@@ -463,14 +463,14 @@ xstormy16_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 
       /* The Xstormy16 epilogue is max. 14 bytes long.  */
       if (pc < func_end - 7 * xstormy16_inst_size)
-	return 0;
+	return false;
 
       /* Check if we're on a `ret' instruction.  Otherwise it's
 	 too dangerous to proceed.  */
       inst = read_memory_unsigned_integer (addr,
 					   xstormy16_inst_size, byte_order);
       if (inst != 0x0003)
-	return 0;
+	return false;
 
       while ((addr -= xstormy16_inst_size) >= func_addr)
 	{
@@ -489,17 +489,17 @@ xstormy16_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 	      addr -= xstormy16_inst_size;
 	      break;
 	    }
-	  return 0;
+	  return false;
 	}
       if (pc > addr)
-	return 1;
+	return true;
     }
-  return 0;
+  return false;
 }
 
 constexpr gdb_byte xstormy16_break_insn[] = { 0x06, 0x0 };
 
-typedef BP_MANIPULATION (xstormy16_break_insn) xstormy16_breakpoint;
+using xstormy16_breakpoint = BP_MANIPULATION (xstormy16_break_insn);
 
 /* Given a pointer to a jump table entry, return the address
    of the function it jumps to.  Return 0 if not found.  */
@@ -515,7 +515,7 @@ xstormy16_resolve_jmp_table_entry (struct gdbarch *gdbarch, CORE_ADDR faddr)
       gdb_byte buf[2 * xstormy16_inst_size];
 
       /* Return faddr if it's not pointing into the jump table.  */
-      if (strcmp (faddr_sect->the_bfd_section->name, ".plt"))
+      if (!streq (faddr_sect->the_bfd_section->name, ".plt"))
 	return faddr;
 
       if (!target_read_memory (faddr, buf, sizeof buf))
@@ -543,12 +543,12 @@ xstormy16_find_jmp_table_entry (struct gdbarch *gdbarch, CORE_ADDR faddr)
   if (faddr_sect)
     {
       /* Return faddr if it's already a pointer to a jump table entry.  */
-      if (!strcmp (faddr_sect->the_bfd_section->name, ".plt"))
+      if (streq (faddr_sect->the_bfd_section->name, ".plt"))
 	return faddr;
 
       for (obj_section &osect : faddr_sect->objfile->sections ())
 	{
-	  if (!strcmp (osect.the_bfd_section->name, ".plt"))
+	  if (streq (osect.the_bfd_section->name, ".plt"))
 	    {
 	      CORE_ADDR addr, endaddr;
 
@@ -772,14 +772,13 @@ xstormy16_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   set_gdbarch_register_name (gdbarch, xstormy16_register_name);
   set_gdbarch_register_type (gdbarch, xstormy16_register_type);
 
-  set_gdbarch_char_signed (gdbarch, 0);
+  set_gdbarch_char_signed (gdbarch, false);
   set_gdbarch_short_bit (gdbarch, 2 * TARGET_CHAR_BIT);
   set_gdbarch_int_bit (gdbarch, 2 * TARGET_CHAR_BIT);
   set_gdbarch_long_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_long_long_bit (gdbarch, 8 * TARGET_CHAR_BIT);
 
   set_gdbarch_wchar_bit (gdbarch, 2 * TARGET_CHAR_BIT);
-  set_gdbarch_wchar_signed (gdbarch, 1);
 
   set_gdbarch_float_bit (gdbarch, 4 * TARGET_CHAR_BIT);
   set_gdbarch_double_bit (gdbarch, 8 * TARGET_CHAR_BIT);

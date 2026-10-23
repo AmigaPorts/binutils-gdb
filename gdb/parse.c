@@ -39,6 +39,7 @@
 #include "language.h"
 #include "parser-defs.h"
 #include "cli/cli-cmds.h"
+#include "cli/cli-style.h"
 #include "symfile.h"
 #include "inferior.h"
 #include "target-float.h"
@@ -148,9 +149,10 @@ parser_state::push_symbol (const char *name, block_symbol sym)
 	= lookup_minimal_symbol (current_program_space, name);
       if (msymbol.minsym != NULL)
 	push_new<expr::var_msym_value_operation> (msymbol);
-      else if (!have_full_symbols (current_program_space)
-	       && !have_partial_symbols (current_program_space))
-	error (_("No symbol table is loaded.  Use the \"file\" command."));
+      else if (!current_program_space->has_full_symbols ()
+	       && !current_program_space->has_partial_symbols ())
+	error (_("No symbol table is loaded.  Use the \"%ps\" command."),
+	       styled_string (command_style.style (), "file"));
       else
 	error (_("No symbol \"%s\" in current context."), name);
     }
@@ -384,7 +386,7 @@ parse_exp_in_context (const char **stringptr, CORE_ADDR pc,
 
 	  if (cursal.symtab)
 	    expression_context_block
-	      = cursal.symtab->compunit ()->blockvector ()->static_block ();
+	      = cursal.symtab->compunit ().blockvector ()->static_block ();
 
 	  if (expression_context_block)
 	    expression_context_pc = expression_context_block->entry_pc ();

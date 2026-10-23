@@ -54,7 +54,7 @@ static std::string s390_disassembler_options;
 
 constexpr gdb_byte s390_break_insn[] = { 0x0, 0x1 };
 
-typedef BP_MANIPULATION (s390_break_insn) s390_breakpoint;
+using s390_breakpoint = BP_MANIPULATION (s390_break_insn);
 
 /* Types.  */
 
@@ -301,6 +301,7 @@ s390_is_partial_instruction (struct gdbarch *gdbarch, CORE_ADDR loc, int *len)
       break;
     }
 
+  /* codespell:ignore-begin.  */
   switch (insn)
     {
     case 0xb255: /* MVST */
@@ -325,6 +326,7 @@ s390_is_partial_instruction (struct gdbarch *gdbarch, CORE_ADDR loc, int *len)
       *len = 4;
       return 1;
     }
+  /* codespell:ignore-end.  */
 
   return 0;
 }
@@ -1232,7 +1234,7 @@ regnum_is_gpr_full (s390_gdbarch_tdep *tdep, int regnum)
 /* Check whether REGNUM indicates a full vector register (v0-v15).
    These pseudo-registers are composed of f0-f15 and v0l-v15l.  */
 
-static int
+static bool
 regnum_is_vxr_full (s390_gdbarch_tdep *tdep, int regnum)
 {
   return (tdep->v0_full_regnum != -1
@@ -1477,7 +1479,7 @@ s390_pseudo_register_write (struct gdbarch *gdbarch, struct regcache *regcache,
 
 /* Implement pseudo_register_reggroup_p tdesc method.  */
 
-static int
+static bool
 s390_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
 				 const struct reggroup *group)
 {
@@ -1498,14 +1500,14 @@ s390_pseudo_register_reggroup_p (struct gdbarch *gdbarch, int regnum,
     return regnum_is_vxr_full (tdep, regnum);
 
   if (group == general_reggroup && regnum_is_vxr_full (tdep, regnum))
-    return 0;
+    return false;
 
   return default_register_reggroup_p (gdbarch, regnum, group);
 }
 
 /* The "ax_pseudo_register_collect" gdbarch method.  */
 
-static int
+static void
 s390_ax_pseudo_register_collect (struct gdbarch *gdbarch,
 				 struct agent_expr *ax, int regnum)
 {
@@ -1531,15 +1533,12 @@ s390_ax_pseudo_register_collect (struct gdbarch *gdbarch,
       ax_reg_mask (ax, S390_V0_LOWER_REGNUM + regnum);
     }
   else
-    {
-      internal_error (_("invalid regnum"));
-    }
-  return 0;
+    gdb_assert_not_reached ("invalid regnum");
 }
 
 /* The "ax_pseudo_register_push_stack" gdbarch method.  */
 
-static int
+static bool
 s390_ax_pseudo_register_push_stack (struct gdbarch *gdbarch,
 				    struct agent_expr *ax, int regnum)
 {
@@ -1574,13 +1573,13 @@ s390_ax_pseudo_register_push_stack (struct gdbarch *gdbarch,
   else if (regnum_is_vxr_full (tdep, regnum))
     {
       /* Too large to stuff on the stack.  */
-      return 1;
+      return false;
     }
   else
     {
       internal_error (_("invalid regnum"));
     }
-  return 0;
+  return true;
 }
 
 /* The "gen_return_address" gdbarch method.  Since this is supposed to be
@@ -1641,7 +1640,7 @@ s390_address_class_name_to_type_flags (struct gdbarch *gdbarch,
 				       const char *name,
 				       type_instance_flags *type_flags_ptr)
 {
-  if (strcmp (name, "mode32") == 0)
+  if (streq (name, "mode32"))
     {
       *type_flags_ptr = TYPE_INSTANCE_FLAG_ADDRESS_CLASS_1;
       return true;
@@ -2197,8 +2196,8 @@ s390_get_return_buf_addr (struct type *val_type,
 
   if (val_on_entry == nullptr)
     {
-      warning ("Cannot determine the function return value.\n"
-	       "Try compiling with -fvar-tracking.");
+      warning (_("Cannot determine the function return value.\n"
+		 "Try compiling with -fvar-tracking."));
       return 0;
     }
 
@@ -2209,7 +2208,7 @@ s390_get_return_buf_addr (struct type *val_type,
 
 /* Implement the stack_frame_destroyed_p gdbarch method.  */
 
-static int
+static bool
 s390_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
 {
   int word_size = gdbarch_ptr_bit (gdbarch) / 8;
@@ -2241,21 +2240,21 @@ s390_stack_frame_destroyed_p (struct gdbarch *gdbarch, CORE_ADDR pc)
       && !target_read_memory (pc - 4, insn, 4)
       && is_rs (insn, op_lm, &r1, &r3, &d2, &b2)
       && r3 == S390_SP_REGNUM - S390_R0_REGNUM)
-    return 1;
+    return true;
 
   if (word_size == 4
       && !target_read_memory (pc - 6, insn, 6)
       && is_rsy (insn, op1_lmy, op2_lmy, &r1, &r3, &d2, &b2)
       && r3 == S390_SP_REGNUM - S390_R0_REGNUM)
-    return 1;
+    return true;
 
   if (word_size == 8
       && !target_read_memory (pc - 6, insn, 6)
       && is_rsy (insn, op1_lmg, op2_lmg, &r1, &r3, &d2, &b2)
       && r3 == S390_SP_REGNUM - S390_R0_REGNUM)
-    return 1;
+    return true;
 
-  return 0;
+  return false;
 }
 
 /* Implement unwind_pc gdbarch method.  */
@@ -3242,8 +3241,9 @@ ex:
       /* SVC - supervisor call */
       if (tdep->s390_syscall_record != NULL)
 	{
-	  if (tdep->s390_syscall_record (regcache, ibyte[1]))
-	    return -1;
+	  int res = tdep->s390_syscall_record (regcache, ibyte[1]);
+	  if (res != 0)
+	    return res;
 	}
       else
 	{
@@ -3374,6 +3374,7 @@ ex:
 	return -1;
       break;
 
+    /* codespell:ignore-begin.  */
     case 0x20: /* LPDR - load positive */
     case 0x30: /* LPER - load positive */
     case 0x21: /* LNDR - load negative */
@@ -3398,6 +3399,7 @@ ex:
     case 0x3f: /* SUR - subtract unnormalized */
     case 0x6f: /* SW - subtract unnormalized */
     case 0x7f: /* SU - subtract unnormalized */
+    /* codespell:ignore-end.  */
       /* float destination + flags */
       if (record_full_arch_list_add_reg (regcache, S390_F0_REGNUM + inib[2]))
 	return -1;
@@ -3924,7 +3926,9 @@ ex:
 
 	/* 0xb29e-0xb2a4 undefined */
 
+	/* codespell:ignore-begin.  */
 	case 0xb2a5: /* TRE - translate extended [partial] */
+	/* codespell:ignore-end.  */
 	  regcache_raw_read_unsigned (regcache, S390_R0_REGNUM + inib[6], &tmp);
 	  oaddr = s390_record_address_mask (gdbarch, regcache, tmp);
 	  regcache_raw_read_unsigned (regcache, S390_R0_REGNUM + (inib[6] | 1), &tmp);
@@ -7021,8 +7025,6 @@ UNKNOWN_OP:
 
   if (record_full_arch_list_add_reg (regcache, S390_PSWA_REGNUM))
     return -1;
-  if (record_full_arch_list_add_end ())
-    return -1;
   return 0;
 }
 
@@ -7051,7 +7053,7 @@ s390_gnu_triplet_regexp (struct gdbarch *gdbarch)
 /* Implementation of `gdbarch_stap_is_single_operand', as defined in
    gdbarch.h.  */
 
-static int
+static bool
 s390_stap_is_single_operand (struct gdbarch *gdbarch, const char *s)
 {
   return ((c_isdigit (*s) && s[1] == '(' && s[2] == '%') /* Displacement
@@ -7273,8 +7275,7 @@ s390_gdbarch_init (struct gdbarch_info info, struct gdbarch_list *arches)
   tdesc_arch_data_up tdesc_data = tdesc_data_alloc ();
   info.tdesc_data = tdesc_data.get ();
 
-  set_gdbarch_believe_pcc_promotion (gdbarch, 0);
-  set_gdbarch_char_signed (gdbarch, 0);
+  set_gdbarch_char_signed (gdbarch, false);
 
   /* S/390 GNU/Linux uses either 64-bit or 128-bit long doubles.
      We can safely let them default to 128-bit, since the debug info

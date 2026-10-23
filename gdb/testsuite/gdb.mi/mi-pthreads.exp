@@ -42,7 +42,7 @@ proc check_mi_thread_command_set {} {
     # many of the threads are blocked in libc calls,
     # and many people have libc's with no symbols.
     mi_gdb_test "-thread-select $thread" \
-      "\\^done,new-thread-id=\"$thread\",frame={.*}(,line=\"(-)?\[0-9\]+\",file=\".*\")?" \
+      "\\^done,new-thread-id=\"$thread\",frame={.*}(,line=\"(-)?${::decimal}\",file=\".*\")?" \
       "check_mi_thread_command_set: -thread-select $thread"
   }
 
@@ -60,7 +60,7 @@ standard_testfile pthreads.c
 
 set options [list debug]
 if {[gdb_compile_pthreads "$srcdir/$subdir/$srcfile" $binfile executable $options] != "" } {
-    return -1
+    return
 }
 
 if {[mi_clean_restart $::testfile]} {

@@ -45,9 +45,16 @@
 static struct interp *interp_lookup_existing (struct ui *ui,
 					      const char *name);
 
-interp::interp (const char *name)
+interp::interp (const char *name, bool make_outputs)
   : m_name (name)
 {
+  if (make_outputs)
+    {
+      m_stdout = std::make_unique<ui::ui_stdout_file> ();
+      m_stderr = std::make_unique<ui::ui_stderr_file> ();
+      m_stdlog = std::make_unique<ui::ui_stdlog_file> ();
+      m_stdtarg = std::make_unique<ui::ui_stdtarg_file> ();
+    }
 }
 
 interp::~interp () = default;
@@ -78,7 +85,7 @@ interp_factory_register (const char *name, interp_factory_func func)
 {
   /* Assert that no factory for NAME is already registered.  */
   for (const interp_factory &f : interpreter_factories)
-    if (strcmp (f.name, name) == 0)
+    if (streq (f.name, name))
       {
 	internal_error (_("interpreter factory already registered: \"%s\"\n"),
 			name);
@@ -150,7 +157,7 @@ static struct interp *
 interp_lookup_existing (struct ui *ui, const char *name)
 {
   for (interp &interp : ui->interp_list)
-    if (strcmp (interp.name (), name) == 0)
+    if (streq (interp.name (), name))
       return &interp;
 
   return nullptr;
@@ -170,7 +177,7 @@ interp_lookup (struct ui *ui, const char *name)
     return interp;
 
   for (const interp_factory &factory : interpreter_factories)
-    if (strcmp (factory.name, name) == 0)
+    if (streq (factory.name, name))
       {
 	interp = factory.func (factory.name);
 	interp_add (ui, interp);
@@ -197,15 +204,6 @@ set_top_level_interpreter (const char *name, bool for_new_ui)
   interp_set (interp, true);
 }
 
-void
-current_interp_set_logging (ui_file_up logfile, bool logging_redirect,
-			    bool debug_redirect)
-{
-  struct interp *interp = current_ui->current_interpreter;
-
-  interp->set_logging (std::move (logfile), logging_redirect, debug_redirect);
-}
-
 /* Temporarily overrides the current interpreter.  */
 struct interp *
 scoped_restore_interp::set_interp (const char *name)
@@ -226,7 +224,7 @@ current_interp_named_p (const char *interp_name)
   interp *interp = current_ui->current_interpreter;
 
   if (interp != NULL)
-    return (strcmp (interp->name (), interp_name) == 0);
+    return (streq (interp->name (), interp_name));
 
   return 0;
 }
@@ -285,13 +283,6 @@ interpreter_exec_cmd (const char *args, int from_tty)
   struct interp *interp_to_use;
   unsigned int nrules;
   unsigned int i;
-
-  /* Interpreters may clobber stdout/stderr (e.g.  in mi_interp::resume at time
-     of writing), preserve their state here.  */
-  scoped_restore save_stdout = make_scoped_restore (&gdb_stdout);
-  scoped_restore save_stderr = make_scoped_restore (&gdb_stderr);
-  scoped_restore save_stdlog = make_scoped_restore (&gdb_stdlog);
-  scoped_restore save_stdtarg = make_scoped_restore (&gdb_stdtarg);
 
   if (args == NULL)
     error_no_arg (_("interpreter-exec command"));

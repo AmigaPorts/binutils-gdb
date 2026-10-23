@@ -50,6 +50,7 @@
 #include "linespec.h"
 #include "cli/cli-utils.h"
 #include "objfiles.h"
+#include "buffered-streams.h"
 
 #include "symfile.h"
 #include "extension.h"
@@ -634,8 +635,9 @@ read_frame_arg (const frame_print_options &fp_opts,
 	  /* Try to remove possibly duplicate error message for ENTRYARGP even
 	     in MI mode.  */
 
-	  if (val_error && entryval_error
-	      && strcmp (val_error, entryval_error) == 0)
+	  if (val_error != nullptr
+	      && entryval_error != nullptr
+	      && streq (val_error, entryval_error))
 	    {
 	      entryval_error = NULL;
 
@@ -797,70 +799,6 @@ print_frame_args (const frame_print_options &fp_opts,
 	    case LOC_OPTIMIZED_OUT:
 	    default:
 	      break;
-	    }
-
-	  /* We have to look up the symbol because arguments can have
-	     two entries (one a parameter, one a local) and the one we
-	     want is the local, which lookup_symbol will find for us.
-	     This includes gcc1 (not gcc2) on SPARC when passing a
-	     small structure and gcc2 when the argument type is float
-	     and it is passed as a double and converted to float by
-	     the prologue (in the latter case the type of the LOC_ARG
-	     symbol is double and the type of the LOC_LOCAL symbol is
-	     float).  */
-	  /* But if the parameter name is null, don't try it.  Null
-	     parameter names occur on the RS/6000, for traceback
-	     tables.  FIXME, should we even print them?  */
-
-	  if (*sym->linkage_name ())
-	    {
-	      struct symbol *nsym;
-
-	      nsym = lookup_symbol_search_name (sym->search_name (),
-						b, SEARCH_VAR_DOMAIN).symbol;
-	      gdb_assert (nsym != NULL);
-	      if (nsym->loc_class () == LOC_REGISTER
-		  && !nsym->is_argument ())
-		{
-		  /* There is a LOC_ARG/LOC_REGISTER pair.  This means
-		     that it was passed on the stack and loaded into a
-		     register, or passed in a register and stored in a
-		     stack slot.  GDB 3.x used the LOC_ARG; GDB
-		     4.0-4.11 used the LOC_REGISTER.
-
-		     Reasons for using the LOC_ARG:
-
-		     (1) Because find_saved_registers may be slow for
-			 remote debugging.
-
-		     (2) Because registers are often reused and stack
-			 slots rarely (never?) are.  Therefore using
-			 the stack slot is much less likely to print
-			 garbage.
-
-		     Reasons why we might want to use the LOC_REGISTER:
-
-		     (1) So that the backtrace prints the same value
-			 as "print foo".  I see no compelling reason
-			 why this needs to be the case; having the
-			 backtrace print the value which was passed
-			 in, and "print foo" print the value as
-			 modified within the called function, makes
-			 perfect sense to me.
-
-		     Additional note: It might be nice if "info args"
-		     displayed both values.
-
-		     One more note: There is a case with SPARC
-		     structure passing where we need to use the
-		     LOC_REGISTER, but this is dealt with by creating
-		     a single LOC_REGPARM in symbol reading.  */
-
-		  /* Leave sym (the LOC_ARG) alone.  */
-		  ;
-		}
-	      else
-		sym = nsym;
 	    }
 
 	  /* Print the current arg.  */
@@ -1395,10 +1333,7 @@ print_frame (struct ui_out *uiout,
 	  catch (const gdb_exception_error &e)
 	    {
 	    }
-
-	    /* FIXME: ARGS must be a list.  If one argument is a string it
-	       will have " that will not be properly escaped.  */
-	    }
+	}
 	QUIT;
       }
     uiout->text (")");
@@ -1725,8 +1660,8 @@ info_frame_command_core (const frame_info_ptr &fi, bool selected_frame_p)
 	  && gdbarch_register_reggroup_p (gdbarch, i, all_reggroup))
 	{
 	  enum lval_type lval;
-	  int optimized;
-	  int unavailable;
+	  bool optimized;
+	  bool unavailable;
 	  CORE_ADDR addr;
 	  int realnum;
 
@@ -1921,7 +1856,8 @@ public:
       error (_("Missing function name argument"));
     frame_info_ptr fid = find_frame_for_function (arg);
     if (fid == NULL)
-      error (_("No frame for function \"%s\"."), arg);
+      error (_("No frame for function \"%ps\"."),
+	     styled_string (function_name_style.style (), arg));
     FPTR (fid, false);
   }
 
@@ -2446,23 +2382,7 @@ iterate_over_block_arg_vars (const struct block *b,
     {
       /* Don't worry about things which aren't arguments.  */
       if (sym->is_argument ())
-	{
-	  /* We have to look up the symbol because arguments can have
-	     two entries (one a parameter, one a local) and the one we
-	     want is the local, which lookup_symbol will find for us.
-	     This includes gcc1 (not gcc2) on the sparc when passing a
-	     small structure and gcc2 when the argument type is float
-	     and it is passed as a double and converted to float by
-	     the prologue (in the latter case the type of the LOC_ARG
-	     symbol is double and the type of the LOC_LOCAL symbol is
-	     float).  There are also LOC_ARG/LOC_REGISTER pairs which
-	     are not combined in symbol-reading.  */
-
-	  struct symbol *sym2
-	    = lookup_symbol_search_name (sym->search_name (),
-					 b, SEARCH_VAR_DOMAIN).symbol;
-	  cb (sym->print_name (), sym2);
-	}
+	cb (sym->print_name (), sym);
     }
 }
 
@@ -2484,8 +2404,6 @@ print_frame_arg_vars (const frame_info_ptr &frame,
   struct print_variable_and_value_data cb_data;
   struct symbol *func;
   std::optional<CORE_ADDR> pc;
-  std::optional<compiled_regex> preg;
-  std::optional<compiled_regex> treg;
 
   if (!(pc = get_frame_pc_if_available (frame)))
     {
@@ -2553,7 +2471,7 @@ get_selected_block (CORE_ADDR *addr_in_block)
   if (!has_stack_frames ())
     return 0;
 
-  return get_frame_block (get_selected_frame (NULL), addr_in_block);
+  return get_frame_block (get_selected_frame (), addr_in_block);
 }
 
 /* Find a frame a certain number of levels away from FRAME.
@@ -2784,7 +2702,7 @@ return_command (const char *retval_exp, int from_tty)
     }
 
   /* Discard the selected frame and all frames inner-to it.  */
-  frame_pop (get_selected_frame (NULL));
+  frame_pop (get_selected_frame ());
 
   /* Store RETURN_VALUE in the just-returned register set.  */
   if (return_value != NULL)
@@ -2808,7 +2726,7 @@ return_command (const char *retval_exp, int from_tty)
   select_frame (get_current_frame ());
   /* If interactive, print the frame that is now current.  */
   if (from_tty)
-    print_stack_frame (get_selected_frame (NULL), 1, SRC_AND_LOC, 1);
+    print_stack_frame (get_selected_frame (), 1, SRC_AND_LOC, 1);
 }
 
 /* Find the most inner frame in the current stack for a function called

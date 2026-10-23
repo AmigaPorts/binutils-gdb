@@ -128,7 +128,6 @@ segT text_section;
 segT data_section;
 segT bss_section;
 
-
 /* Name of listing file.  */
 static char *listing_filename = NULL;
 
@@ -327,6 +326,10 @@ Options:\n\
 	   DEFAULT_SFRAME ? "yes" : "no");
   fprintf (stream, _("\
   --gsframe-<N>           generate SFrame version <N> information. 3 == <N>\n"));
+  fprintf (stream, _("\
+  --reloc-section-sym=[all|internal|none]\n\
+                          adjust eligible relocations to use section symbols\n\
+                          (default: all)\n"));
 # if defined (TARGET_USE_SCFI) && defined (TARGET_USE_GINSN)
   fprintf (stream, _("\
   --scfi=experimental     Synthesize DWARF CFI for hand-written asm\n\
@@ -524,7 +527,8 @@ parse_args (int * pargc, char *** pargv)
       OPTION_SFRAME_3,
       OPTION_SCFI,
       OPTION_INFO,
-      OPTION_NOINFO
+      OPTION_NOINFO,
+      OPTION_RELOC_SECTION_SYM
     /* When you add options here, check that they do
        not collide with OPTION_MD_BASE.  See as.h.  */
     };
@@ -557,6 +561,7 @@ parse_args (int * pargc, char *** pargv)
     ,{"generate-missing-build-notes", required_argument, NULL, OPTION_ELF_BUILD_NOTES}
     ,{"gsframe", optional_argument, NULL, OPTION_SFRAME}
     ,{"gsframe-3", no_argument, NULL, OPTION_SFRAME_3}
+    ,{"reloc-section-sym", required_argument, NULL, OPTION_RELOC_SECTION_SYM}
 # if defined (TARGET_USE_SCFI) && defined (TARGET_USE_GINSN)
     ,{"scfi", required_argument, NULL, OPTION_SCFI}
 # endif
@@ -1044,6 +1049,18 @@ This program has absolutely no warranty.\n"));
 	  flag_sectname_subst = 1;
 	  break;
 
+	case OPTION_RELOC_SECTION_SYM:
+	  if (strcasecmp (optarg, "all") == 0)
+	    flag_reloc_section_sym = reloc_section_sym_all;
+	  else if (strcasecmp (optarg, "internal") == 0)
+	    flag_reloc_section_sym = reloc_section_sym_internal;
+	  else if (strcasecmp (optarg, "none") == 0)
+	    flag_reloc_section_sym = reloc_section_sym_none;
+	  else
+	    as_fatal (_("Invalid --reloc-section-sym= option: `%s'"),
+		      optarg);
+	  break;
+
 	case OPTION_ELF_BUILD_NOTES:
 	  if (strcasecmp (optarg, "no") == 0)
 	    flag_generate_build_notes = false;
@@ -1331,7 +1348,8 @@ gas_early_init (int *argcp, char ***argvp)
     as_fatal (_("libbfd ABI mismatch"));
 
   obstack_begin (&notes, chunksize);
-  xatexit (free_notes);
+  if (ENABLE_LEAK_CHECK)
+    xatexit (free_notes);
 
   myname = **argvp;
   xmalloc_set_program_name (myname);
@@ -1520,7 +1538,7 @@ main (int argc, char ** argv)
       gnustack = subseg_new (".note.GNU-stack", 0);
       bfd_set_section_flags (gnustack,
 			     SEC_READONLY | (flag_execstack ? SEC_CODE : 0));
-
+      elf_section_type (gnustack) = SHT_NOTE;
     }
 #endif
 

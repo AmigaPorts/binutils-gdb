@@ -36944,7 +36944,7 @@ aarch64_find_alias_opcode (const aarch64_opcode *opcode)
       value = A64_OPID_05203800_mov_SVE_Zd_Rn_SP;
       break;
     case A64_OPID_05202000_dup_SVE_Zd_SVE_Zn_INDEX:
-      value = A64_OPID_05202000_mov_SVE_Zd_SVE_Zn_INDEX;
+      value = A64_OPID_05202000_mov_SVE_Zd_SVE_VZn;
       break;
     case A64_OPID_2538c000_dup_SVE_Zd_SVE_ASIMM:
       value = A64_OPID_2538c000_fmov_SVE_Zd_FPIMM0;
@@ -37594,9 +37594,6 @@ aarch64_find_next_alias_opcode (const aarch64_opcode *opcode)
       value = A64_OPID_d5080000_at_SYSREG_AT_Rt;
       break;
     case A64_OPID_d5080000_at_SYSREG_AT_Rt:
-      value = A64_OPID_d5080000_mlbi_SYSREG_MLBI_Rt_SYS;
-      break;
-    case A64_OPID_d5080000_mlbi_SYSREG_MLBI_Rt_SYS:
       value = A64_OPID_d5080000_sys_UIMM3_OP1_CRn_CRm_UIMM3_OP2_Rt;
       break;
     case A64_OPID_d5480000_tlbip_SYSREG_TLBIP_Rt_SYS_PAIRREG_OR_XZR:
@@ -37638,10 +37635,10 @@ aarch64_find_next_alias_opcode (const aarch64_opcode *opcode)
     case A64_OPID_05203800_mov_SVE_Zd_Rn_SP:
       value = A64_OPID_05203800_dup_SVE_Zd_Rn_SP;
       break;
-    case A64_OPID_05202000_mov_SVE_Zd_SVE_Zn_INDEX:
-      value = A64_OPID_05202000_mov_SVE_Zd_SVE_VZn;
-      break;
     case A64_OPID_05202000_mov_SVE_Zd_SVE_VZn:
+      value = A64_OPID_05202000_mov_SVE_Zd_SVE_Zn_INDEX;
+      break;
+    case A64_OPID_05202000_mov_SVE_Zd_SVE_Zn_INDEX:
       value = A64_OPID_05202000_dup_SVE_Zd_SVE_Zn_INDEX;
       break;
     case A64_OPID_2538c000_fmov_SVE_Zd_FPIMM0:
@@ -37851,7 +37848,6 @@ aarch64_extract_operand (const aarch64_operand *self,
     case AARCH64_OPND_Em:
     case AARCH64_OPND_Em16:
     case AARCH64_OPND_Em8:
-    case AARCH64_OPND_SM3_IMM2:
       return aarch64_ext_reglane (self, info, code, inst, errors);
     case AARCH64_OPND_Em_INDEX1_14:
     case AARCH64_OPND_Em_INDEX2_13:
@@ -37989,7 +37985,6 @@ aarch64_extract_operand (const aarch64_operand *self,
       return aarch64_ext_addr_regoff (self, info, code, inst, errors);
     case AARCH64_OPND_ADDR_SIMM7:
     case AARCH64_OPND_ADDR_SIMM9:
-    case AARCH64_OPND_ADDR_SIMM9_2:
     case AARCH64_OPND_ADDR_SIMM11:
     case AARCH64_OPND_ADDR_SIMM13:
       return aarch64_ext_addr_simm (self, info, code, inst, errors);
@@ -38012,7 +38007,6 @@ aarch64_extract_operand (const aarch64_operand *self,
     case AARCH64_OPND_SYSREG_TLBI:
     case AARCH64_OPND_SYSREG_TLBIP:
     case AARCH64_OPND_SYSREG_PLBI:
-    case AARCH64_OPND_SYSREG_MLBI:
     case AARCH64_OPND_SYSREG_SR:
     case AARCH64_OPND_GIC:
     case AARCH64_OPND_GICR:

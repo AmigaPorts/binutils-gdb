@@ -22,6 +22,7 @@
 #include "ui-out.h"
 #include "command.h"
 #include "cli/cli-script.h"
+#include "cli/cli-style.h"
 #include "cli/cli-utils.h"
 #include "cli/cli-option.h"
 #include "completer.h"
@@ -363,7 +364,7 @@ get_expr_block_and_pc (CORE_ADDR *pc)
 	= get_current_source_symtab_and_line (current_program_space);
 
       if (cursal.symtab)
-	block = cursal.symtab->compunit ()->blockvector ()->static_block ();
+	block = cursal.symtab->compunit ().blockvector ()->static_block ();
 
       if (block != NULL)
 	*pc = block->entry_pc ();
@@ -436,7 +437,7 @@ show_compile_gcc (struct ui_file *file, int from_tty,
 static const char *
 get_selected_pc_producer_options (void)
 {
-  CORE_ADDR pc = get_frame_pc (get_selected_frame (NULL));
+  CORE_ADDR pc = get_frame_pc (get_selected_frame ());
   struct compunit_symtab *symtab = find_compunit_symtab_for_pc (pc);
   const char *cs;
 
@@ -462,7 +463,7 @@ filter_args (char **argv)
   for (destv = argv; *argv != NULL; argv++)
     {
       /* -fpreprocessed may get in commonly from ccache.  */
-      if (strcmp (*argv, "-fpreprocessed") == 0)
+      if (streq (*argv, "-fpreprocessed"))
 	{
 	  xfree (*argv);
 	  continue;
@@ -583,7 +584,7 @@ compile_to_object (struct command_line *cmd, const char *cmd_string,
 	     "work."));
 
   expr_block = get_expr_block_and_pc (&trash_pc);
-  expr_pc = get_frame_address_in_block (get_selected_frame (NULL));
+  expr_pc = get_frame_address_in_block (get_selected_frame ());
 
   /* Set up instance and context for the compiler.  */
   std::unique_ptr<compile_instance> compiler
@@ -630,8 +631,9 @@ compile_to_object (struct command_line *cmd, const char *cmd_string,
   if (!compile_gcc.empty ())
     {
       if (compiler->version () < GCC_FE_VERSION_1)
-	error (_("Command 'set compile-gcc' requires GCC version 6 or higher "
-		 "(libcc1 interface version 1 or higher)"));
+	error (_("Command \"%ps\" requires GCC version 6 or higher "
+		 "(libcc1 interface version 1 or higher)"),
+	       styled_string (command_style.style (), "set compile-gcc"));
 
       compiler->set_driver_filename (compile_gcc.c_str ());
     }
@@ -767,7 +769,7 @@ compile_register_name_demangle (struct gdbarch *gdbarch,
   regname += 2;
 
   for (regnum = 0; regnum < gdbarch_num_regs (gdbarch); regnum++)
-    if (strcmp (regname, gdbarch_register_name (gdbarch, regnum)) == 0)
+    if (streq (regname, gdbarch_register_name (gdbarch, regnum)))
       return regnum;
 
   error (_("Cannot find gdbarch register \"%s\"."), regname);

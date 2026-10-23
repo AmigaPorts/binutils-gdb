@@ -553,7 +553,7 @@ do_mixed_source_and_assembly_deprecated
   mle = (struct deprecated_dis_line_entry *)
     alloca (nlines * sizeof (struct deprecated_dis_line_entry));
 
-  struct objfile *objfile = symtab->compunit ()->objfile ();
+  struct objfile *objfile = symtab->compunit ().objfile ();
 
   unrelocated_addr unrel_low
     = unrelocated_addr (low - objfile->text_section_offset ());
@@ -701,7 +701,7 @@ do_mixed_source_and_assembly (struct gdbarch *gdbarch,
 
   gdb::unordered_set<dis_line_entry, dis_line_entry_hash> dis_line_table;
 
-  struct objfile *objfile = main_symtab->compunit ()->objfile ();
+  struct objfile *objfile = main_symtab->compunit ().objfile ();
 
   unrelocated_addr unrel_low
     = unrelocated_addr (low - objfile->text_section_offset ());
@@ -1311,7 +1311,7 @@ set_disassembler_options (const char *prospective_options)
 	    if (valid_options->arg[i]->values == NULL)
 	      break;
 	    for (j = 0; valid_options->arg[i]->values[j] != NULL; j++)
-	      if (strcmp (arg, valid_options->arg[i]->values[j]) == 0)
+	      if (streq (arg, valid_options->arg[i]->values[j]))
 		{
 		  found = true;
 		  break;
@@ -1319,7 +1319,7 @@ set_disassembler_options (const char *prospective_options)
 	    if (found)
 	      break;
 	  }
-	else if (strcmp (opt, valid_options->name[i]) == 0)
+	else if (streq (opt, valid_options->name[i]))
 	  break;
       if (valid_options->name[i] == NULL)
 	{

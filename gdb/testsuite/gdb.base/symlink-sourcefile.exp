@@ -28,17 +28,17 @@ set status [remote_exec host \
 		"ln -sf $srcdir/$subdir/$srcfile $srcfilelink"]
 if {[lindex $status 0] != 0} {
     unsupported "$test (host does not support symbolic links)"
-    return 0
+    return
 }
 
 if {[prepare_for_testing $testfile $testfile $srcfilelink]} {
-    return -1
+    return
 }
 
 if {![runto_main]} {
-    return -1
+    return
 }
 
 # Using a line number ensures that the default symtab is used.
-gdb_breakpoint [gdb_get_line_number "break here" $srcfile] message
+gdb_breakpoint [gdb_get_line_number "break here" $srcfile] -message
 gdb_continue_to_breakpoint "run to breakpoint marker"

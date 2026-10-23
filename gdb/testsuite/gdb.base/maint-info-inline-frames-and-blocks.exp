@@ -20,11 +20,11 @@ standard_testfile
 
 if { [prepare_for_testing "failed to prepare" ${testfile} ${srcfile} \
 	  {debug nopie}]} {
-    return -1
+    return
 }
 
 if {![runto normal_func]} {
-    return 0
+    return
 }
 
 # Make a pattern to match 'maint info blocks' output.  ARGS is the
@@ -52,9 +52,9 @@ proc make_blocks_result { args } {
 	    "  entry pc: $::hex"
 
 	if { [string range $func 0 10] eq "inline_func" } {
-	    lappend result"  inline function: $func"
+	    lappend result "  inline function: $func"
 	} else {
-	    lappend result"  function: $func"
+	    lappend result "  function: $func"
 	}
 
 	lappend result ".*"

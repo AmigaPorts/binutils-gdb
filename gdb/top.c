@@ -57,6 +57,7 @@
 #include "gdbsupport/pathstuff.h"
 #include "cli/cli-style.h"
 #include "pager.h"
+#include "logging-file.h"
 
 /* readline include files.  */
 #include "readline/readline.h"
@@ -91,28 +92,96 @@ extern void initialize_all_files (void);
 #define DEFAULT_PROMPT	"(gdb) "
 #endif
 
-struct ui_file **
-current_ui_gdb_stdout_ptr ()
+/* See utils.h.  */
+
+struct ui_file *
+current_gdb_stdout ()
 {
-  return &current_ui->m_gdb_stdout;
+  /* In early startup, there's no interpreter, but we'd still like to
+     be able to print.  */
+  interp *curr = current_interpreter ();
+  if (curr == nullptr)
+    return current_ui->m_ui_stdout;
+  return curr->get_stdout ();
 }
 
-struct ui_file **
-current_ui_gdb_stdin_ptr ()
+/* See utils.h.  */
+
+struct ui_file *
+current_gdb_stdin ()
 {
-  return &current_ui->m_gdb_stdin;
+  return current_ui->m_gdb_stdin;
 }
 
-struct ui_file **
-current_ui_gdb_stderr_ptr ()
+/* See utils.h.  */
+
+struct ui_file *
+current_gdb_stderr ()
 {
-  return &current_ui->m_gdb_stderr;
+  /* In early startup, there's no interpreter, but we'd still like to
+     be able to print.  */
+  interp *curr = current_interpreter ();
+  if (curr == nullptr)
+    return current_ui->m_ui_stderr;
+  return curr->get_stderr ();
 }
 
-struct ui_file **
-current_ui_gdb_stdlog_ptr ()
+/* See utils.h.  */
+
+struct ui_file *
+current_gdb_stdlog ()
 {
-  return &current_ui->m_gdb_stdlog;
+  /* In early startup, there's no interpreter, but we'd still like to
+     be able to print.  */
+  interp *curr = current_interpreter ();
+  if (curr == nullptr)
+    return current_ui->m_ui_stdlog;
+  return curr->get_stdlog ();
+}
+
+/* See utils.h.  */
+
+struct ui_file *
+current_gdb_stdtarg ()
+{
+  /* In early startup, there's no interpreter, but we'd still like to
+     be able to print.  */
+  interp *curr = current_interpreter ();
+  if (curr == nullptr)
+    return current_ui->m_ui_stdtarg;
+  return curr->get_stdtarg ();
+}
+
+/* See utils.h.  */
+
+struct ui_file **
+redirectable_stdout ()
+{
+  return &current_ui->m_ui_stdout;
+}
+
+/* See utils.h.  */
+
+struct ui_file **
+redirectable_stderr ()
+{
+  return &current_ui->m_ui_stderr;
+}
+
+/* See utils.h.  */
+
+struct ui_file **
+redirectable_stdlog ()
+{
+  return &current_ui->m_ui_stdlog;
+}
+
+/* See utils.h.  */
+
+struct ui_file **
+redirectable_stdtarg ()
+{
+  return &current_ui->m_ui_stdtarg;
 }
 
 struct ui_out **
@@ -585,7 +654,7 @@ execute_command (const char *p, int from_tty)
      we just finished executing did not resume the inferior's execution.
      If it did resume the inferior, we will do that check after
      the inferior stopped.  */
-  if (has_stack_frames () && inferior_thread ()->state != THREAD_RUNNING)
+  if (has_stack_frames () && inferior_thread ()->state () != THREAD_RUNNING)
     check_frame_language_change ();
 
   cleanup_if_error.release ();
@@ -597,8 +666,6 @@ execute_command (const char *p, int from_tty)
 static void
 execute_fn_to_ui_file (struct ui_file *file, std::function<void(void)> fn)
 {
-  /* GDB_STDOUT should be better already restored during these
-     restoration callbacks.  */
   set_batch_flag_and_restore_page_info save_page_info;
 
   scoped_restore save_async = make_scoped_restore (&current_ui->async, 0);
@@ -606,13 +673,13 @@ execute_fn_to_ui_file (struct ui_file *file, std::function<void(void)> fn)
   ui_out_redirect_pop redirect_popper (current_uiout, file);
 
   scoped_restore save_stdout
-    = make_scoped_restore (&gdb_stdout, file);
+    = make_scoped_restore (redirectable_stdout (), file);
   scoped_restore save_stderr
-    = make_scoped_restore (&gdb_stderr, file);
+    = make_scoped_restore (redirectable_stderr (), file);
   scoped_restore save_stdlog
-    = make_scoped_restore (&gdb_stdlog, file);
+    = make_scoped_restore (redirectable_stdlog (), file);
   scoped_restore save_stdtarg
-    = make_scoped_restore (&gdb_stdtarg, file);
+    = make_scoped_restore (redirectable_stdtarg (), file);
 
   fn ();
 }
@@ -1123,7 +1190,7 @@ gdb_add_history (const char *command)
 	  if (temp == NULL)
 	    break;
 
-	  if (strcmp (temp->line, command) == 0)
+	  if (streq (temp->line, command))
 	    {
 	      HIST_ENTRY *prev = remove_history (where_history ());
 	      command_count--;
@@ -1189,6 +1256,18 @@ gdb_safe_append_history (void)
 		 local_history_filename.c_str (), history_filename.c_str (),
 		 safe_strerror (saved_errno));
     }
+}
+
+/* Implementation of 'save history' command.  */
+
+static void
+save_history_command (const char *filename, int from_tty)
+{
+  if (filename == nullptr || *filename == '\0')
+    error (_("Argument required (file name in which to save)"));
+
+  gdb::unique_xmalloc_ptr<char> expanded_filename (tilde_expand (filename));
+  write_history (expanded_filename.get ());
 }
 
 /* Read one line from the command input stream `instream'.
@@ -1334,7 +1413,7 @@ There is NO WARRANTY, to the extent permitted by law.",
   /* After the required info we print the configuration information.  */
 
   gdb_printf (stream, "This GDB was configured as \"");
-  if (strcmp (host_name, target_name) != 0)
+  if (!streq (host_name, target_name))
     {
       gdb_printf (stream, "--host=%s --target=%s",
 		  host_name, target_name);
@@ -1576,16 +1655,6 @@ This GDB was configured as follows:\n\
 #else
   gdb_printf (stream, _("\
 	     --without-lzma\n\
-"));
-#endif
-
-#if HAVE_LIBBABELTRACE
-  gdb_printf (stream, _("\
-	     --with-babeltrace\n\
-"));
-#else
-  gdb_printf (stream, _("\
-	     --without-babeltrace\n\
 "));
 #endif
 
@@ -2345,6 +2414,13 @@ Without an argument, saving is enabled."),
 			   NULL,
 			   show_write_history_p,
 			   &sethistlist, &showhistlist);
+
+  cmd_list_element *c = add_cmd ("history", no_class, save_history_command,
+				 _("\
+Save current history as a script.\n\
+Usage: save history FILE"),
+	       &save_cmdlist);
+  set_cmd_completer (c, deprecated_filename_completer);
 
   add_setshow_zuinteger_unlimited_cmd ("size", no_class,
 				       &history_size_setshow_var, _("\

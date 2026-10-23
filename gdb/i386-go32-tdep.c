@@ -36,18 +36,18 @@ i386_go32_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
   if (!tdesc_has_registers (info.target_desc))
     tdep->tdesc = i386_target_description (X86_XSTATE_X87_MASK, false);
 
-  set_gdbarch_has_dos_based_file_system (gdbarch, 1);
+  set_gdbarch_has_dos_based_file_system (gdbarch, true);
 
   set_gdbarch_wchar_bit (gdbarch, 16);
-  set_gdbarch_wchar_signed (gdbarch, 0);
+  set_gdbarch_wchar_signed (gdbarch, false);
 }
 
 
 static enum gdb_osabi
 i386_coff_osabi_sniffer (bfd *abfd)
 {
-  if (strcmp (bfd_get_target (abfd), "coff-go32-exe") == 0
-      || strcmp (bfd_get_target (abfd), "coff-go32") == 0)
+  if (streq (bfd_get_target (abfd), "coff-go32-exe")
+      || streq (bfd_get_target (abfd), "coff-go32"))
     return GDB_OSABI_GO32;
 
   return GDB_OSABI_UNKNOWN;

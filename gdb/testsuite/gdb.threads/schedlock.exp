@@ -28,7 +28,7 @@ standard_testfile
 set NUM 2
 
 if {[gdb_compile_pthreads "${srcdir}/${subdir}/${srcfile}" "${binfile}" executable debug] != "" } {
-    return -1
+    return
 }
 
 # Now we can proceed with the real testing.
@@ -40,14 +40,14 @@ proc get_args { description } {
     global gdb_prompt
     global NUM
 
-    set pattern "(\[0-9\]+)"
+    set pattern "(${::decimal})"
     for {set i 1} {$i < $NUM} {incr i} {
-	append pattern ", (\[0-9\]+)"
+	append pattern ", (${::decimal})"
     }
 
     set test "listed args, $description"
     gdb_test_multiple "print args" $test {
-	-re "\\\$\[0-9\]+ = {$pattern}.*$gdb_prompt $" {
+	-re "${::valnum_re} = {$pattern}.*$gdb_prompt $" {
 	    pass $test
 
 	    set result ""
@@ -232,8 +232,12 @@ proc check_result { cmd before_thread before_args locked } {
 	    }
 	} else {
 	    if {$i == $before_thread} {
-		if {$cmd == "continue"
-		    || [lindex $before_args $i] == [lindex $after_args $i] - 10} {
+		if {$cmd == "continue"} {
+		    pass "$test"
+		} elseif {[llength $after_args] <= $i} {
+		    fail "$test (no arg #$i)"
+		} elseif {[lindex $before_args $i] \
+			  == [lindex $after_args $i] - 10} {
 		    pass "$test"
 		} else {
 		    fail "$test (wrong amount)"

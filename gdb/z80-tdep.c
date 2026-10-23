@@ -495,12 +495,16 @@ z80_skip_prologue (struct gdbarch *gdbarch, CORE_ADDR pc)
   if (prologue_end != 0)
     {
       struct symtab_and_line prologue_sal = find_sal_for_pc (func_addr, 0);
-      struct compunit_symtab *compunit = prologue_sal.symtab->compunit ();
-      const char *debug_format = compunit->debugformat ();
 
-      if (debug_format != NULL &&
-	  !strncasecmp ("dwarf", debug_format, strlen("dwarf")))
-	return std::max (pc, prologue_end);
+      if (prologue_sal.symtab != nullptr)
+	{
+	  const char *debug_format
+	    = prologue_sal.symtab->compunit ().debugformat ();
+
+	  if (debug_format != nullptr
+	      && !strncasecmp ("dwarf", debug_format, strlen ("dwarf")))
+	    return std::max (pc, prologue_end);
+	}
     }
 
   return pc;
@@ -591,17 +595,27 @@ z80_frame_unwind_cache (const frame_info_ptr &this_frame,
     {
       CORE_ADDR addr;
       CORE_ADDR sp;
-      CORE_ADDR sp_mask = (1 << gdbarch_ptr_bit(gdbarch)) - 1;
+      CORE_ADDR addr_space_max = (1 << gdbarch_ptr_bit(gdbarch)) - 1;
       enum bfd_endian byte_order = gdbarch_byte_order (gdbarch);
+      int loop_count = 0;
       /* Assume that the FP is this frame's SP but with that pushed
 	 stack space added back.  */
       this_base = get_frame_register_unsigned (this_frame, Z80_SP_REGNUM);
       sp = this_base + info->size;
       for (;; ++sp)
 	{
-	  sp &= sp_mask;
-	  if (sp < this_base)
-	    { /* overflow, looks like end of stack */
+	  /* Limit the scan to 2 * addr_len iterations.  If the unwinder's
+	     frame size calculation is slightly off (e.g. due to unpopped
+	     arguments or temporary pushes), the return address might be
+	     hidden a few bytes deeper.  Scanning up to 2 * addr_len bytes
+	     comfortably covers two misplaced pointer-sized values.
+	     Scanning further drastically increases the risk of false
+	     positives: we might wander into the caller's local variables,
+	     hit a random CALL or conditional CALL opcode, and generate a
+	     corrupted backtrace.  It also prevents massive slow-downs on
+	     remote serial targets if the stack is severely corrupted.  */
+	  if (++loop_count > 2 * addr_len || sp > addr_space_max)
+	    { /* Limit reached or end of address space, assume end of stack.  */
 	      sp = this_base + info->size;
 	      break;
 	    }
@@ -640,9 +654,14 @@ z80_frame_unwind_cache (const frame_info_ptr &this_frame,
   /* Adjust all the saved registers so that they contain addresses and not
      offsets.  */
   for (i = 0; i < gdbarch_num_regs (gdbarch) - 1; i++)
-    if (info->saved_regs[i].addr () > 0)
-      info->saved_regs[i].set_addr
-	(info->prev_sp - info->saved_regs[i].addr () * addr_len);
+    {
+      if (info->saved_regs[i].is_addr ())
+	{
+	  if (info->saved_regs[i].addr () > 0)
+	    info->saved_regs[i].set_addr
+	      (info->prev_sp - info->saved_regs[i].addr () * addr_len);
+	}
+    }
 
   /* Except for the startup code, the return PC is always saved on
      the stack and is at the base of the frame.  */
@@ -1000,8 +1019,8 @@ z80_overlay_update (struct obj_section *osect)
       }
 }
 
-/* Return non-zero if the instruction at ADDR is a call; zero otherwise.  */
-static int
+/* Return true if the instruction at ADDR is a call; false otherwise.  */
+static bool
 z80_insn_is_call (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
   gdb_byte buf[8];
@@ -1015,13 +1034,13 @@ z80_insn_is_call (struct gdbarch *gdbarch, CORE_ADDR addr)
       case insn_call_nn:
       case insn_call_cc_nn:
       case insn_rst_n:
-	return 1;
+	return true;
       }
-  return 0;
+  return false;
 }
 
-/* Return non-zero if the instruction at ADDR is a return; zero otherwise. */
-static int
+/* Return true if the instruction at ADDR is a return; false otherwise. */
+static bool
 z80_insn_is_ret (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
   gdb_byte buf[8];
@@ -1034,13 +1053,13 @@ z80_insn_is_ret (struct gdbarch *gdbarch, CORE_ADDR addr)
       {
       case insn_ret:
       case insn_ret_cc:
-	return 1;
+	return true;
       }
-  return 0;
+  return false;
 }
 
-/* Return non-zero if the instruction at ADDR is a jump; zero otherwise.  */
-static int
+/* Return true if the instruction at ADDR is a jump; false otherwise.  */
+static bool
 z80_insn_is_jump (struct gdbarch *gdbarch, CORE_ADDR addr)
 {
   gdb_byte buf[8];
@@ -1057,9 +1076,9 @@ z80_insn_is_jump (struct gdbarch *gdbarch, CORE_ADDR addr)
       case insn_jr_d:
       case insn_jr_cc_d:
       case insn_djnz_d:
-	return 1;
+	return true;
       }
-  return 0;
+  return false;
 }
 
 static const struct frame_unwind_legacy z80_frame_unwind (
@@ -1423,7 +1442,7 @@ z80_get_insn_info (struct gdbarch *gdbarch, const gdb_byte *buf, int *size)
 	case insn_adl:
 	  info = &ez80_adl_main_insn_table[0];
 	  break;
-	/*  These two (for GameBoy Z80 & Z80 Next CPUs) haven't been tested.
+	/*  These two (for Game Boy Z80 & Z80 Next CPUs) haven't been tested.
 
 	case bfd_mach_gbz80:
 	  info = &gbz80_main_insn_table[0];
