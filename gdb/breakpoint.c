@@ -2950,32 +2950,29 @@ static void
 pic_code_error_check (struct ui_file *tmp_error_stream,
 		      CORE_ADDR address)
 {
-  for (objfile *objfile : current_program_space->objfiles ())
+  for (objfile &objfile : current_program_space->objfiles ())
     {
-      struct obj_section *osect;
-
       /* If the primary text section is not relocated then nothing should
 	 be relocated - maybe?  */
-      if (objfile->text_section_offset () == 0)
+      if (objfile.text_section_offset () == 0)
 	continue;
 
       /* We know this object file was relocated, but was the breakpoint
 	 inside one of the code sections before relocation?  */
-      ALL_OBJFILE_OSECTIONS (objfile, osect)
+      for (obj_section &osect : objfile.sections ())
 	{
 	  /* Ignore non-code sections.  */
-	  if ((bfd_section_flags (osect->the_bfd_section) & SEC_CODE) == 0)
+	  if ((bfd_section_flags (osect.the_bfd_section) & SEC_CODE) == 0)
 	    continue;
 
 	  /* Was ADDRESS within this section before relocation?  */
-	  if (!(address >= bfd_section_vma (osect->the_bfd_section)
-		&& address < (bfd_section_vma (osect->the_bfd_section)
-			      + bfd_section_size (osect->the_bfd_section))))
+	  if (!(address >= bfd_section_vma (osect.the_bfd_section)
+		&& address < (bfd_section_vma (osect.the_bfd_section)
+			      + bfd_section_size (osect.the_bfd_section))))
 	    continue;
 
 	  /* Final check that this section was relocated.  */
-	  int idx = osect - objfile->sections;
-	  CORE_ADDR offset = objfile->section_offsets[idx];
+	  CORE_ADDR offset = osect.offset ();
 	  if (offset == 0)
 	    continue;
 
@@ -2986,17 +2983,17 @@ pic_code_error_check (struct ui_file *tmp_error_stream,
 	     still have this issue then I'm not sure what the user could
 	     reasonably do about it.  However, for now, we just always
 	     give this error.  */
-	  CORE_ADDR len = bfd_section_size (osect->the_bfd_section);
-	  CORE_ADDR start = bfd_section_vma (osect->the_bfd_section);
+	  CORE_ADDR len = bfd_section_size (osect.the_bfd_section);
+	  CORE_ADDR start = bfd_section_vma (osect.the_bfd_section);
 	  gdb_printf (tmp_error_stream, "\
 The address is located within a code region of `%s' which was dynamically\n\
 relocated at run time.  The code region `%s ... %s' is now located\n\
 at `%s ... %s', you may need to adjust your breakpoints.\n",
-			      objfile_name (objfile),
-			      core_addr_to_string (start),
-			      core_addr_to_string (start + len),
-			      core_addr_to_string (offset + start),
-			      core_addr_to_string (offset + start + len));
+		      objfile_name (&objfile),
+		      core_addr_to_string (start),
+		      core_addr_to_string (start + len),
+		      core_addr_to_string (offset + start),
+		      core_addr_to_string (offset + start + len));
 	}
     }
 }
@@ -3231,7 +3228,7 @@ insert_bp_location (struct bp_location *bl,
 				  "%s\n",
 				  bl->owner->number, message.c_str ());
 
-			  pic_code_error_check (tmp_error_stream, bl->address);  
+			  pic_code_error_check (tmp_error_stream, bl->address);
 		    }
 		  else
 		    {
