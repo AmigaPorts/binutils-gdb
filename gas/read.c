@@ -334,7 +334,11 @@ static htab_t po_hash;
 
 static const pseudo_typeS potable[] = {
   {"abort", s_abort, 0},
+#ifdef TC_M68K
   {"align", s_align_bytes, 0},
+#else
+  {"align", s_align_ptwo, 0},
+#endif
   {"altmacro", s_altmacro, 1},
   {"ascii", stringer, 8+0},
   {"asciz", stringer, 8+1},
@@ -416,7 +420,9 @@ static const pseudo_typeS potable[] = {
   {"global", s_globl, 0},
   {"globl", s_globl, 0},
   {"hword", cons, 2},
+#ifdef TC_M68K
   {"ident", s_ignore, 0},
+#endif
   {"if", s_if, (int) O_ne},
   {"ifb", s_ifb, 1},
   {"ifc", s_ifc, 0},
@@ -447,7 +453,9 @@ static const pseudo_typeS potable[] = {
   {"list", listing_list, 1},	/* Turn listing on.  */
   {"llen", listing_psize, 1},
   {"long", cons, 4},
+#ifdef TC_M68K
   {"loc", s_ignore, 0},
+#endif
   {"lsym", s_lsym, 0},
   {"macro", s_macro, 0},
   {"mexit", s_mexit, 0},
@@ -483,7 +491,9 @@ static const pseudo_typeS potable[] = {
   {"short", cons, 2},
   {"single", float_cons, 'f'},
 /* size  */
+#ifdef TC_M68K
   {"size", s_ignore, 0},
+#endif
   {"space", s_space, 0},
   {"skip", s_space, 0},
   {"sleb128", s_leb128, 1},
@@ -4084,7 +4094,9 @@ demand_empty_rest_of_line (void)
   else
     {
       if (ISPRINT (*input_line_pointer)) {
+#ifdef TC_M68K
 	if (*input_line_pointer != '|')
+#endif
 	as_bad (_("junk at end of line, first unrecognized character is `%c'"),
 		 *input_line_pointer);
       }
@@ -4142,7 +4154,11 @@ pseudo_set (symbolS *symbolP)
   if (!S_IS_FORWARD_REF (symbolP))
     (void) expression (&exp);
   else
+#ifdef TC_M68K
     (void) deferred_expression (&exp);
+#else
+    (void) expr (0, &exp, expr_defer_incl_dot);
+#endif
 
 #if defined(OBJ_AMIGAHUNK)
 // needed to get .stabs working
@@ -6363,12 +6379,14 @@ demand_copy_string (int *lenP)
   len = 0;
   SKIP_WHITESPACE ();
 
+#ifdef TC_M68K
   if (ISDIGIT(*input_line_pointer))
     {
       while (ISDIGIT(*input_line_pointer))
 	++input_line_pointer;
       SKIP_WHITESPACE ();
     }
+#endif
 
   if (*input_line_pointer == '\"')
     {
