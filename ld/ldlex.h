@@ -481,6 +481,14 @@ enum option_values
   /* Used by emultempl/elf-i386-glibc.em.  */
   OPTION_GNU_TLS_VERSION_TAG,
   OPTION_NO_GNU_TLS_VERSION_TAG,
+  /* Used by emultempl/amiga.em.  */
+  OPTION_AMIGA_CHIP,
+  OPTION_AMIGA_FAST,
+  OPTION_AMIGA_ATTRIBUTE,
+  OPTION_AMIGA_DEBUG,
+  OPTION_AMIGA_DATABSS_TOGETHER,
+  OPTION_AMIGA_DATADATA_RELOC,
+  OPTION_FLAVOR,
 };
 
 /* The initial parser states.  */

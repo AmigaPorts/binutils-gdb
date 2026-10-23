@@ -38,6 +38,7 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "ldlang.h"
 #include "ldfile.h"
 #include "ldemul.h"
+#include "ldlex.h"
 #include "ldctor.h"
 
 #include "libamiga.h"
@@ -72,18 +73,7 @@ static char *gld${EMULATION_NAME}_get_script PARAMS ((int *isfile));
 
 #if defined(TARGET_IS_amiga)
 
-/* Handle amiga specific options */
-
-enum {
-  OPTION_IGNORE = 300,
-  OPTION_AMIGA_CHIP,
-  OPTION_AMIGA_FAST,
-  OPTION_AMIGA_ATTRIBUTE,
-  OPTION_AMIGA_DEBUG,
-  OPTION_AMIGA_DATABSS_TOGETHER,
-  OPTION_AMIGA_DATADATA_RELOC,
-  OPTION_FLAVOR
-};
+/* Handle amiga specific options; their OPTION_* values are in ldlex.h.  */
 
 void
 amiga_add_options (int ns ATTRIBUTE_UNUSED,
