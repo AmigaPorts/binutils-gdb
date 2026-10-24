@@ -1154,7 +1154,8 @@ md_parse_option (int c, const char *arg)
     case 'a':
       if (strcmp (arg, "64") == 0)
 	{
-#ifdef BFD64
+	  /* AmigaOS 4 objects are always elf32-powerpc-amigaos.  */
+#if defined (BFD64) && !defined (TE_AMIGAOS)
 	  ppc_obj64 = 1;
 	  if (ppc_cpu & PPC_OPCODE_VLE)
 	    as_bad (_("the use of -mvle requires -a32."));
