@@ -1471,7 +1471,12 @@ bfd_set_section_size (asection *sec, bfd_size_type val)
     }
 
   sec->size = val;
-  sec->rawsize = val;  
+  /* The Amiga hunk back end wants the original size kept in rawsize.  For
+     ELF and everything else a rawsize different from zero means the
+     contents changed size (relaxed or compressed sections), so leave it
+     alone there: setting it broke reading compressed debug sections.  */
+  if (bfd_get_flavour (sec->owner) == bfd_target_amiga_flavour)
+    sec->rawsize = val;
   return true;
 }
 
