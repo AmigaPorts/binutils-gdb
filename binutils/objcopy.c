@@ -2774,6 +2774,14 @@ copy_object (bfd *ibfd, bfd *obfd, const bfd_arch_info_type *input_arch)
 
   if (bfd_get_flavour (ibfd) == bfd_target_elf_flavour)
     {
+      /* elf.library loads AmigaOS 4 files by section, and the relocations
+	 kept for it need the section headers too.  */
+      if (strip_section_headers && is_amigaos_elf (ibfd))
+	{
+	  non_fatal (_("--strip-section-headers is unsupported on `%s'"),
+		     bfd_get_archive_filename (ibfd));
+	  return false;
+	}
       if (strip_section_headers)
 	{
 	  ibfd->flags |= BFD_NO_SECTION_HEADER;
