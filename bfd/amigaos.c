@@ -2296,7 +2296,11 @@ amiga_write_object_contents (
 
       for (p = abfd->sections; p != NULL; p = p->next)
 	{
-	  if (p->rawsize == 0 && p->size == 0 && strcmp (".text", p->name))
+	  /* Keep empty LTO sections: an empty translation unit still has
+	     an empty .gnu.lto_.symtab, and lto-plugin claims only objects
+	     that have one.  */
+	  if (p->rawsize == 0 && p->size == 0 && strcmp (".text", p->name)
+	      && !amiga_is_lto_section_name (p->name))
 	    {
 	      // remove only if there are no symbols
 	      bool remove = true;
@@ -2714,7 +2718,8 @@ amiga_write_section_contents (
      Then compactify reloc_data
      Set the entry in the section for the reloc to NULL */
 
-  if (disksize != 0)
+  /* disksize also counts the LTO header, which is not in contents.  */
+  if (amiga_per_section(section)->disk_size != 0)
     BFD_ASSERT ((section->flags & SEC_IN_MEMORY) != 0);
 
   reloc_counts = (long *) bfd_zalloc (abfd, NB_RELOC_TYPES * (max_hunk + 1) * sizeof(long));
