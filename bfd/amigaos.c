@@ -1273,6 +1273,21 @@ amiga_handle_cdb_hunk (
 		    return false;
 	    }
 
+      /* Read only the payload of an LTO section: the writer adds the
+	 "LTO1" header again, and ld -r doubled it.  */
+      if (amiga_is_lto_section_name (current_section->name) && len >= 8)
+	{
+	  unsigned long magic, payload_len;
+	  bfd_vma cpos = bfd_tell (abfd);
+
+	  if (!get_long (abfd, &magic) || !get_long (abfd, &payload_len))
+	    return false;
+	  if (magic == AMIGA_LTO_DEBUG_MAGIC && payload_len <= len - 8)
+	    len = payload_len;
+	  else if (bfd_seek (abfd, cpos, SEEK_SET))
+	    return false;
+	}
+
       current_section->filepos = bfd_tell (abfd);
       /* For a loadfile, the section size in memory comes from the
 	 hunk header. The size on disk may be smaller. */
