@@ -45,6 +45,7 @@
 #	OTHER_BSS_SYMBOLS - symbols that appear at the start of the
 #		.bss section besides __bss_start.
 #	PLT_NEXT_DATA - .plt next to data segment when .plt is in text segment.
+#	PLT_AFTER_TEXT - .plt just after .text when .plt is in text segment.
 #	DATA_PLT - .plt should be in data segment, not text segment.
 #	PLT_BEFORE_GOT - .plt just before .got when .plt is in data segement.
 #	BSS_PLT - .plt should be in bss segment
@@ -641,7 +642,7 @@ cat <<EOF
     ${RELOCATING+${INIT_END}}
   } ${FILL}
 
-  ${TEXT_PLT+${PLT_NEXT_DATA-${PLT} ${OTHER_PLT_SECTIONS}}}
+  ${TEXT_PLT+${PLT_NEXT_DATA-${PLT_AFTER_TEXT-${PLT} ${OTHER_PLT_SECTIONS}}}}
   
   ${TINY_READONLY_SECTION}
   
@@ -658,6 +659,7 @@ cat <<EOF
     *(.gnu.warning)
     ${RELOCATING+${OTHER_TEXT_SECTIONS}}
   } ${FILL}
+  ${TEXT_PLT+${PLT_AFTER_TEXT+${PLT} ${OTHER_PLT_SECTIONS}}}
   
   .fini         ${RELOCATING-0}${RELOCATING+${FINI_ADDR}} :
   {
