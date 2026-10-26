@@ -28,8 +28,8 @@ ppc_amigaos_has_shared_address_space (struct gdbarch *gdbarch)
 	return true;
 }
 
-/* 1 to 1 copy from rs6000aix-tdp.c branch_dest , 
-except removed AIX_TEXT_SEGMENT_BASE checks, 
+/* 1 to 1 copy from rs6000aix-tdp.c branch_dest ,
+except removed AIX_TEXT_SEGMENT_BASE checks,
 removed byte_order */
 static CORE_ADDR
 branch_dest (struct regcache *regcache, int opcode, int instr,
@@ -98,7 +98,7 @@ ppc_amigaos_software_single_step (struct regcache *regcache)
   std::vector<CORE_ADDR> next_pcs = ppc_deal_with_atomic_sequence (regcache);
   if (!next_pcs.empty ())
     return next_pcs;
-  
+
   breaks[0] = loc + PPC_INSN_SIZE;
   opcode = insn >> 26;
   breaks[1] = branch_dest (regcache, opcode, insn, loc, breaks[0]);
