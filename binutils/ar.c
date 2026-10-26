@@ -697,10 +697,10 @@ int main (int, char **);
 int
 main (int argc, char **argv)
 {
-#if defined(__amigaos4__) && !defined(ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
+#if defined(__amigaos4__) && defined(__CLIB4__) && !defined(ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
   enableUnixPaths();
 #endif
-	
+
   int arg_index;
   char **files;
   int file_count;

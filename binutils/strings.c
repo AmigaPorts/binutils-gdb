@@ -199,10 +199,10 @@ set_string_min (const char * arg)
 int
 main (int argc, char **argv)
 {
-#if defined(__amigaos4__) && !defined(ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
+#if defined(__amigaos4__) && defined(__CLIB4__) && !defined(ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM)
   enableUnixPaths();
 #endif
-	
+
   int optc;
   int exit_status = 0;
   bool files_given = false;
