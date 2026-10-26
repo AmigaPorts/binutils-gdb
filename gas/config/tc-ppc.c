@@ -2082,10 +2082,12 @@ ppc_elf_suffix (char **str_p, expressionS *exp_p)
 #define MAP64(str, reloc) { str, sizeof (str) - 1, 0, 1, reloc }
 
   static const struct map_bfd mapping[] = {
+#ifdef TE_AMIGAOS
     MAP ("brel",		BFD_RELOC_PPC_AMIGAOS_BREL),
     MAP ("brel@l",		BFD_RELOC_PPC_AMIGAOS_BREL_LO),
     MAP ("brel@h",		BFD_RELOC_PPC_AMIGAOS_BREL_HI),
-    MAP ("brel@ha",		BFD_RELOC_PPC_AMIGAOS_BREL_HA),	
+    MAP ("brel@ha",		BFD_RELOC_PPC_AMIGAOS_BREL_HA),
+#endif
     MAP ("l",			BFD_RELOC_LO16),
     MAP ("h",			BFD_RELOC_HI16),
     MAP ("ha",			BFD_RELOC_HI16_S),
@@ -3085,9 +3087,11 @@ fixup_size (bfd_reloc_code_real_type reloc, bool *pc_relative)
     case BFD_RELOC_PPC_TPREL16_HA:
     case BFD_RELOC_PPC_TPREL16_HI:
     case BFD_RELOC_PPC_TPREL16_LO:
-	case BFD_RELOC_PPC_AMIGAOS_BREL_LO:
-	case BFD_RELOC_PPC_AMIGAOS_BREL_HI:
-	case BFD_RELOC_PPC_AMIGAOS_BREL_HA:
+#ifdef TE_AMIGAOS
+    case BFD_RELOC_PPC_AMIGAOS_BREL_LO:
+    case BFD_RELOC_PPC_AMIGAOS_BREL_HI:
+    case BFD_RELOC_PPC_AMIGAOS_BREL_HA:
+#endif
       size = 2;
       break;
 
@@ -3152,7 +3156,9 @@ fixup_size (bfd_reloc_code_real_type reloc, bool *pc_relative)
     case BFD_RELOC_PPC_VLE_SDAREL_LO16D:
     case BFD_RELOC_PPC64_TLS_PCREL:
     case BFD_RELOC_RVA:
-	case BFD_RELOC_PPC_AMIGAOS_BREL:
+#ifdef TE_AMIGAOS
+    case BFD_RELOC_PPC_AMIGAOS_BREL:
+#endif
       size = 4;
       break;
 
@@ -7475,10 +7481,12 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg)
 	case BFD_RELOC_PPC64_ADDR16_HIGH:
 	case BFD_RELOC_PPC64_ADDR16_HIGHA:
 	case BFD_RELOC_PPC64_ADDR64_LOCAL:
+#ifdef TE_AMIGAOS
 	case BFD_RELOC_PPC_AMIGAOS_BREL:
 	case BFD_RELOC_PPC_AMIGAOS_BREL_HI:
 	case BFD_RELOC_PPC_AMIGAOS_BREL_LO:
 	case BFD_RELOC_PPC_AMIGAOS_BREL_HA:
+#endif
 	  break;
 
 	case BFD_RELOC_PPC_DTPMOD:
