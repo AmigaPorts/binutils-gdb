@@ -90,7 +90,7 @@ extern "C" {
 #ifdef ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM
 #define IS_AMIGOS_DIR_SEPARATOR(c) ( ((c) == '/') || ((c) == ':') )
 #define IS_AMIGOS_ABSOLUTE_PATH(f) HAS_AMIGOS_DRIVE_SPEC(f)
-#define HAS_AMIGOS_DRIVE_SPEC(f) (index (&(f)[0], ':') != NULL ) 
+#define HAS_AMIGOS_DRIVE_SPEC(f) (index (&(f)[0], ':') != NULL )
 #endif
 
 #define IS_UNIX_DIR_SEPARATOR(c) IS_DIR_SEPARATOR_1 (0, c)

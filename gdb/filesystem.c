@@ -47,10 +47,10 @@ effective_target_file_system_kind (void)
     {
       if (gdbarch_has_dos_based_file_system (current_inferior ()->arch ()))
 	return file_system_kind_dos_based;
-#ifdef ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM	
+#ifdef ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM
 	  else if (gdbarch_has_amiga_based_file_system (current_inferior ()->arch ()))
 	return file_system_kind_amigaos_based;
-#endif	
+#endif
       else
 	return file_system_kind_unix;
     }
@@ -63,7 +63,7 @@ target_lbasename (const char *kind, const char *name)
 {
   if (kind == file_system_kind_dos_based)
     return dos_lbasename (name);
-#ifdef ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM	
+#ifdef ENABLE_HAVE_AMIGA_BASED_FILE_SYSTEM
   else if (kind == file_system_kind_amigaos_based)
     return amiga_lbasename (name);
 #endif

@@ -1386,7 +1386,7 @@ bind_arrow_keys_internal (Keymap map)
     rl_bind_keyseq_if_unbound("\23341~", (rl_command_func_t *)0x0); //Next Page
     rl_bind_keyseq_if_unbound("\23342~", (rl_command_func_t *)0x0); //Previous Page
     rl_bind_keyseq_if_unbound("\177", rl_delete);
-    rl_bind_keyseq_if_unbound("\23340", rl_overwrite_mode);  
+    rl_bind_keyseq_if_unbound("\23340", rl_overwrite_mode);
 #endif
 
   rl_bind_keyseq_if_unbound ("\033[A", rl_get_previous_history);
