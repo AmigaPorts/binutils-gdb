@@ -9,6 +9,11 @@ on:
     types: [labeled]
   workflow_dispatch:
 
+env:
+  # Build without texinfo and install no info files.  configure replaces a
+  # makeinfo it can't get a version from, so make gets it as well.
+  MAKEINFO: "true"
+
 jobs:
   ppc-amigaos:
     if: github.event_name == 'workflow_dispatch' || startsWith(github.event.label.name, 'ci')
@@ -16,7 +21,7 @@ jobs:
     timeout-minutes: 120
     steps:
       - name: Check out binutils-gdb
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.sha || github.ref }}
 
@@ -24,7 +29,7 @@ jobs:
         run: |
           sudo apt-get -y update
           sudo apt-get -y install --no-install-recommends \
-            bison dejagnu flex g++ gcc libgmp-dev libmpfr-dev make texinfo
+            bison dejagnu flex g++ gcc libgmp-dev libmpfr-dev make
 
       - name: Build binutils and gdb
         run: |
@@ -33,11 +38,11 @@ jobs:
           ../configure --target=ppc-amigaos --prefix=/opt/amiga-ppc \
             --disable-werror --disable-nls --without-msgpack \
             --disable-sim --disable-gprofng
-          make -j "$(nproc)"
+          make -j "$(nproc)" MAKEINFO=true
 
       - name: Run the gas and binutils testsuites
         run: |
           cd build
-          make -k -j "$(nproc)" check-gas check-binutils || true
+          make -k -j "$(nproc)" MAKEINFO=true check-gas check-binutils || true
           grep -E '^(# of|FAIL|ERROR)' gas/testsuite/gas.sum binutils/binutils.sum || true
           ! grep -E '^(FAIL|ERROR)' gas/testsuite/gas.sum binutils/binutils.sum
