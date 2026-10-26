@@ -72,6 +72,10 @@ if { [istarget powerpc64*-*-*] || [istarget *-*-elf64*]} then {
     run_dump_test "test1elf32"
 }
 
+if { [istarget powerpc*-*-amigaos*] } then {
+    run_dump_test "amigaos-brel"
+}
+
 run_dump_test "common"
 run_dump_test "476"
 run_dump_test "a2"
