@@ -1,9 +1,9 @@
 name: ppc-amigaos binutils
 
 # Builds binutils and gdb for the AmigaOS 4 (PowerPC) target and runs the
-# gas and binutils testsuites.  Like the m68k toolchain build, it runs when
-# a pull request gets a ci* label (re-add the label to rebuild), or by hand
-# from the Actions tab.
+# gas and binutils testsuites.  It runs when a pull request gets the
+# ci-linux-ppc label (re-add the label to rebuild), or by hand from the
+# Actions tab.  The m68k toolchain build ignores that label.
 on:
   pull_request:
     types: [labeled]
@@ -16,7 +16,7 @@ env:
 
 jobs:
   ppc-amigaos:
-    if: github.event_name == 'workflow_dispatch' || startsWith(github.event.label.name, 'ci')
+    if: github.event_name == 'workflow_dispatch' || github.event.label.name == 'ci-linux-ppc'
     runs-on: ubuntu-24.04
     timeout-minutes: 120
     steps:
