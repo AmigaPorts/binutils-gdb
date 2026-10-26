@@ -7523,14 +7523,6 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg)
 	  break;
 
 #ifdef OBJ_ELF
-	case BFD_RELOC_PPC_AMIGAOS_BREL:
-	case BFD_RELOC_PPC_AMIGAOS_BREL_HI:
-	case BFD_RELOC_PPC_AMIGAOS_BREL_LO:
-	case BFD_RELOC_PPC_AMIGAOS_BREL_HA:
-	  md_number_to_chars (fixP->fx_frag->fr_literal + fixP->fx_where,
-			      value, 2);
-	  break;
-
 	  /* These can appear with @l etc. in data.  */
 	case BFD_RELOC_LO16:
 	case BFD_RELOC_LO16_PCREL:
@@ -7545,6 +7537,10 @@ md_apply_fix (fixS *fixP, valueT *valP, segT seg)
 	case BFD_RELOC_PPC64_ADDR16_HIGH:
 	case BFD_RELOC_PPC64_ADDR16_HIGHA:
 	case BFD_RELOC_PPC64_ADDR64_LOCAL:
+	case BFD_RELOC_PPC_AMIGAOS_BREL:
+	case BFD_RELOC_PPC_AMIGAOS_BREL_HI:
+	case BFD_RELOC_PPC_AMIGAOS_BREL_LO:
+	case BFD_RELOC_PPC_AMIGAOS_BREL_HA:
 	  break;
 
 	case BFD_RELOC_PPC_DTPMOD:
