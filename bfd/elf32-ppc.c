@@ -8092,50 +8092,65 @@ ppc_elf_relocate_section (struct bfd_link_info *info,
 	case R_PPC_UADDR16:
 	  goto dodyn;
 
+	  /* Relocate against the start of the output .data section, which
+	     AmigaOS keeps in r2.  The value is the distance between two
+	     addresses in this module, so it needs no dynamic relocation.  */
 	case R_PPC_AMIGAOS_BREL:
 	case R_PPC_AMIGAOS_BREL_HI:
 	case R_PPC_AMIGAOS_BREL_LO:
 	case R_PPC_AMIGAOS_BREL_HA:
-	{
-		if (data_section == NULL)
-			data_section = bfd_get_section_by_name (output_bfd, ".data");
-		if (data_section != NULL)
-		{
-			if (sec)
-			{
-				const char *name = bfd_section_name (sec->output_section);
-				if (strcmp (name, ".sdata") != 0
-					&& strcmp (name, ".sbss") != 0
-					&& strcmp (name, ".data") != 0
-					&& strcmp (name, ".bss") != 0
-					&& strncmp (name, ".ctors", 6) != 0
-					&& strncmp (name, ".dtors", 6) != 0)
-				{
-					_bfd_error_handler
-						/* xgettext:c-format */
-						(_("%pB: the target (%s) of a %s relocation is in the wrong output section (%s)"),
-							input_bfd,
-							sym_name,
-							howto->name,
-							name);
-				}			
-			}
+	  {
+	    const char *name;
 
-			addend -= data_section->output_section->vma;
+	    /* A symbol defined in a shared object has no address in this
+	       module.  */
+	    if (sec != NULL && sec->output_section == NULL)
+	      {
+		unresolved_reloc = true;
+		break;
+	      }
 
-			if (r_type == R_PPC_AMIGAOS_BREL_HA)
-			addend += ((relocation + addend) & 0x8000) << 1;
-		}
-		else 
-		{
-			_bfd_error_handler
-				/* xgettext:c-format */
-				(_("%pB: the target (%s) has not '.data' section"),
-					input_bfd,
-					sym_name);
-		}
-	}
-	break;
+	    if (data_section == NULL)
+	      data_section = bfd_get_section_by_name (output_bfd, ".data");
+	    if (data_section == NULL)
+	      {
+		_bfd_error_handler
+		  /* xgettext:c-format */
+		  (_("%pB: %s relocation against `%s' without a .data "
+		     "output section"),
+		   input_bfd, howto->name, sym_name);
+		bfd_set_error (bfd_error_bad_value);
+		ret = false;
+		goto copy_reloc;
+	      }
+
+	    if (sec != NULL)
+	      {
+		name = bfd_section_name (sec->output_section);
+		if (strcmp (name, ".sdata") != 0
+		    && strcmp (name, ".sbss") != 0
+		    && strcmp (name, ".data") != 0
+		    && strcmp (name, ".bss") != 0
+		    && strncmp (name, ".ctors", 6) != 0
+		    && strncmp (name, ".dtors", 6) != 0)
+		  {
+		    _bfd_error_handler
+		      /* xgettext:c-format */
+		      (_("%pB: the target (%s) of a %s relocation is "
+			 "in the wrong output section (%s)"),
+		       input_bfd, sym_name, howto->name, name);
+		    bfd_set_error (bfd_error_bad_value);
+		    ret = false;
+		    goto copy_reloc;
+		  }
+	      }
+
+	    addend -= data_section->vma;
+
+	    if (r_type == R_PPC_AMIGAOS_BREL_HA)
+	      addend += ((relocation + addend) & 0x8000) << 1;
+	  }
+	  break;
 
 	case R_PPC_VLE_REL8:
 	case R_PPC_VLE_REL15:
