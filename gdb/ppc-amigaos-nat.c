@@ -54,7 +54,7 @@ struct regcache_map_entry ppc_amigaos_vrregmap[] =
 	{ 0 }
 };
 
-const struct regset ppc_amigaos_vrregset = 
+const struct regset ppc_amigaos_vrregset =
 {
 	ppc_amigaos_vrregmap,
 	regcache_supply_regset,
@@ -149,13 +149,13 @@ public:
 			IExec->AddTail(amigaos_debug_messages_list, (struct Node *)message);
 		}
 	}
-	
+
 	ppc_amigaos_nat_target ();
 	~ppc_amigaos_nat_target () override;
-	
+
 	ptid_t wait (ptid_t, struct target_waitstatus *, target_wait_flags) override;
 
-	void fetch_registers (struct regcache *, int) override;	
+	void fetch_registers (struct regcache *, int) override;
 	void store_registers (struct regcache *, int) override;
 
     enum target_xfer_status xfer_partial (enum target_object object,const char *annex,gdb_byte *readbuf,const gdb_byte *writebuf,ULONGEST offset, ULONGEST len,ULONGEST *xfered_len) override;
@@ -172,7 +172,7 @@ public:
 	{
 		printf( "[GDB] %s (pid: %d)\n",__func__,pid );
 	}
-	
+
 	void detach (inferior *inf, int from_tty) override
 	{
 		printf( "[GDB] %s ( inferior: %p, from_tty: %d )\n",__func__,inf,from_tty );
@@ -187,13 +187,13 @@ public:
 		printf( "[GDB] %s ()\n",__func__ );
 	}
 	*/
-	
+
 	/* Not needed: prepare_to_store() and async_wait_fd() use defaults */
-	
+
 	void resume (ptid_t ptid,int step,enum gdb_signal signal) override
 	{
 		struct Task *task = (struct Task *)(ptid == minus_one_ptid ? inferior_ptid.pid () : ptid.pid ());
-		
+
 		IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d ( step: %d, gdb_signal: %d, Task: %p )\n"),__func__,__LINE__,step,signal,task ).c_str());;
 
 		IExec->RestartTask (task,0);
@@ -226,12 +226,12 @@ public:
 
 		target_mourn_inferior(inferior_ptid);
 	}
-	
+
 	/*
 	std::string pid_to_str (ptid_t ptid) override
 	{
 		IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d Entering\n"),__func__,__LINE__ ).c_str());
-		
+
 		/ *
 		if( ptid != minus_one_ptid )
 		{
@@ -249,11 +249,11 @@ public:
 	  return normal_pid_to_str (ptid);
 	}
 	*/
-	
+
 	/* Not yet implemented: pid_to_exec_file() for 'info proc' support */
-	
+
 	/*
-	bool info_proc (const char *args, enum info_proc_what what) override 
+	bool info_proc (const char *args, enum info_proc_what what) override
 	{
 		IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d (false)\n"),__func__,__LINE__ ).c_str());
 		return false;
@@ -324,7 +324,7 @@ ppc_amigaos_nat_target::ppc_amigaos_nat_target ()
 	amigaos_debug_hook_data.current_process	= 0;
 	amigaos_debug_hook_data.debugger_task	= IExec->FindTask ( NULL );
 
-	amigaos_debug_hook = (struct Hook *)IExec->AllocSysObjectTags ( ASOT_HOOK, 
+	amigaos_debug_hook = (struct Hook *)IExec->AllocSysObjectTags ( ASOT_HOOK,
 		ASOHOOK_Entry,	(HOOKFUNC)amigaos_debug_callback,
 		ASOHOOK_Data,	(APTR)this,
 		TAG_DONE);
@@ -357,8 +357,8 @@ ppc_amigaos_nat_target::ppc_amigaos_nat_target ()
 		IMMU = NULL;
 		IElf = NULL;
 		ElfBase = NULL;
-	
-	
+
+
 		error ("Can't allocate memory for messages\n");
 	}
 
@@ -480,7 +480,7 @@ ppc_amigaos_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,t
 			return ptid;
 		}
 
-		while (struct Message *message = IExec->GetMsg (amigaos_debug_hook_data.debugger_port) ) 		
+		while (struct Message *message = IExec->GetMsg (amigaos_debug_hook_data.debugger_port) )
 		{
 			IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d received message: %p\n"),__func__,__LINE__,message ).c_str());
 
@@ -508,7 +508,7 @@ ppc_amigaos_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,t
 					{
 						IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d received task terminated\n"),__func__,__LINE__ ).c_str());
 
-						if( process == debuggerMessage->process) 
+						if( process == debuggerMessage->process)
 						{
 							ourstatus->set_exited (0);
 
@@ -544,7 +544,7 @@ ppc_amigaos_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,t
 					default:
 					{
 						IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d received unknown flags for signal -1 from callback %ld\n"),__func__,__LINE__,debuggerMessage->flags ).c_str());
-	
+
 						break;
 					}
 				}
@@ -596,11 +596,11 @@ ppc_amigaos_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,t
 				}
 
 				free_message (debuggerMessage);
-				
+
 				IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d Leaving with ptid: 0x%s\n"),__func__,__LINE__,phex_nz (ptid.tid (),sizeof (ULONGEST)) ).c_str());
 
 				return ptid;
-			}		
+			}
 		}
 	}
 
@@ -610,11 +610,11 @@ ppc_amigaos_nat_target::wait (ptid_t ptid, struct target_waitstatus *ourstatus,t
 }
 
 /* Fetch register REGNO from the inferior.  */
-void 
-ppc_amigaos_nat_target::fetch_registers (struct regcache *regcache, int regno) 
+void
+ppc_amigaos_nat_target::fetch_registers (struct regcache *regcache, int regno)
 {
 	struct gdbarch *gdbarch = regcache->arch ();
-	ppc_gdbarch_tdep *tdep = gdbarch_tdep<ppc_gdbarch_tdep> (gdbarch);	
+	ppc_gdbarch_tdep *tdep = gdbarch_tdep<ppc_gdbarch_tdep> (gdbarch);
 	struct Task *task = (struct Task *)regcache->ptid().pid();
 
 	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d ( regcache: %p, regno: %d (%s), task: %p)\n"),__func__,__LINE__,regcache,regno,regno >= 0 ? gdbarch_register_name( gdbarch,regno ) : "all",task ).c_str());
@@ -809,7 +809,7 @@ ppc_amigaos_nat_target::xfer_partial (enum target_object object,const char *anne
 	{
 		case TARGET_OBJECT_MEMORY:
 		{
-			if (offset == 0) 
+			if (offset == 0)
 			{
 				// ML: Helps to unwind farme correctly
 				return TARGET_XFER_E_IO;
@@ -823,7 +823,7 @@ ppc_amigaos_nat_target::xfer_partial (enum target_object object,const char *anne
 
 				IMMU->SetMemoryAttrs ( (APTR)offset,len,MEMATTRF_READ_WRITE );
 
-				if (readbuf) 
+				if (readbuf)
 				{
 					IExec->CopyMem( (APTR)offset,(APTR)readbuf,len );
 				}
@@ -845,7 +845,7 @@ ppc_amigaos_nat_target::xfer_partial (enum target_object object,const char *anne
 
 			IExec->DebugPrintF ( string_printf (_("[GDB] %s tansferfed %s bytes\n"),__func__,pulongest (*xfered_len)).c_str());
 
-			return TARGET_XFER_OK;			
+			return TARGET_XFER_OK;
 		}
 		break;
 
@@ -853,12 +853,12 @@ ppc_amigaos_nat_target::xfer_partial (enum target_object object,const char *anne
 		{
 			IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d tansferfed object library '%s' failed, aka not supported yet\n"),__func__,__LINE__,annex ).c_str());
 
-			return TARGET_XFER_E_IO;			
+			return TARGET_XFER_E_IO;
 		}
 		break;
 
 		default:
-			if (beneath()) 
+			if (beneath())
 			{
 				IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d tansferfed delegated to beneath for target_object %d\n"),__func__,__LINE__,object ).c_str());
 
@@ -875,7 +875,7 @@ ppc_amigaos_nat_target::xfer_partial (enum target_object object,const char *anne
 void
 ppc_amigaos_nat_target::attach (const char *args, int from_tty)
 {
-	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d args: '%s', from_tty: %d\n"),__func__,__LINE__,args,from_tty ).c_str());	
+	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d args: '%s', from_tty: %d\n"),__func__,__LINE__,args,from_tty ).c_str());
 
 	if (!args || !*args)
 		error ("No task name or address specified for attach");
@@ -927,7 +927,7 @@ ppc_amigaos_nat_target::attach (const char *args, int from_tty)
 }
 
 void
-ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist) 
+ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist)
 {
 	// To debug this stuff, enableing elf debug out with 'SetENV ELF.debug 1' helps alot on thr target
 	Elf32_Handle exec_elfhandle = 0;
@@ -939,9 +939,9 @@ ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist)
 			OET_ElfHandle,			exec_elfhandle,
 			OET_ReadOnlyCopy,		TRUE,
 			TAG_DONE );
-		if( exec_opendelf ) 
+		if( exec_opendelf )
 		{
-			if( current_program_space->symfile_object_file ) 
+			if( current_program_space->symfile_object_file )
 			{
 				struct objfile *symfile = current_program_space->symfile_object_file;
 				/* Start from the current offsets, so that sections elf.library
@@ -954,15 +954,15 @@ ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist)
 					struct bfd_section *section = osect->the_bfd_section;
 					/* section_offsets is indexed by the BFD section index.  */
 					int osect_idx = section->index;
-					
+
 					void *address = IElf->GetSectionTags( exec_opendelf,
 						GST_SectionName, section->name,
 						TAG_DONE );
-						
+
 					if( address )
 					{
 						IExec->DebugPrintF ( string_printf (_("[GDB] On symfile_object relocated %d section '%s' from 0x%08lx to %p, size %ld, old offset: 0x%s\n"),section->index,section->name,(unsigned long) section->vma,address,(long) section->size,phex ( osect->addr(), sizeof (osect->addr()))).c_str());
-						
+
 						/* objfile_relocate takes offsets from the unrelocated
 						   addresses, not deltas from the current ones.  */
 						offsets[ osect_idx ] = (CORE_ADDR)address - bfd_section_vma (section);
@@ -979,12 +979,12 @@ ppc_amigaos_relocate_sections (const char *exec_file,BPTR exec_seglist)
 					void *address = IElf->GetSectionTags( exec_opendelf,
 						GST_SectionName, section->name,
 						TAG_DONE );
-								
+
 					if( address )
 					{
 						IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d On exec_bfd relocated %d section '%s' from 0x%08lx to %p, size %ld\n"),__func__,__LINE__,section->index,section->name,(unsigned long) section->vma,address,(long) section->size).c_str());
-						
-						exec_set_section_address( exec_file,section->index,(CORE_ADDR)address );							
+
+						exec_set_section_address( exec_file,section->index,(CORE_ADDR)address );
 					}
 				}
 			}
@@ -1021,7 +1021,7 @@ void ppc_amigaos_nat_target::create_inferior (const char *exec_file,const std::s
 	dmsg->msg.mn_Node.ln_Name	= (char*)"DeathMessage";
 	dmsg->msg.mn_ReplyPort		= amigaos_debug_hook_data.debugger_port;
 	dmsg->flags					= DM_FLAGS_TASK_FINAL;
-	dmsg->signal				= -1; 	
+	dmsg->signal				= -1;
 
 	dmsg->seglist = (void*)IDOS->LoadSeg( exec_file );
 	if( ! dmsg->seglist )
@@ -1079,7 +1079,7 @@ void ppc_amigaos_nat_target::create_inferior (const char *exec_file,const std::s
 	/* Do not change either targets above or the same target if already present.
 	 The reason is the target stack is shared across multiple inferiors.  */
 	inf->unpush_target(this);
-	
+
 	if(!inf->target_is_pushed(this))
 		inf->push_target(this);
 
@@ -1101,18 +1101,18 @@ INIT_GDB_FILE (ppcamigaos_nat)
 	add_inf_child_target (&the_ppc_amigaos_nat_target);
 }
 
-VOID amigaos_debug_suspend( struct Hook *amigaos_debug_hook ) 
+VOID amigaos_debug_suspend( struct Hook *amigaos_debug_hook )
 {
 	struct Task *current = IExec->FindTask (NULL);
 
 	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d inferiorer %p started by kernel, suspending myself and installing debug hook: %p\n"),__func__,__LINE__,current,amigaos_debug_hook ).c_str());
-	
+
 	IExec->SuspendTask (current,0);
 
 	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d inferiorer %p started by gdb\n"),__func__,__LINE__,current ).c_str());
 }
 
-VOID amigaos_debug_kill( int32 return_code,struct debugger_message *dmsg ) 
+VOID amigaos_debug_kill( int32 return_code,struct debugger_message *dmsg )
 {
 	struct Task *current = IExec->FindTask (NULL);
 
@@ -1120,14 +1120,14 @@ VOID amigaos_debug_kill( int32 return_code,struct debugger_message *dmsg )
 
 	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d inferiorer %p killed by kernel, sending death message: %p\n"),__func__,__LINE__,current,dmsg ).c_str());
 
-	IExec->PutMsg( dmsg->msg.mn_ReplyPort,(struct Message *)dmsg );	
+	IExec->PutMsg( dmsg->msg.mn_ReplyPort,(struct Message *)dmsg );
 }
 
 ULONG amigaos_debug_callback (struct Hook *hook, struct Task *currentTask,struct KernelDebugMessage *dbgmsg )
 {
 	class ppc_amigaos_nat_target *ppc_amigaos_nat_target = (class ppc_amigaos_nat_target *)hook->h_Data;
 	struct amigaos_debug_hook_data *data = &(ppc_amigaos_nat_target->amigaos_debug_hook_data);
-	
+
 	if( (struct Task *)data->current_process != currentTask )
 	{
 		IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d Task: %p ('%s'), task NOT under our observation\n"),__func__,__LINE__,currentTask,currentTask->tc_Node.ln_Name ).c_str());
@@ -1137,7 +1137,7 @@ ULONG amigaos_debug_callback (struct Hook *hook, struct Task *currentTask,struct
 	IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d Task: %p ('%s'), task IS under our observation\n"),__func__,__LINE__,currentTask,currentTask->tc_Node.ln_Name ).c_str());
 
 
-	switch( dbgmsg->type ) 
+	switch( dbgmsg->type )
 	{
 		case DBHMT_EXCEPTION:
 		{
@@ -1179,11 +1179,11 @@ ULONG amigaos_debug_callback (struct Hook *hook, struct Task *currentTask,struct
 			if (!message) break;
 			message->flags	= DM_FLAGS_TASK_TERMINATED;
 			message->signal	= -1;
-			
+
 			IExec->DebugPrintF ( string_printf (_("[GDB] %s@%d debug hook sending message: %p\n"),__func__,__LINE__,message ).c_str());
 
 			IExec->PutMsg (data->debugger_port,(struct Message *)message);
-			
+
 			break;
 		}
 		case DBHMT_OPENLIB:
