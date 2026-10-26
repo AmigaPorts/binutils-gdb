@@ -50,7 +50,7 @@
 # define DIRNAME_SEPARATOR ';'
 #endif
 
-#if defined(__amigaos4__) 
+#if defined(__amigaos4__)
 # define CANT_FORK
 # undef HAVE_POLL
 # undef HAVE_SOCKETPAIR

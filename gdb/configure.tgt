@@ -534,7 +534,7 @@ powerpc-*-amigaos*)
 	gdb_target_obs="rs6000-tdep.o ppc-sysv-tdep.o \
 			ppc-amigaos-tdep.o \
 			ravenscar-thread.o ppc-ravenscar-thread.o"
-	;;	
+	;;
 powerpc-*-lynx*178)
 	# Target: PowerPC running Lynx178.
 	gdb_target_obs="rs6000-tdep.o rs6000-lynx178-tdep.o \

@@ -38,14 +38,14 @@ the GNU General Public License version 3 or (at your option) any later version.\
 This program has absolutely no warranty.\n"));
 
 #if defined(__amigaos4__)
-# if defined( __NEWLIB__)
+# if defined(__NEWLIB__)
   printf (_("AmigaOS native (ppc-amigaos,newlib).\n"));
-# elif defined( __CLIB4__)
+# elif defined(__CLIB4__)
   printf (_("AmigaOS native (ppc-amigaos,clib4).\n"));
-# elif defined( __CLIB2__ )
+# elif defined(__CLIB2__)
   printf (_("AmigaOS native (ppc-amigaos,clib2).\n"));
 # else
- printf (_("AmigaOS native (ppc-amigaos,unknown).\n"));
+  printf (_("AmigaOS native (ppc-amigaos,unknown).\n"));
 # endif
 #endif
 

@@ -844,7 +844,7 @@ ppc_elf_reloc_type_lookup (bfd *abfd ATTRIBUTE_UNUSED,
     case BFD_RELOC_PPC_EMB_RELST_HA:	r = R_PPC_EMB_RELST_HA;		break;
     case BFD_RELOC_PPC_EMB_BIT_FLD:	r = R_PPC_EMB_BIT_FLD;		break;
     case BFD_RELOC_PPC_EMB_RELSDA:	r = R_PPC_EMB_RELSDA;		break;
-	case BFD_RELOC_PPC_AMIGAOS_BREL:	r = R_PPC_AMIGAOS_BREL;		break;
+    case BFD_RELOC_PPC_AMIGAOS_BREL:	r = R_PPC_AMIGAOS_BREL;		break;
     case BFD_RELOC_PPC_AMIGAOS_BREL_LO:	r = R_PPC_AMIGAOS_BREL_LO;	break;
     case BFD_RELOC_PPC_AMIGAOS_BREL_HI:	r = R_PPC_AMIGAOS_BREL_HI;	break;
     case BFD_RELOC_PPC_AMIGAOS_BREL_HA:	r = R_PPC_AMIGAOS_BREL_HA;	break;
@@ -10546,7 +10546,7 @@ ppc_elf_finish_dynamic_sections (bfd *output_bfd,
 #define RDATA_SECTION_NAME ".rodata"
 
 /* If we have .rodata section we need to bump the
-programm headers, so that it is in it own segment. */ 
+programm headers, so that it is in it own segment. */
 
 
 static int
@@ -10560,7 +10560,7 @@ ppc_elf_amigaos_additional_program_headers (
 	if (bfd_get_section_by_name (abfd, RDATA_SECTION_NAME))
 	{
 #ifdef DEBUG
-		printf ("Target amigaos-pcc needs addtional programm header, because .rodata section is present, thus we add 1 to %d\n",ret); 
+		printf ("Target amigaos-pcc needs addtional programm header, because .rodata section is present, thus we add 1 to %d\n",ret);
 #endif
 		++ret;
 	}
@@ -10575,29 +10575,29 @@ ppc_elf_amigaos_modify_segment_map (
 {
 	/* If there is a .rodata section, we need a own segment for it.  */
 	asection *roSection = bfd_get_section_by_name (abfd, RDATA_SECTION_NAME);
-	if( roSection != NULL ) 
+	if( roSection != NULL )
 	{
 #ifdef DEBUG
-		printf ("Target amigaos-pcc needs .rodata section in aseparate segment from .text and .plt\n"); 
+		printf ("Target amigaos-pcc needs .rodata section in aseparate segment from .text and .plt\n");
 #endif
-		for( struct elf_segment_map *segment = elf_seg_map (abfd);segment != NULL;segment = segment->next ) 
+		for( struct elf_segment_map *segment = elf_seg_map (abfd);segment != NULL;segment = segment->next )
 		{
 			if( segment->p_type == PT_LOAD && segment->count > 1 )
 			{
 				for( unsigned int index = 0;index < segment->count;index++ )
 				{
-					if( segment->sections[index] == roSection ) 
+					if( segment->sections[index] == roSection )
 					{
 #ifdef DEBUG
-						printf ("Segment found for .rodata at index %d of %d sections\n",index,segment->count); 
+						printf ("Segment found for .rodata at index %d of %d sections\n",index,segment->count);
 #endif
-				
+
 						if( index + 1 < segment->count )
 						{
 							struct elf_segment_map *nextSegment = bfd_zalloc (abfd,sizeof (struct elf_segment_map) + ( (segment->count - ( index + 2 )) * sizeof ( segment->sections[0]) ) );
-							if( nextSegment == NULL ) 
+							if( nextSegment == NULL )
 								return false;
-						
+
 							nextSegment->count = segment->count - (index + 1);
 							memcpy (nextSegment->sections, segment->sections + index + 1,nextSegment->count * sizeof (segment->sections[0]));
 							nextSegment->p_type = PT_LOAD;
@@ -10605,7 +10605,7 @@ ppc_elf_amigaos_modify_segment_map (
 							nextSegment->next = segment->next;
 							segment->next = nextSegment;
 						}
-						
+
 						segment->count = 1;
 
 						if( index != 0 )
@@ -10624,8 +10624,8 @@ ppc_elf_amigaos_modify_segment_map (
 						}
 
 						break;
-					} 
-				}		
+					}
+				}
 			}
 		}
 	}
@@ -10641,22 +10641,22 @@ ppc_elf_amigaos_finish_dynamic_symbol(
 	Elf_Internal_Sym *sym)
 {
 #ifdef DEBUG
-	printf ("Target amigaos-pcc needs reloc R_PPC_JMP_SLOT/... having none zero value\n"); 
+	printf ("Target amigaos-pcc needs reloc R_PPC_JMP_SLOT/... having none zero value\n");
 #endif
- 
+
 	if( ! hashEntry->def_regular || ( hashEntry->type == STT_GNU_IFUNC && !bfd_link_pic( info ) ) )
 	{
 		for( struct plt_entry *pltEntry = hashEntry->plt.plist;pltEntry != NULL;pltEntry = pltEntry->next )
 		{
-			if( pltEntry->plt.offset != (bfd_vma)-1 ) 
-			{	
+			if( pltEntry->plt.offset != (bfd_vma)-1 )
+			{
 				if( ! hashEntry->def_regular && ! hashEntry->pointer_equality_needed )
-	    		{
+				{
 					/* THF: This is peculiar. The compiler generates a R_PPC_JMP_SLOT for externally referenced
 					 * symbols imported from libc.so. Relocation in elf.library requires the symbol to have it's .plt
 					 * stub value, but the linker specifically clears the value to 0, resulting in run-time
 					 * errors when the binary tries to call libc functions.
-					 */	
+					 */
 					hashEntry->pointer_equality_needed = 1;
 				}
 			}
