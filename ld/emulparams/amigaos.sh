@@ -28,9 +28,9 @@ SEPARATE_GOTPLT=0
 unset BSS_PLT
 unset DATA_PLT
 GOT=".got          ${RELOCATING-0} : SPECIAL { *(.got) }"
-PLT=". = ALIGN(4096);
+PLT="${RELOCATING+. = ALIGN(4096);}
   .plt          ${RELOCATING-0} :  { *(.plt) }
-  . = ALIGN(4096);"
+  ${RELOCATING+. = ALIGN(4096);}"
 # GOTPLT="${PLT}"
 OTHER_TEXT_SECTIONS="*(.glink)"
 ENABLE_INITFINI_ARRAY=no
