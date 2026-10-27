@@ -8111,7 +8111,7 @@ ppc_elf_relocate_section (struct bfd_link_info *info,
 	      }
 
 	    if (data_section == NULL)
-	      data_section = bfd_get_section_by_name (output_bfd, ".data");
+	      data_section = bfd_get_section_by_name (info->output_bfd, ".data");
 	    if (data_section == NULL)
 	      {
 		_bfd_error_handler
@@ -10639,7 +10639,6 @@ ppc_elf_amigaos_modify_segment_map (
 
 static bool
 ppc_elf_amigaos_finish_dynamic_symbol(
-	bfd *output_bfd,
 	struct bfd_link_info *info,
 	struct elf_link_hash_entry *hashEntry,
 	Elf_Internal_Sym *sym)
@@ -10667,7 +10666,7 @@ ppc_elf_amigaos_finish_dynamic_symbol(
 		}
 	}
 
-  return ppc_elf_finish_dynamic_symbol( output_bfd,info,hashEntry,sym );
+  return ppc_elf_finish_dynamic_symbol( info,hashEntry,sym );
 }
 #undef elf_backend_additional_program_headers
 #define elf_backend_additional_program_headers	ppc_elf_amigaos_additional_program_headers

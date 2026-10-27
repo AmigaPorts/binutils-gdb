@@ -227,7 +227,7 @@ struct gdbarch
   gdbarch_guess_tracepoint_registers_ftype *guess_tracepoint_registers = default_guess_tracepoint_registers;
   gdbarch_auto_wide_charset_ftype *auto_wide_charset = default_auto_wide_charset;
   bool has_dos_based_file_system = false;
-  int has_amiga_based_file_system = 0;
+  bool has_amiga_based_file_system = false;
   gdbarch_gen_return_address_ftype *gen_return_address = default_gen_return_address;
   gdbarch_info_proc_ftype *info_proc = nullptr;
   gdbarch_core_info_proc_ftype *core_info_proc = nullptr;
@@ -4822,10 +4822,10 @@ set_gdbarch_has_dos_based_file_system (struct gdbarch *gdbarch,
   gdbarch->has_dos_based_file_system = has_dos_based_file_system;
 }
 
-int
+bool
 gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch)
 {
-  gdb_assert (gdbarch != NULL);
+  gdb_assert (gdbarch != nullptr);
   /* Skip verify of has_amiga_based_file_system, invalid_p == 0.  */
   if (gdbarch_debug >= 2)
     gdb_printf (gdb_stdlog, "gdbarch_has_amiga_based_file_system called\n");
@@ -4834,7 +4834,7 @@ gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch)
 
 void
 set_gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch,
-					 int has_amiga_based_file_system)
+					 bool has_amiga_based_file_system)
 {
   gdbarch->has_amiga_based_file_system = has_amiga_based_file_system;
 }

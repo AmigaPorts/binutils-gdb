@@ -17,12 +17,11 @@
    You should have received a copy of the GNU General Public License
    along with this program.  If not, see <http://www.gnu.org/licenses/>.  */
 
-#include "defs.h"
 #include "gdbcore.h"
 #include "gdbarch.h"
 #include "ppc-tdep.h"
 
-static int
+static bool
 ppc_amigaos_has_shared_address_space (struct gdbarch *gdbarch)
 {
 	return true;
@@ -125,7 +124,7 @@ static void
 ppc_amigaos_init_abi (struct gdbarch_info info, struct gdbarch *gdbarch)
 {
 	/* Canonical paths on this target look like `SYS:Utilities/Clock', for example.  */
-	set_gdbarch_has_amiga_based_file_system (gdbarch, 1);
+	set_gdbarch_has_amiga_based_file_system (gdbarch, true);
 
 	/* Everything runs in the same address space, but might have a private address area */
 	set_gdbarch_has_shared_address_space (gdbarch, ppc_amigaos_has_shared_address_space);
