@@ -1545,8 +1545,8 @@ void set_gdbarch_has_dos_based_file_system (struct gdbarch *gdbarch, bool has_do
    absolute paths start with a volume or assign name followed by a
    colon, and the slash is the directory separator. */
 
-extern int gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch);
-extern void set_gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch, int has_amiga_based_file_system);
+bool gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch);
+void set_gdbarch_has_amiga_based_file_system (struct gdbarch *gdbarch, bool has_amiga_based_file_system);
 
 /* Generate bytecodes to collect the return address in a frame.
    Since the bytecodes run on the target, possibly with GDB not even
