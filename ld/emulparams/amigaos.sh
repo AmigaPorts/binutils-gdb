@@ -15,7 +15,10 @@ GENERATE_SHLIB_SCRIPT=yes
 TEXT_START_ADDR=0x01000000
 SHLIB_TEXT_START_ADDR=0x10000000
 unset WRITABLE_RODATA
-DATA_START_SYMBOLS="_DATA_BASE_ = .;"
+# -mbaserel code addresses its data relative to _DATA_BASE_, which the
+# startup code loads into r2.  elf.library resolves _DATA_BASE_ to 0 when
+# .data is empty, so keep a word there.
+DATA_START_SYMBOLS="_DATA_BASE_ = .; LONG (0);"
 SDATA_START_SYMBOLS="_SDA_BASE_ = . + 0x8000;"
 DATA_GOT=
 SDATA_GOT=
