@@ -40,3 +40,47 @@ run_dump_test "baserel-section"
 run_dump_test "weak-override"
 run_dump_test "weak-override-local"
 run_dump_test "lto-r"
+
+# A .datachip hunk must stay in chip RAM: a partial link keeps HUNKF_CHIP in
+# the HUNK_DATA size word, and a load file has it in the HUNK_HEADER table.
+# objdump shows neither, so read the longwords of the files directly.
+
+proc amiga_longs { file } {
+    set f [open $file rb]
+    binary scan [read $f] Iu* longs
+    close $f
+    return $longs
+}
+
+proc amiga_chip_test {} {
+    global as ld srcdir subdir
+
+    set test "Amiga .datachip keeps HUNKF_CHIP"
+    if { ![ld_assemble $as $srcdir/$subdir/chip.s tmpdir/chip.o]
+	 || ![ld_link $ld tmpdir/chip-r.o "-r tmpdir/chip.o"]
+	 || ![ld_link $ld tmpdir/chip "-e _start tmpdir/chip.o"] } {
+	fail $test
+	return
+    }
+
+    # HUNK_DATA (0x3ea) of the 4-byte .datachip, with the chip bit
+    set r [amiga_longs tmpdir/chip-r.o]
+    set i [lsearch -exact $r [expr 0x3ea]]
+    if { $i < 0 || [lindex $r [expr $i + 1]] != [expr 0x40000001] } {
+	fail "$test (ld -r)"
+	return
+    }
+
+    # HUNK_HEADER: 0x3f3, no names, the table size, the first and last
+    # hunk, then one size per hunk; the chip data is the last one
+    set h [amiga_longs tmpdir/chip]
+    set last [lindex $h 4]
+    if { [lindex $h 0] != [expr 0x3f3]
+	 || [lindex $h [expr 5 + $last]] != [expr 0x40000001] } {
+	fail "$test (load file)"
+	return
+    }
+    pass $test
+}
+
+amiga_chip_test
