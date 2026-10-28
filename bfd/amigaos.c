@@ -1248,7 +1248,7 @@ amiga_handle_cdb_hunk (
       len = HUNK_VALUE (tmp) << 2; /* Length of section */
       if (!is_load)
 	{
-	  hunk_attribute=HUNK_ATTRIBUTE (len);
+	  hunk_attribute=HUNK_ATTRIBUTE (tmp);
 	  hunk_attribute=(hunk_attribute==HUNK_ATTR_CHIP)?MEMF_CHIP:
 			 (hunk_attribute==HUNK_ATTR_FAST)?MEMF_FAST:0;
 	}
