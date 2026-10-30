@@ -7,7 +7,10 @@ SCRIPT_NAME=elf
 OUTPUT_FORMAT="elf32-powerpc-amigaos"
 MAXPAGESIZE="CONSTANT (MAXPAGESIZE)"
 COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
-DATA_SEGMENT_ALIGN="ALIGN(${SEGMENT_SIZE})"
+# Move .data to a new page by address alone.  ALIGN by itself would also pad
+# the file up to the next 64 KiB boundary, for nothing: elf.library allocates
+# each segment on its own.
+DATA_SEGMENT_ALIGN="ALIGN(${SEGMENT_SIZE}) + (. & (${MAXPAGESIZE} - 1))"
 ALIGNMENT=16
 ARCH=powerpc
 MACHINE=
