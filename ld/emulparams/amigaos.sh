@@ -7,7 +7,10 @@ SCRIPT_NAME=elf
 OUTPUT_FORMAT="elf32-powerpc-amigaos"
 MAXPAGESIZE="CONSTANT (MAXPAGESIZE)"
 COMMONPAGESIZE="CONSTANT (COMMONPAGESIZE)"
-DATA_SEGMENT_ALIGN="ALIGN(${SEGMENT_SIZE})"
+# Move .data to a new page by address alone.  ALIGN by itself would also pad
+# the file up to the next 64 KiB boundary, for nothing: elf.library allocates
+# each segment on its own.
+DATA_SEGMENT_ALIGN="ALIGN(${SEGMENT_SIZE}) + (. & (${MAXPAGESIZE} - 1))"
 ALIGNMENT=16
 ARCH=powerpc
 MACHINE=
@@ -15,7 +18,10 @@ GENERATE_SHLIB_SCRIPT=yes
 TEXT_START_ADDR=0x01000000
 SHLIB_TEXT_START_ADDR=0x10000000
 unset WRITABLE_RODATA
-DATA_START_SYMBOLS="_DATA_BASE_ = .;"
+# -mbaserel code addresses its data relative to _DATA_BASE_, which the
+# startup code loads into r2.  elf.library resolves _DATA_BASE_ to 0 when
+# .data is empty, so keep a word there.
+DATA_START_SYMBOLS="_DATA_BASE_ = .; LONG (0);"
 SDATA_START_SYMBOLS="_SDA_BASE_ = . + 0x8000;"
 DATA_GOT=
 SDATA_GOT=
