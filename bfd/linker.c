@@ -1147,10 +1147,20 @@ generic_link_check_archive_element (bfd *abfd,
 	     created from outside BFD such as from a linker -u option.
 	     This object file defines the symbol, so pull it in.  */
 	  *pneeded = true;
+	  bfd_set_error (bfd_error_no_error);
 	  if (!(*info->callbacks
 		->add_archive_element) (info, abfd, bfd_asymbol_name (p),
 					&abfd))
-	    return false;
+	    {
+	      /* ld declines a slim IR element once the LTO plugin has
+		 claimed everything, without an error: a reference from
+		 the LTO output, such as a libcall, is then left for a
+		 later library, as in elf_link_add_archive_symbols.  */
+	      if (bfd_get_error () != bfd_error_no_error)
+		return false;
+	      *pneeded = false;
+	      return true;
+	    }
 	  /* Potentially, the add_archive_element hook may have set a
 	     substitute BFD for us.  */
 	  return bfd_link_add_symbols (abfd, info);
