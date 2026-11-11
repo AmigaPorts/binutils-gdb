@@ -791,7 +791,7 @@ parse_archive_units (
 	    {
 	len = n & 0xffffff;
 	type = (n>>24) & 0xff;
-	if (type < 200) type &= ~0x60;
+	if (EXT_HAS_FLAGS (type)) type &= ~(EXT_WEAK | EXT_LOCAL);
 	      switch (type)
 		{
 	case EXT_SYMB:
@@ -1540,7 +1540,7 @@ amiga_handle_rest (
 	      type = (no>>24) & 0xff;
 	      len = no & 0xffffff;
 	      nsyms++;
-	      if (type >= 200 || (type & 0x40) == 0)
+	      if (!EXT_HAS_FLAGS (type) || (type & EXT_WEAK) == 0)
 		one_only = false;	/* not weak */
 
 	      /* read symbol name */
@@ -1556,7 +1556,7 @@ amiga_handle_rest (
 	      abfd->flags |= HAS_SYMS;
 	      abfd->symcount++;
 
-		if (type < 200) type &= ~0x60;
+		if (EXT_HAS_FLAGS (type)) type &= ~(EXT_WEAK | EXT_LOCAL);
 	      switch (type)
 		{
 		case EXT_SYMB: /* Symbol hunks are relative to hunk start... */
@@ -3000,7 +3000,7 @@ amiga_write_lto_undefined_symbols (bfd *abfd,
 
 	  type = EXT_ABSREF32;
 	  if (kind == AMIGA_LTO_GCCPK_WEAKUNDEF)
-	    type |= 0x40;
+	    type |= EXT_WEAK;
 
 	  if (!write_name (abfd, symname, type << 24))
 	    return false;
@@ -3161,6 +3161,24 @@ static bool amiga_write_symbols (
 	  ncnt=1;
 	}/* Of is common section */
 
+	/* A weak reference.  Not one to a weak definition of this unit,
+	   which also goes by name: see amiga_reloc_is_ext.  */
+	if (bfd_is_und_section (osection) && (sym_p->flags & BSF_WEAK) != 0)
+	  {
+	    /* The types from EXT_DEXT32COMMON up, such as EHF's
+	       EXT_RELREF26, have no room for the flag: rather than write a
+	       strong reference, fail.  */
+	    if (!EXT_HAS_FLAGS (type))
+	      {
+		_bfd_error_handler (_("%pB: weak reference to `%s' with a "
+				      "relocation that hunk objects cannot "
+				      "mark weak"), abfd, sym_p->name);
+		bfd_set_error (bfd_error_bad_value);
+		return false;
+	      }
+	    type |= EXT_WEAK;
+	  }
+
 	DPRINT(5,("Type is %lx\n",type));
 	if (!write_name (abfd, sym_p->name, type << 24))
 	  return false;
@@ -3221,8 +3239,8 @@ static bool amiga_write_symbols (
 	    }
 
 	  if (!write_name (abfd, sym_p->name, (EXT_ABS
-	      | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0)
-	      | ((sym_p->flags & BSF_LOCAL) ? 0x20 : 0)
+	      | ((sym_p->flags & BSF_WEAK) ? EXT_WEAK : 0)
+	      | ((sym_p->flags & BSF_LOCAL) ? EXT_LOCAL : 0)
 	      )<< 24))
 	    return false;
 	  n[0]=sym_p->value;
@@ -3264,8 +3282,8 @@ static bool amiga_write_symbols (
 	    }
 
 	  type = symbol_header == HUNK_EXT ? (EXT_DEF
-	      | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0)
-	      | ((sym_p->flags & BSF_LOCAL) ? 0x20 : 0)
+	      | ((sym_p->flags & BSF_WEAK) ? EXT_WEAK : 0)
+	      | ((sym_p->flags & BSF_LOCAL) ? EXT_LOCAL : 0)
 	      )<< 24 : 0;
 	  if (!write_name (abfd, sym_p->name, type))
 	    return false;
@@ -3285,8 +3303,8 @@ static bool amiga_write_symbols (
 		}
 
 	      if (!write_name (abfd, sym_p->name, (EXT_ABSCOMMON
-		  | ((sym_p->flags & BSF_WEAK) ? 0x40 : 0)
-		  | ((sym_p->flags & BSF_LOCAL) ? 0x20 : 0)
+		  | ((sym_p->flags & BSF_WEAK) ? EXT_WEAK : 0)
+		  | ((sym_p->flags & BSF_LOCAL) ? EXT_LOCAL : 0)
 		  ) << 24))
 		return false;
 	      n[0]=sym_p->value;
@@ -3567,15 +3585,16 @@ amiga_slurp_symbol_table (bfd *abfd)
 	  asp->type = type;
 	  asp->index = asp - amiga_data->symbols;
 
-	  if (type < 200 && (type & 0x40))
+	  bool weak = EXT_HAS_FLAGS (type) && (type & EXT_WEAK) != 0;
+	  if (weak)
 	    {
 	      asp->symbol.flags = BSF_WEAK | BSF_GLOBAL;
-	      type &= ~0x40;
+	      type &= ~EXT_WEAK;
 	    }
-	  else if (type < 200 && (type & 0x20))
+	  else if (EXT_HAS_FLAGS (type) && (type & EXT_LOCAL))
 	    {
 	      asp->symbol.flags = BSF_LOCAL;
-	      type &= ~0x20;
+	      type &= ~EXT_LOCAL;
 	    }
 
 	  switch (type)
@@ -3610,7 +3629,7 @@ amiga_slurp_symbol_table (bfd *abfd)
 	    break;
 	  default: /* References to an undefined symbol */
 	    asp->symbol.section = bfd_und_section_ptr;
-	    asp->symbol.flags = 0;
+	    asp->symbol.flags = weak ? BSF_WEAK : 0;
 	    /* skip refs */
 	    if (!get_long (abfd, &l) || bfd_seek (abfd, l<<2, SEEK_CUR))
 	      return false;
@@ -3997,8 +4016,8 @@ amiga_slurp_relocs (
       if (bfd_seek (abfd, n<<2, SEEK_CUR))
 	return false;
 
-      if (type < 200)
-	type &= ~0x60;
+      if (EXT_HAS_FLAGS (type))
+	type &= ~(EXT_WEAK | EXT_LOCAL);
 
       switch (type)
 	{
