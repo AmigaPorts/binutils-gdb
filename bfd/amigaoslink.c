@@ -1430,6 +1430,33 @@ elf_perform_reloc (
 extern bool _bfd_generic_link_write_global_symbol(struct generic_link_hash_entry *, void *);
 extern bool _bfd_generic_link_output_symbols(bfd *, bfd *, struct bfd_link_info *, size_t *);
 
+/* A weak reference and a strong one to the same symbol, from two inputs,
+   make it a strong undefined symbol, but all their relocs go through one
+   asymbol, the first seen, and _bfd_generic_link_output_symbols leaves its
+   flags alone.  If that was the weak one, drop BSF_WEAK: the perform_reloc
+   functions would link the undefined symbol as 0 and say nothing, and
+   ld -r would write the strong reference out as a weak one.  */
+static void
+amiga_strengthen_undefined (bfd *abfd, bfd *input, struct bfd_link_info *info)
+{
+  asymbol **sym_ptr = _bfd_generic_link_get_symbols (input);
+  asymbol **sym_end = sym_ptr + _bfd_generic_link_get_symcount (input);
+
+  for (; sym_ptr < sym_end; sym_ptr++)
+    {
+      asymbol *sym = *sym_ptr;
+      struct bfd_link_hash_entry *h;
+
+      if ((sym->flags & BSF_WEAK) == 0
+	  || !bfd_is_und_section (bfd_asymbol_section (sym)))
+	continue;
+      h = bfd_wrapped_link_hash_lookup (abfd, info, bfd_asymbol_name (sym),
+					false, false, true);
+      if (h != NULL && h->type == bfd_link_hash_undefined)
+	sym->flags &= ~BSF_WEAK;
+    }
+}
+
 /* The final link routine, used both by Amiga and a.out backend */
 /* This is nearly a copy of linker.c/_bfd_generic_final_link */
 bool
@@ -1502,6 +1529,9 @@ amiga_final_link (
   for (sub = info->input_bfds; sub != (bfd *) NULL; sub = sub->link.next)
     if (! _bfd_generic_link_output_symbols (abfd, sub, info, &outsymalloc))
       return false;
+
+  for (sub = info->input_bfds; sub != (bfd *) NULL; sub = sub->link.next)
+    amiga_strengthen_undefined (abfd, sub, info);
 
   DPRINT(10,("Did build output symbol table\n"));
 
