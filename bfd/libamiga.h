@@ -91,6 +91,19 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 /* EHF extensions */
 #define EXT_RELREF26		229
 
+/* GNU extensions: flag bits in a subtype below the VBCC ones.  A weak
+   definition loses to a strong one, a weak reference does not load an
+   archive member and resolves to 0 if nothing defines the symbol.
+
+   EXT_WEAK turns the references EXT_RELREF32, EXT_ABSREF16 and
+   EXT_ABSREF8 into the subtypes 200, 202 and 203.  A reader that looks
+   for the flags only below 200, as older versions of this one do, rejects
+   those three and takes any other weak reference for a strong one, which
+   is also what vlink makes of all of them.  */
+#define EXT_WEAK		0x40
+#define EXT_LOCAL		0x20
+#define EXT_HAS_FLAGS(type)	((type) < EXT_DEXT32COMMON)
+
 /* DWARF input sections: the plain .debug_* ones plus the per-type-unit
    COMDAT sections gcc -fdebug-types-section emits, which the linker
    script folds into .debug_info.  ELF keys these off the name too.  */

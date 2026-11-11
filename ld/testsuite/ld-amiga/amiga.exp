@@ -55,6 +55,9 @@ run_dump_test "baserel-text"
 run_dump_test "baserel-section"
 run_dump_test "weak-override"
 run_dump_test "weak-override-local"
+run_dump_test "weak-undef"
+run_dump_test "weak-undef-r"
+run_dump_test "weak-undef-baserel"
 run_dump_test "lto-r"
 run_dump_test "setelem"
 
@@ -123,3 +126,36 @@ proc amiga_chip_test {} {
 }
 
 amiga_chip_test
+
+# A weak reference does not load an archive member, but still resolves to a
+# member that a strong reference loads.  nm on the load file shows g only if
+# its member was linked.
+
+proc amiga_weak_archive_test {} {
+    global as ar ld nm srcdir subdir
+
+    set test "Amiga weak reference and archive members"
+    if { ![ld_assemble $as $srcdir/$subdir/weak-undef.s tmpdir/weak-undef.o]
+	 || ![ld_assemble $as $srcdir/$subdir/weak-archive-def.s tmpdir/weak-def.o]
+	 || ![ld_assemble $as $srcdir/$subdir/weak-archive-ref.s tmpdir/weak-ref.o]
+	 || ![ar_simple_create $ar "" tmpdir/libweak.a tmpdir/weak-def.o]
+	 || ![ld_link $ld tmpdir/weak-only \
+		"-e main tmpdir/weak-undef.o tmpdir/libweak.a"]
+	 || ![ld_link $ld tmpdir/weak-strong \
+		"-e main tmpdir/weak-undef.o tmpdir/weak-ref.o tmpdir/libweak.a"] } {
+	fail $test
+	return
+    }
+
+    if { [regexp { T g\n} [run_host_cmd $nm tmpdir/weak-only]] } {
+	fail "$test (member loaded)"
+	return
+    }
+    if { ![regexp { T g\n} [run_host_cmd $nm tmpdir/weak-strong]] } {
+	fail "$test (member not loaded)"
+	return
+    }
+    pass $test
+}
+
+amiga_weak_archive_test

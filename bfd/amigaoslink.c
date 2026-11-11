@@ -978,10 +978,27 @@ amiga_perform_reloc (
   if (target_section->kept_section)
       sym->section = target_section = target_section->kept_section;
 
-  if (bfd_is_und_section(target_section)) /* Error */
+  if (bfd_is_und_section(target_section))
     {
-      DPRINT(10,("amiga_perf_reloc: target_sec==UND\n"));
-      return bfd_reloc_undefined;
+      if ((sym->flags & BSF_WEAK) == 0) /* Error */
+	{
+	  DPRINT(10,("amiga_perf_reloc: target_sec==UND\n"));
+	  return bfd_reloc_undefined;
+	}
+
+      /* An undefined weak symbol is the absolute address 0, which no
+	 offset from the base register can stand for.  */
+      if (r->howto->type == H_SD8 || r->howto->type == H_SD16
+	  || r->howto->type == H_SD32)
+	{
+	  static char msg[512];
+	  snprintf (msg, sizeof (msg),
+		    _("base-relative reference to the undefined weak "
+		      "symbol `%s'"), bfd_asymbol_name (sym));
+	  *error_message = msg;
+	  return bfd_reloc_dangerous;
+	}
+      target_section = bfd_abs_section_ptr;
     }
 
   /* A symbol still defined in an LTO plugin placeholder after the
