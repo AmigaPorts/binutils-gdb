@@ -42,6 +42,15 @@ run_dump_test "weak-override-local"
 run_dump_test "lto-r"
 run_dump_test "setelem"
 
+# -e makes its symbol undefined, so ld pulls the archive member that
+# defines it, as on other targets.
+run_ld_link_tests [list \
+    [list "Amiga archive for -e" "" "" "" {entry-lib.s} {} "libentry.a"] \
+    [list "Amiga -e pulls its symbol from an archive" \
+	 "-e _alt" "tmpdir/libentry.a" "" {entry.s} {{nm {} entry.nd}} \
+	 "entry"] \
+]
+
 # A .datachip hunk must stay in chip RAM: a partial link keeps HUNKF_CHIP in
 # the HUNK_DATA size word, and a load file has it in the HUNK_HEADER table.
 # objdump shows neither, so read the longwords of the files directly.

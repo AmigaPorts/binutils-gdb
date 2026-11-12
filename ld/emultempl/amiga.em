@@ -50,7 +50,6 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 /* shared functions */
 void amiga_add_options PARAMS ((int, char **, int, struct option **, int, struct option **));
 bool amiga_handle_option PARAMS ((int));
-void amiga_after_parse PARAMS ((void));
 void amiga_after_open PARAMS ((void));
 void amiga_list_options PARAMS ((FILE *));
 
@@ -118,12 +117,6 @@ amiga_handle_option (int optc)
     }
 
   return true;
-}
-
-void 
-amiga_after_parse ()
-{
-  ldfile_sort_flavors();
 }
 
 void
@@ -239,7 +232,7 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   gld${EMULATION_NAME}_before_parse,	/* before_parse */
   syslib_default,			/* syslib */
   hll_default,				/* hll */
-  amiga_after_parse,			/* after_parse */
+  after_parse_default,			/* after_parse */
   NULL, /* LDEMUL_BEFORE_PLUGIN_ALL_SYMBOLS_READ */
   amiga_after_open,			/* after_open */
   after_check_relocs_default,

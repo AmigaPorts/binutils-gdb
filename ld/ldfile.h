@@ -90,5 +90,4 @@ extern void ldfile_print_input_remaps
 
 
 extern void ldfile_add_flavor (const char *);
-extern void ldfile_sort_flavors (void);
 #endif
