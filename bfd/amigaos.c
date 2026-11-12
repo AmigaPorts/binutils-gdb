@@ -3348,6 +3348,8 @@ amiga_new_section_hook (
      bfd *abfd,
      sec_ptr newsect)
 {
+  if (!_bfd_generic_new_section_hook (abfd, newsect))
+    return false;
   newsect->used_by_bfd = (void *) bfd_zalloc (abfd, sizeof(amiga_per_section_type));
   newsect->alignment_power = 2;
   if (!strcmp (newsect->name, ".datachip") || !strcmp (newsect->name, ".bsschip"))
