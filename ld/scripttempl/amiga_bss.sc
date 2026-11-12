@@ -73,20 +73,20 @@ SECTIONS
    * The order here must match the order expected by amiga_pack_dwarf_sections()
    * in amigaos.c
    */
-  .debug_frame : { *(.debug_frame) }
-  .debug_info : { *(.debug_info) *(.gnu.linkonce.wi.*) }
-  .debug_abbrev : { *(.debug_abbrev) }
-  .debug_loclists : { *(.debug_loclists) }
-  .debug_aranges : { *(.debug_aranges) }
-  .debug_rnglists : { *(.debug_rnglists) }
-  .debug_line : { *(.debug_line) *(.debug_line.*) }
-  .debug_str : { *(.debug_str) }
-  .debug_line_str : { *(.debug_line_str) }
+  .debug_frame 0 : { *(.debug_frame) }
+  .debug_info 0 : { *(.debug_info) *(.gnu.linkonce.wi.*) }
+  .debug_abbrev 0 : { *(.debug_abbrev) }
+  .debug_loclists 0 : { *(.debug_loclists) }
+  .debug_aranges 0 : { *(.debug_aranges) }
+  .debug_rnglists 0 : { *(.debug_rnglists) }
+  .debug_line 0 : { *(.debug_line) *(.debug_line.*) }
+  .debug_str 0 : { *(.debug_str) }
+  .debug_line_str 0 : { *(.debug_line_str) }
   /* Additional DWARF sections for completeness */
-  .debug_types : { *(.debug_types) }
-  .debug_macro : { *(.debug_macro) }
-  .debug_ranges : { *(.debug_ranges) }
-  .debug_addr : { *(.debug_addr) }
-  .debug_str_offsets : { *(.debug_str_offsets) }
+  .debug_types 0 : { *(.debug_types) }
+  .debug_macro 0 : { *(.debug_macro) }
+  .debug_ranges 0 : { *(.debug_ranges) }
+  .debug_addr 0 : { *(.debug_addr) }
+  .debug_str_offsets 0 : { *(.debug_str_offsets) }
 }
 EOF
