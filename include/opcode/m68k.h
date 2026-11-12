@@ -18,10 +18,6 @@
    Software Foundation, 51 Franklin Street - Fifth Floor, Boston, MA
    02110-1301, USA.  */
 
-#ifndef BINUTILSDECL
-#define BINUTILSDECL
-#endif
-
 /* These are used as bit flags for the arch field in the m68k_opcode
    structure.  */
 #define	_m68k_undef  0
@@ -374,9 +370,9 @@ struct m68k_opcode_alias
    ]  first word, bit 10
 */
 
-extern BINUTILSDECL const struct m68k_opcode m68k_opcodes[];
-extern BINUTILSDECL const struct m68k_opcode_alias m68k_opcode_aliases[];
+extern const struct m68k_opcode m68k_opcodes[];
+extern const struct m68k_opcode_alias m68k_opcode_aliases[];
 
-extern BINUTILSDECL const int m68k_numopcodes, m68k_numaliases;
+extern const int m68k_numopcodes, m68k_numaliases;
 
 /* end of m68k-opcode.h */

@@ -31,7 +31,7 @@
 
 /* Error reporting.  */
 
-BINUTILSDECL char *program_name;
+char *program_name;
 
 void
 bfd_nonfatal (const char *string)

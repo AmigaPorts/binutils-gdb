@@ -106,7 +106,7 @@
    Also, when `ordering' is RETURN_IN_ORDER,
    each non-option ARGV-element is returned here.  */
 
-LIBIBERTYDECL char *optarg = NULL;
+char *optarg = NULL;
 
 /* Index in ARGV of the next element to be scanned.
    This is used for communication to and from the caller
@@ -121,7 +121,7 @@ LIBIBERTYDECL char *optarg = NULL;
    how much of ARGV has been scanned so far.  */
 
 /* 1003.2 says this must be 1 before any call.  */
-LIBIBERTYDECL int optind = 1;
+int optind = 1;
 
 /* Formerly, initialization of getopt depended on optind==0, which
    causes problems with re-calling getopt as programs generally don't

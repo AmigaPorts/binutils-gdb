@@ -35,10 +35,6 @@
 #ifndef LIBIBERTY_H
 #define LIBIBERTY_H
 
-#ifndef LIBIBERTYDECL
-#define LIBIBERTYDECL
-#endif
-
 #ifdef __cplusplus
 extern "C" {
 #endif
