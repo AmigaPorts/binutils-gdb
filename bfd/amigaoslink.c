@@ -921,6 +921,32 @@ is_dwarf_reloc (asection *sec)
             strcmp(n, ".debug_str")     == 0);
 }
 
+/* Turn the bra.l or bsr.l whose 32-bit pc-relative displacement R relocates
+   into a jmp or jsr to an absolute address, and R into an absolute reloc.
+   Return false, with nothing changed, for any other instruction, and for
+   data, where the two bytes before a displacement are not an opcode.  */
+static bool
+amiga_pcrel32_to_abs (arelent *r, sec_ptr sec, bfd_byte *data)
+{
+  unsigned int opcode;
+
+  if (r->howto->type != H_PC32 || r->address < 2
+      || (sec->flags & SEC_CODE) == 0)
+    return false;
+
+  opcode = bfd_get_16 (sec->owner, data + r->address - 2);
+  if (opcode == 0x60ff)		/* bra.l */
+    opcode = 0x4ef9;		/* jmp */
+  else if (opcode == 0x61ff)	/* bsr.l */
+    opcode = 0x4eb9;		/* jsr */
+  else
+    return false;
+
+  bfd_put_16 (sec->owner, opcode, data + r->address - 2);
+  r->howto = &howto_table[0];
+  return true;
+}
+
 /* Perform an Amiga relocation */
 static bfd_reloc_status_type
 amiga_perform_reloc (
@@ -987,13 +1013,26 @@ amiga_perform_reloc (
 	}
 
       /* An undefined weak symbol is the absolute address 0, which no
-	 offset from the base register can stand for.  */
+	 offset from the base register can stand for, nor one from the pc
+	 of code that is loaded at an address unknown at link time.  A
+	 bra.l or bsr.l has an absolute form to use instead.  */
       if (r->howto->type == H_SD8 || r->howto->type == H_SD16
 	  || r->howto->type == H_SD32)
 	{
 	  static char msg[512];
 	  snprintf (msg, sizeof (msg),
 		    _("base-relative reference to the undefined weak "
+		      "symbol `%s', whose address 0 has no offset from the "
+		      "base register (compile the reference without "
+		      "-fbaserel?)"), bfd_asymbol_name (sym));
+	  *error_message = msg;
+	  return bfd_reloc_dangerous;
+	}
+      if (r->howto->pc_relative && !amiga_pcrel32_to_abs (r, sec, data))
+	{
+	  static char msg[512];
+	  snprintf (msg, sizeof (msg),
+		    _("pc-relative reference to the undefined weak "
 		      "symbol `%s'"), bfd_asymbol_name (sym));
 	  *error_message = msg;
 	  return bfd_reloc_dangerous;
@@ -1078,20 +1117,8 @@ AbsReloc:
 	}
       else if (sec->output_section!=target_section->output_section) /* Error */
 	{
-	  // convert to absolute jmp/jsr and change reloc type
-	  if (r->howto->type == H_PC32) {
-	      uint16_t opcode = bfd_get_16(sec->owner, data + r->address - 2);
-	      if (opcode == 0x60FF) { // BRA.L
-	          bfd_put_16(sec->owner, 0x4EF9, data + r->address - 2);
-	          r->howto= &howto_table[0];
-	          goto AbsReloc;
-	      }
-	      if (opcode == 0x61FF) { // BSR.L
-	          bfd_put_16(sec->owner, 0x4EB9, data + r->address - 2);
-	          r->howto= &howto_table[0];
-	          goto AbsReloc;
-	      }
-	  }
+	  if (amiga_pcrel32_to_abs (r, sec, data))
+	    goto AbsReloc;
 
 	  DPRINT(5,("pc relative, but out-of-range\n"));
 	  ret=bfd_reloc_outofrange;
