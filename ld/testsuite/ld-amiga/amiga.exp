@@ -22,6 +22,19 @@ if { ![istarget m68k-*-amigaos*] } {
     return
 }
 
+# m68k-amigaoself assembles to ELF and links with the ELF emulation by
+# default; its amiga emulations turn ELF objects into hunk files.
+if { [istarget m68k-*-amigaoself*] } {
+    # The amiga emulation has no -z options: keep run_dump_test from
+    # adding the ones the default ELF emulation takes.
+    global relro_available_saved memory_seal_available_saved
+    set relro_available_saved 0
+    set memory_seal_available_saved 0
+    run_dump_test "amigaoself"
+    unset relro_available_saved memory_seal_available_saved
+    return
+}
+
 run_dump_test "pcrel"
 run_dump_test "pcrel-local"
 run_dump_test "pcrel-same-name"
