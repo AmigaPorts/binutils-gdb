@@ -136,18 +136,6 @@ BFD:
 #define BYTES_IN_WORD 4
 #include "aout/aout64.h" /* struct external_nlist */
 
-#ifndef PARAMS
-#define PARAMS(x) x
-#endif
-
-#ifndef NULL
-#define NULL 0
-#endif
-
-#ifndef alloca
-extern void * alloca PARAMS ((size_t));
-#endif
-
 #define DEFAULT_BUFFERSIZE 8192
 
 
@@ -218,75 +206,73 @@ bool
 aout_32_translate_symbol_table (bfd *abfd, aout_symbol_type *in, struct external_nlist *ext,
      bfd_size_type count, char *str, bfd_size_type strsize, bool dynamic);
 
-static bool amiga_reloc_long_p PARAMS ((unsigned long, bool));
-static reloc_howto_type *howto_for_raw_reloc PARAMS ((unsigned long, bool));
-static reloc_howto_type *howto_for_reloc PARAMS ((unsigned long));
-static bool get_long PARAMS ((bfd *, unsigned long *));
-static bool get_word PARAMS ((bfd *, unsigned long *));
-static bfd_cleanup amiga_object_p PARAMS ((bfd *));
-static sec_ptr amiga_get_section_by_hunk_number PARAMS ((bfd *, long));
-static bool amiga_add_reloc PARAMS ((bfd *, sec_ptr, bfd_size_type,
-	amiga_symbol_type *, reloc_howto_type *, long));
-sec_ptr amiga_make_unique_section PARAMS ((bfd *, const char *));
-static bool parse_archive_units PARAMS ((bfd *, int *, file_ptr,
- 	bool, struct arch_syms **, symindex *));
-static bool amiga_digest_file PARAMS ((bfd *));
-static bool amiga_read_unit PARAMS ((bfd *, file_ptr));
-static bool amiga_read_load PARAMS ((bfd *));
-static bool amiga_handle_cdb_hunk PARAMS ((bfd *, unsigned long,
-	unsigned long, unsigned long, unsigned long));
-static bool amiga_handle_rest PARAMS ((bfd *, sec_ptr, bool));
-static bool amiga_mkobject PARAMS ((bfd *));
-static bool amiga_mkarchive PARAMS ((bfd *));
-static bool write_longs PARAMS ((const unsigned long *, unsigned long,
-	bfd *));
-static bool write_words PARAMS ((const unsigned long *, unsigned long,
-	bfd *));
-static long determine_datadata_relocs PARAMS ((bfd *, sec_ptr));
-static void remove_section_index PARAMS ((sec_ptr, int *));
-static bool amiga_write_object_contents PARAMS ((bfd *));
-static bool write_name PARAMS ((bfd *, const char *, unsigned long));
-static bool amiga_write_archive_contents PARAMS ((bfd *));
-static bool amiga_write_armap PARAMS ((bfd *, unsigned int,
-	struct orl *, unsigned int, int));
-static int determine_type PARAMS ((arelent *));
-static bool amiga_write_section_contents PARAMS ((bfd *, sec_ptr,
-	sec_ptr, unsigned long, int *, int));
-static bool amiga_write_symbols PARAMS ((bfd *, sec_ptr));
-static bool amiga_get_section_contents PARAMS ((bfd *, sec_ptr, void *,
-	file_ptr, bfd_size_type));
-static bool amiga_new_section_hook PARAMS ((bfd *, sec_ptr));
-static bool amiga_slurp_symbol_table PARAMS ((bfd *));
-static long amiga_get_symtab_upper_bound PARAMS ((bfd *));
-static long amiga_canonicalize_symtab PARAMS ((bfd *, asymbol **));
-static asymbol *amiga_make_empty_symbol PARAMS ((bfd *));
-static void amiga_get_symbol_info PARAMS ((bfd *, asymbol *, symbol_info *));
-static void amiga_print_symbol PARAMS ((bfd *, void *,   asymbol *,
-	bfd_print_symbol_type));
-static long amiga_get_reloc_upper_bound PARAMS ((bfd *, sec_ptr));
-static bool read_raw_relocs PARAMS ((bfd *, sec_ptr, unsigned long,
-	unsigned long));
-static bool amiga_slurp_relocs PARAMS ((bfd *, sec_ptr, asymbol **));
-static long amiga_canonicalize_reloc PARAMS ((bfd *, sec_ptr, arelent **,
-	asymbol **));
-static bool amiga_set_section_contents PARAMS ((bfd *, sec_ptr, const void *,
-	file_ptr, bfd_size_type));
-static bool amiga_set_arch_mach PARAMS ((bfd *, enum bfd_architecture,
-	unsigned long));
-static int amiga_sizeof_headers PARAMS ((bfd *, struct bfd_link_info *));
-static bool amiga_find_nearest_line PARAMS ((bfd *, asymbol **, sec_ptr,
-	 bfd_vma, const char **, const char **, unsigned int *, unsigned int *));
-static reloc_howto_type *amiga_bfd_reloc_type_lookup PARAMS ((bfd *,
-	bfd_reloc_code_real_type));
-static bool amiga_bfd_copy_private_bfd_data PARAMS ((bfd *, bfd *));
-static bool amiga_bfd_copy_private_section_data PARAMS ((bfd *,
-	sec_ptr, bfd *, sec_ptr, struct bfd_link_info *));
-static bool amiga_slurp_armap PARAMS ((bfd *));
-static void amiga_truncate_arname PARAMS ((bfd *, const char *, char *));
-static bfd_cleanup amiga_archive_p PARAMS ((bfd *));
-static bfd *amiga_openr_next_archived_file PARAMS ((bfd *, bfd *));
-static void * amiga_read_ar_hdr PARAMS ((bfd *));
-static int amiga_generic_stat_arch_elt PARAMS ((bfd *, struct stat *));
+static bool amiga_reloc_long_p (unsigned long, bool);
+static reloc_howto_type *howto_for_raw_reloc (unsigned long, bool);
+static reloc_howto_type *howto_for_reloc (unsigned long);
+static bool get_long (bfd *, unsigned long *);
+static bool get_word (bfd *, unsigned long *);
+static bfd_cleanup amiga_object_p (bfd *);
+static sec_ptr amiga_get_section_by_hunk_number (bfd *, long);
+static bool amiga_add_reloc (bfd *, sec_ptr, bfd_size_type,
+	amiga_symbol_type *, reloc_howto_type *, long);
+sec_ptr amiga_make_unique_section (bfd *, const char *);
+static bool parse_archive_units (bfd *, int *, file_ptr,
+	bool, struct arch_syms **, symindex *);
+static bool amiga_digest_file (bfd *);
+static bool amiga_read_unit (bfd *, file_ptr);
+static bool amiga_read_load (bfd *);
+static bool amiga_handle_cdb_hunk (bfd *, unsigned long,
+	unsigned long, unsigned long, unsigned long);
+static bool amiga_handle_rest (bfd *, sec_ptr, bool);
+static bool amiga_mkobject (bfd *);
+static bool amiga_mkarchive (bfd *);
+static bool write_longs (const unsigned long *, unsigned long, bfd *);
+static bool write_words (const unsigned long *, unsigned long, bfd *);
+static long determine_datadata_relocs (bfd *, sec_ptr);
+static void remove_section_index (sec_ptr, int *);
+static bool amiga_write_object_contents (bfd *);
+static bool write_name (bfd *, const char *, unsigned long);
+static bool amiga_write_archive_contents (bfd *);
+static bool amiga_write_armap (bfd *, unsigned int,
+	struct orl *, unsigned int, int);
+static int determine_type (arelent *);
+static bool amiga_write_section_contents (bfd *, sec_ptr,
+	sec_ptr, unsigned long, int *, int);
+static bool amiga_write_symbols (bfd *, sec_ptr);
+static bool amiga_get_section_contents (bfd *, sec_ptr, void *,
+	file_ptr, bfd_size_type);
+static bool amiga_new_section_hook (bfd *, sec_ptr);
+static bool amiga_slurp_symbol_table (bfd *);
+static long amiga_get_symtab_upper_bound (bfd *);
+static long amiga_canonicalize_symtab (bfd *, asymbol **);
+static asymbol *amiga_make_empty_symbol (bfd *);
+static void amiga_get_symbol_info (bfd *, asymbol *, symbol_info *);
+static void amiga_print_symbol (bfd *, void *, asymbol *,
+	bfd_print_symbol_type);
+static long amiga_get_reloc_upper_bound (bfd *, sec_ptr);
+static bool read_raw_relocs (bfd *, sec_ptr, unsigned long,
+	unsigned long);
+static bool amiga_slurp_relocs (bfd *, sec_ptr, asymbol **);
+static long amiga_canonicalize_reloc (bfd *, sec_ptr, arelent **,
+	asymbol **);
+static bool amiga_set_section_contents (bfd *, sec_ptr, const void *,
+	file_ptr, bfd_size_type);
+static bool amiga_set_arch_mach (bfd *, enum bfd_architecture,
+	unsigned long);
+static int amiga_sizeof_headers (bfd *, struct bfd_link_info *);
+static bool amiga_find_nearest_line (bfd *, asymbol **, sec_ptr,
+	bfd_vma, const char **, const char **, unsigned int *, unsigned int *);
+static reloc_howto_type *amiga_bfd_reloc_type_lookup (bfd *,
+	bfd_reloc_code_real_type);
+static bool amiga_bfd_copy_private_bfd_data (bfd *, bfd *);
+static bool amiga_bfd_copy_private_section_data (bfd *,
+	sec_ptr, bfd *, sec_ptr, struct bfd_link_info *);
+static bool amiga_slurp_armap (bfd *);
+static void amiga_truncate_arname (bfd *, const char *, char *);
+static bfd_cleanup amiga_archive_p (bfd *);
+static bfd *amiga_openr_next_archived_file (bfd *, bfd *);
+static void * amiga_read_ar_hdr (bfd *);
+static int amiga_generic_stat_arch_elt (bfd *, struct stat *);
 static bool amiga_gc_sections (bfd *abfd, struct bfd_link_info *info);
 
 
@@ -419,13 +405,13 @@ howto_for_reloc (unsigned long type)
 
 /* This one is used by the linker and tells us, if a debug hunk should
    be written out. */
-extern BFDDECL int write_debug_hunk;
+extern int write_debug_hunk;
 
 /* used with base-relative linking */
-extern BFDDECL int amiga_base_relative;
+extern int amiga_base_relative;
 
 /* used with -resident linking */
-extern BFDDECL int amiga_resident;
+extern int amiga_resident;
 
 static bool
 get_long (bfd * abfd, unsigned long *n)
@@ -569,20 +555,7 @@ amiga_make_unique_section (
   section = bfd_make_section (abfd, name);
   if ((section == NULL) && (bfd_get_error() == bfd_error_no_error))
     {
-#if 0
-      char *new_name = bfd_alloc (abfd, strlen(name) + 4);
-      int i = 1;
-
-      /* We try to come up with an original name (since BFD currently
-	 requires all sections to have different names).  */
-      while (!section && (i<=99))
-	{
-	  sprintf (new_name, "%s_%u", name, i++);
-	  section = bfd_make_section (abfd, new_name);
-	}
-#else
       section = bfd_make_section_anyway (abfd, name);
-#endif
     }
   return section;
 }
@@ -623,39 +596,6 @@ amiga_is_loadfile_debug_section (const asection *p)
 	  || amiga_is_dwarf_section_name (p->name)
 	  || (p->flags & (SEC_CODE | SEC_DATA | SEC_LOAD | SEC_ALLOC)) == 0);
 }
-
-#if DEBUG_AMIGA
-#define DPRINTHUNK(x) fprintf(stderr,"Processing %s hunk (0x%x)...",\
-	(x) == HUNK_UNIT ? "HUNK_UNIT" :\
-	(x) == HUNK_NAME ? "HUNK_NAME" :\
-	(x) == HUNK_CODE ? "HUNK_CODE" :\
-	(x) == HUNK_DATA ? "HUNK_DATA" :\
-	(x) == HUNK_BSS ? "HUNK_BSS" :\
-	(x) == HUNK_ABSRELOC32 ? "HUNK_RELOC32" :\
-	(x) == HUNK_RELRELOC16 ? "HUNK_RELRELOC16" :\
-	(x) == HUNK_RELRELOC8 ? "HUNK_RELRELOC8" :\
-	(x) == HUNK_EXT ? "HUNK_EXT" :\
-	(x) == HUNK_SYMBOL ? "HUNK_SYMBOL" :\
-	(x) == HUNK_DEBUG ? "HUNK_DEBUG" :\
-	(x) == HUNK_END ? "HUNK_END" :\
-	(x) == HUNK_HEADER ? "HUNK_HEADER" :\
-	(x) == HUNK_OVERLAY ? "HUNK_OVERLAY" :\
-	(x) == HUNK_BREAK ? "HUNK_BREAK" :\
-	(x) == HUNK_DREL32 ? "HUNK_DREL32" :\
-	(x) == HUNK_DREL16 ? "HUNK_DREL16" :\
-	(x) == HUNK_DREL8 ? "HUNK_DREL8" :\
-	(x) == HUNK_LIB ? "HUNK_LIB" :\
-	(x) == HUNK_INDEX ? "HUNK_INDEX" :\
-	(x) == HUNK_RELOC32SHORT ? "HUNK_RELOC32SHORT" :\
-	(x) == HUNK_RELRELOC32 ? "HUNK_RELRELOC32" :\
-	(x) == HUNK_PPC_CODE ? "HUNK_PPC_CODE" :\
-	(x) == HUNK_RELRELOC26 ? "HUNK_RELRELOC26" :\
-	"*unknown*",(x))
-#define DPRINTHUNKEND fprintf(stderr,"done\n")
-#else
-#define DPRINTHUNK(x)
-#define DPRINTHUNKEND
-#endif
 
 static bool
 parse_archive_units (
@@ -935,10 +875,6 @@ parse_archive_units (
       break; /* of HUNK_EXT */
 
     default:
-#if 0
-      bfd_msg ("unexpected hunk 0x%lx at offset 0x%lx",
-	       hunk_type, bfd_tell (abfd));
-#endif
       return false;
     }
   }
@@ -1311,13 +1247,6 @@ amiga_handle_cdb_hunk (
 		{
 		case N_INDR | N_EXT:
 		case N_WARNING:
-//		  /* always take the next symbol. */
-//		  len -= sizeof(buf);
-//		  if (len > amiga_per_section(current_section)->disk_size || bfd_read (buf, sizeof(buf), abfd) != sizeof(buf))
-//		    return false;
-//		  abfd->symcount++;
-//
-//		  /* fallthrough */
 		case N_UNDF | N_EXT:
 		case N_ABS | N_EXT:
 		case N_TEXT | N_EXT:
@@ -2166,9 +2095,6 @@ amiga_write_object_contents (
     {
       DPRINT(5,("Writing load file\n"));
 
-      /* no longer true - a base relative executable may have a chip,far and stab/stabstr sections */
-//      if (amiga_base_relative)
-//	BFD_ASSERT (abfd->section_count==3);
       /* Write out load file header */
       n[0] = HUNK_HEADER;
       n[1] = n[2] = 0;
@@ -2664,22 +2590,15 @@ amiga_write_section_contents (
     n[0] = HUNK_DEBUG;
   else /* Error */
     {
-#if 0
-      bfd_set_error (bfd_error_nonrepresentable_section);
-      return false;
-#else
       /* FIXME: Just dump everything we don't currently recognize into
 	 a DEBUG hunk. */
       n[0] = HUNK_DEBUG;
-#endif
     }
 
   DPRINT(10,("Section type is %lx\n",n[0]));
 
   /* Get real size in n[1], this may be shorter than the size in the header */
-//  if (amiga_per_section(section)->disk_size == 0)
-//  if (n[0] != HUNK_BSS)
-    amiga_per_section(section)->disk_size = section->rawsize;
+  amiga_per_section(section)->disk_size = section->rawsize;
 
   /* SBF: prepend the unpadded section size: add 4 bytes */
   if (n[0] == HUNK_DEBUG && amiga_is_dwarf_section_name (section->name))
@@ -2851,12 +2770,6 @@ amiga_write_section_contents (
 	return false;
     }
 
-#if 0
-  /* write bss data in the data hunk if needed */
-  for (; bss_size--;)
-    if (!write_longs (&zero, 1, abfd))
-      return false;
-#endif
 
   if (datadata_relocs)
     {
@@ -2945,17 +2858,7 @@ amiga_write_section_contents (
 	    /* Is reloc relative to a special section? */
 	    if (amiga_reloc_is_ext (abfd, sym_p))
 	      continue; /* Nothing to do, since this translates to HUNK_EXT */
-#if 0
-	    /* Determine which hunk to write, and index of target */
-		      for (jj = 0, sec = abfd->sections; sec; sec = sec->next, jj++)
-			{
-	      if (sec == insection->output_section)
-		break;
-	    }
-	    BFD_ASSERT (jj==index_map[insection->output_section->index]);
-#else
 	    jj=index_map[insection->output_section->index];
-#endif
 		      if (jj == j && i == determine_type (r))
 			{
 	      section->orelocation[k] = NULL;
@@ -4847,8 +4750,6 @@ amiga_collect (struct bfd_hash_table *ht, asection *sec)
                       sym->name, sec->name);
 
                   he->section = sec;
-// TODO                  
-//                  aout_keep_section(ht, sec);   /* or whatever the a.out equivalent is */
                   sec->flags |= SEC_KEEP;
                 }
             }
@@ -4955,19 +4856,13 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
       i = referenced.count;
       for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
 	for (sec = ibfd->sections; sec != NULL; sec = sec->next)
-	  {
-//	    if (!(sec->flags & SEC_KEEP))
-//	      fprintf(stderr, "############### %s\n", sec->name);
-	    amiga_collect(&referenced, sec);
-	  }
+	  amiga_collect(&referenced, sec);
     }
 
   // discard all not visited stuff
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
     for (sec = ibfd->sections; sec != NULL; sec = sec->next)
       amiga_purge(sec, info->print_gc_sections);
-
-//  amiga_dedup_sections(info);
 
   // free all relocs - these are read again, with correct output sections.
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
@@ -4988,7 +4883,6 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
 #define amiga_bfd_free_cached_info	_bfd_generic_bfd_free_cached_info
 /* amiga_new_section_hook defined above */
 /* amiga_get_section_contents defined above */
-#define amiga_get_section_contents_in_window _bfd_generic_get_section_contents_in_window
 
 /* Entry points through BFD_JUMP_TABLE_COPY */
 #define amiga_bfd_merge_private_bfd_data _bfd_generic_bfd_merge_private_bfd_data
@@ -5098,19 +4992,17 @@ amiga_link_add_symbols (bfd *abfd, struct bfd_link_info *info)
    NOTE: We use a special get_relocated_section_contents both in amiga AND in a.out files.
    In addition, we use an own final_link routine, which is nearly identical to _bfd_generic_final_link */
 bfd_byte *
-get_relocated_section_contents PARAMS ((bfd *, struct bfd_link_info *,
-	struct bfd_link_order *, bfd_byte *, bool, asymbol **));
+get_relocated_section_contents (bfd *, struct bfd_link_info *,
+	struct bfd_link_order *, bfd_byte *, bool, asymbol **);
 #define amiga_bfd_get_relocated_section_contents get_relocated_section_contents
 #define amiga_bfd_relax_section		bfd_generic_relax_section
 #define amiga_bfd_link_hash_table_create _bfd_generic_link_hash_table_create
-#define amiga_bfd_link_hash_table_free	_bfd_generic_link_hash_table_free
 #define amiga_bfd_link_add_symbols	amiga_link_add_symbols
 #define amiga_bfd_link_just_syms	_bfd_generic_link_just_syms
-bool amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
+bool amiga_final_link (bfd *, struct bfd_link_info *);
 #define amiga_bfd_final_link		amiga_final_link
 #define amiga_bfd_link_split_section	_bfd_generic_link_split_section
 #define amiga_bfd_gc_sections		amiga_gc_sections
-#define amiga_bfd_merge_sections	bfd_generic_merge_sections
 #define amiga_bfd_discard_group		bfd_generic_discard_group
 
 #define amiga_finalize_section_relocs _bfd_generic_finalize_section_relocs
@@ -5128,19 +5020,15 @@ bool amiga_final_link PARAMS ((bfd *, struct bfd_link_info *));
 
 #define amiga_bfd_is_target_special_symbol         _bfd_bool_bfd_asymbol_false
 
-#define amiga_set_reloc				   _bfd_generic_set_reloc
 #define amiga_bfd_reloc_name_lookup          _bfd_norelocs_bfd_reloc_name_lookup
 
 #define amiga_bfd_copy_link_hash_symbol_type \
   _bfd_generic_copy_link_hash_symbol_type
-#define amiga_bfd_link_split_section               _bfd_generic_link_split_section
 #define amiga_bfd_link_check_relocs                _bfd_generic_link_check_relocs
 
 #define amiga_bfd_lookup_section_flags             bfd_generic_lookup_section_flags
-#define amiga_bfd_merge_sections                   bfd_generic_merge_sections
 #define amiga_bfd_is_group_section                 bfd_generic_is_group_section
 #define amiga_bfd_group_name			  bfd_generic_group_name
-#define amiga_bfd_discard_group                    bfd_generic_discard_group
 #define amiga_section_already_linked               _bfd_generic_section_already_linked
 #define amiga_bfd_define_common_symbol             bfd_generic_define_common_symbol
 #define amiga_bfd_link_hide_symbol _bfd_generic_link_hide_symbol
