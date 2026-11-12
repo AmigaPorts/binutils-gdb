@@ -265,7 +265,6 @@ ALL_MACHINES_CFILES = \
 BFD32_BACKENDS = \
 	amigaos.lo \
 	amigaoslink.lo \
-	aout-amiga.lo \
 	aout-cris.lo \
 	aout-ns32k.lo \
 	aout32.lo \
@@ -404,7 +403,6 @@ BFD32_BACKENDS = \
 BFD32_BACKENDS_CFILES = \
 	amigaos.c \
 	amigaoslink.c \
-	aout-amiga.c \
 	aout-cris.c \
 	aout-ns32k.c \
 	aout32.c \

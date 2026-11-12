@@ -695,7 +695,6 @@ extern const bfd_target alpha_vms_lib_txt_vec;
 extern const bfd_target am33_elf32_linux_vec;
 extern const bfd_target amdgcn_elf64_le_vec;
 extern const bfd_target amiga_vec;
-extern const bfd_target aout_amiga_vec;
 extern const bfd_target aout_vec;
 extern const bfd_target arc_elf32_be_vec;
 extern const bfd_target arc_elf32_le_vec;
@@ -1016,7 +1015,6 @@ static const bfd_target * const _bfd_target_vector[] =
 	&am33_elf32_linux_vec,
 
 	&amiga_vec,
-	&aout_amiga_vec,
 #if 0
 	/* Since a.out files lack decent magic numbers, no way to recognize
 	   which kind of a.out file it is.  */

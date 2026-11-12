@@ -26,28 +26,6 @@ SECTION
 	amigalink
 
 This is the description of the linker routines for the amiga.
-In fact, this includes a description of the changes made to the
-a.out code, in order to build a working linker for the Amiga.
-@menu
-@* alterations::
-@end menu
-
-INODE
-alterations, , , amigalink
-SUBSECTION
-	alterations
-
-The file @file{aout-amiga.c} defines the amiga a.out backend. It differs from
-the sun3 backend only in these details:
-	o The @code{final_link} routine is @code{amiga_final_link}.
-	o The routine to get the relocated section contents is
-	  @code{get_relocated_section_contents}.
-
-This ensures that the link is performed properly, but has the side effect of
-loosing performance.
-
-The amiga bfd code uses the same functions since they check for the used flavour.
-@@*
 
 The usage of a special linker code has one reason:
 The bfd library assumes that a program is always loaded at a known memory
@@ -113,8 +91,6 @@ get_relocated_section_contents (bfd *, struct bfd_link_info *,
 	struct bfd_link_order *, bfd_byte *, bool, asymbol **);
 bool
 amiga_final_link (bfd *, struct bfd_link_info *);
-bool
-aout_amiga_final_link (bfd *, struct bfd_link_info *);
 
 bool amiga_slurp_relocs (bfd *, sec_ptr, asymbol **);
 
@@ -125,8 +101,6 @@ my_add_to (arelent *, void *, int, int);
 static void amiga_update_target_section (sec_ptr);
 static bfd_reloc_status_type
 amiga_perform_reloc (bfd *, arelent *, void *, sec_ptr, bfd *, char **);
-static bfd_reloc_status_type
-aout_perform_reloc (bfd *, arelent *, void *, sec_ptr, bfd *, char **);
 static bfd_reloc_status_type
 elf_perform_reloc (bfd *, arelent *, void *, sec_ptr, bfd *, char **);
 static bool
@@ -191,7 +165,6 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	    continue;
 	  asection *s = lol->u.indirect.section;
 	  if (s->owner->xvec->flavour != bfd_target_amiga_flavour
-	      && s->owner->xvec->flavour != bfd_target_aout_flavour
 	      && s->owner->xvec->flavour != bfd_target_elf_flavour)
 	    continue;
 
@@ -558,12 +531,6 @@ get_relocated_section_contents (
 
   if (bfd_get_flavour (input_bfd) == bfd_target_amiga_flavour)
     reloc_func = amiga_perform_reloc;
-  else if (bfd_get_flavour (input_bfd) == bfd_target_aout_flavour)
-    {
-      reloc_func = aout_perform_reloc;
-      if (!input_section->rawsize)
-	input_section->rawsize = input_section->size;
-    }
   else if (bfd_get_flavour (input_bfd) == bfd_target_elf_flavour
 	   && bfd_get_arch (input_bfd) == bfd_arch_m68k)
     {
@@ -966,9 +933,8 @@ amiga_perform_reloc (
   if (amiga_is_dwarf_section_name (sec->name))
     hard_reloc = true;
 
-  DPRINT(5,("Entering APR\nflavour is %d (amiga_flavour=%d, aout_flavour=%d)\n",
-	    bfd_get_flavour (sec->owner), bfd_target_amiga_flavour,
-	    bfd_target_aout_flavour));
+  DPRINT(5,("Entering APR\nflavour is %d (amiga_flavour=%d)\n",
+	    bfd_get_flavour (sec->owner), bfd_target_amiga_flavour));
 
   /* If obfd==NULL: Apply the reloc, if possible. */
   /* Else: Modify it and return */
@@ -1159,199 +1125,6 @@ AbsReloc:
   return ret;
 }
 
-/* Perform an a.out relocation */
-static bfd_reloc_status_type
-aout_perform_reloc (
-     bfd *abfd,
-     arelent *r,
-     void * data,
-     sec_ptr sec,
-     bfd *obfd,
-     char **error_message ATTRIBUTE_UNUSED)
-{
-  asymbol *sym; /* Reloc is relative to sym */
-  sec_ptr target_section; /* reloc is relative to this section */
-  bfd_reloc_status_type ret;
-  bool copy;
-  int flags;
-
-  DPRINT(5,("Entering aout_perf_reloc\n"));
-
-  /* If obfd==NULL: Apply the reloc, if possible. */
-  /* Else: Modify it and return */
-
-  if (obfd!=NULL) /* Only modify the reloc */
-    {
-      r->address+=sec->output_offset;
-      DPRINT(5,("Leaving aout_perf_reloc, modified\n"));
-      return bfd_reloc_ok;
-    }
-
-  /* Try to apply the reloc */
-
-  sym=*(r->sym_ptr_ptr);
-  target_section=sym->section;
-
-  if (bfd_is_und_section(target_section)) /* Error */
-    {
-      if ((sym->flags & BSF_WEAK) == 0)
-        {
-	  DPRINT(10,("aout_perf_reloc: target_sec==UND\n"));
-	  return bfd_reloc_undefined;
-	}
-      target_section=bfd_abs_section_ptr;
-    }
-
-  relocation=0; flags=RELOC_SIGNED; copy=false; ret=bfd_reloc_ok;
-
-  DPRINT(10,("RELOC: %s: size=%u\n",r->howto->name,bfd_get_reloc_size(r->howto)));
-  switch (r->howto->type)
-    {
-    case H_ABS8: /* 8/16 bit reloc, pc relative or absolute */
-    case H_ABS16:
-      if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */
-	relocation=sym->value;
-      else if (bfd_is_com_section(target_section)) /* Error.. */
-	{
-	  bfd_msg ("pc relative relocation to common symbol \"%s\" in "
-		   "section %s",sym->name,sec->name);
-	  DPRINT(10,("Ref to common symbol...aout_perf_reloc\n"));
-	  ret=bfd_reloc_undefined;
-	}
-      else if (sec->output_section!=target_section->output_section)
-	{
-	  // SBF: the if statement has been fixed, but the linker does no longer work.
-	  // if ((target_section->output_section->flags&SEC_DATA)!=0)
-	  // I replaced it with the old (obvious bogus) statement
-	  // TODO: a better fix?
-	  //if (target_section->output_section->flags & (SEC_DATA != 0))
-	  if (amiga_base_relative)
-	    goto baserel; /* Dirty, but no code duplication.. */
-	  bfd_msg ("pc relative relocation out-of-range in section %s. "
-		   "Relocation was to symbol %s",sec->name,sym->name);
-	  DPRINT(10,("Section %s, target %s: Reloc out-of-range...not same "
-		     "section, aout_perf\nsec->out=%s, target->out=%s, "
-		     "offset=%lx\n",sec->name,target_section->name,
-		     sec->output_section->name,
-		     target_section->output_section->name,r->address));
-	  ret=bfd_reloc_outofrange;
-	}
-      else
-	{
-	  /* Same section, this is a pc relative hunk... */
-	  DPRINT(5,("Reloc to same section...\n"));
-	  relocation=-(long)(r->address+sec->output_offset);
-	}
-      break;
-
-    case H_ABS32: /* 32 bit reloc, pc relative or absolute */
-      if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */
-	relocation=sym->value;
-      else if (bfd_is_com_section(target_section)) /* ref to common */
-	{
-	  relocation=0;
-	  copy=true;
-	}
-      else
-	{
-	  if (amiga_base_relative)
-	    amiga_update_target_section (target_section);
-	  relocation=0;
-	  copy=true;
-	}
-      DPRINT(10,("target->out=%s(%lx), sec->out=%s(%lx), symbol=%s\n",
-		 target_section->output_section->name,
-		 target_section->output_section,
-		 sec->output_section->name,
-		 sec->output_section,
-		 sym->name));
-      break;
-
-     case H_PC16:
-      if (r->address == 0x80000000)
-	return bfd_reloc_ok;
-      // fall through
-    case H_PC8: /* pcrel */
-    case H_PC32:
-      if (bfd_is_abs_section(target_section)) /* Ref to absolute hunk */
-	relocation=sym->value;
-      else if (sec->output_section!=target_section->output_section) /* Error */
-	{
-	  DPRINT(5,("pc relative, but out-of-range\n"));
-	  ret=bfd_reloc_outofrange;
-	}
-      else /* Same section */
-	{
-	  relocation = sym->value + target_section->output_offset
-	    - sec->output_offset;
-	}
-      break;
-
-    case H_SD16: /* baserel */
-    case H_SD32:
-    baserel:
-      /* We use the symbol ___a4_init as base */
-      if (bfd_is_abs_section(target_section))
-	relocation=sym->value;
-      else if (bfd_is_com_section(target_section)) /* Error.. */
-	{
-	  bfd_msg ("baserelative relocation to common \"%s\"",sym->name);
-	  DPRINT(10,("Ref to common symbol...aout_perf_reloc\n"));
-	  ret=bfd_reloc_undefined;
-	}
-      else if (!AMIGA_DATA(target_section->output_section->owner)->baserel)
-	{
-	  bfd_msg ("Base symbol for base relative reloc not defined: "
-		   "section %s, reloc to symbol %s",sec->name,sym->name);
-	  ret=bfd_reloc_notsupported;
-	}
-      else /* Target section and sec need not be the same.. */
-	{
-	  amiga_update_target_section (target_section);
-	  if (!amiga_baserel_target_ok (target_section, sym, error_message))
-	    return bfd_reloc_dangerous;
-	  relocation = sym->value + target_section->output_offset;
-	  /* if the symbol is in .bss, subtract the offset that gas has put
-	     into the opcode */
-	  if (target_section->index == 2 && !(sym->flags & BSF_GLOBAL))
-	    relocation -= adata(abfd).datasec->rawsize;
-	  DPRINT(20,("symbol=%s (0x%lx)\nsection %s (0x%lx; %s; output=0x%lx)"
-		     "\nrelocation @0x%lx\n", sym->name, sym->value,
-		     target_section->name, target_section,
-		     target_section->owner->filename, target_section->output_offset,
-		     r->address));
-
-	  relocation -= (AMIGA_DATA(target_section->output_section->owner))->a4init;
-	}
-      DPRINT(10,("target->out=%s(%lx), sec->out=%s(%lx), symbol=%s\n",
-		 target_section->output_section->name,
-		 target_section->output_section,
-		 sec->output_section->name,
-		 sec->output_section,
-		 sym->name));
-      break;
-
-    default:
-      bfd_msg ("Error: unsupported reloc: %s(%d)",r->howto->name,r->howto->size);
-      ret=bfd_reloc_notsupported;
-      break;
-    }/* Of switch */
-
-  /* Add in relocation */
-  if (relocation!=0)
-    ret = my_add_to (r, data, relocation, flags);
-
-  if (copy) /* Copy reloc to output section */
-    {
-      DPRINT(5,("Copying reloc\n"));
-      target_section=sec->output_section;
-      r->address+=sec->output_offset;
-      target_section->orelocation[target_section->reloc_count++]=r;
-    }
-  DPRINT(5,("Leaving aout_perf_reloc with %d (OK=%d)\n",ret,bfd_reloc_ok));
-  return ret;
-}
-
 struct generic_write_global_symbol_info
 {
   struct bfd_link_info *info;
@@ -1427,8 +1200,8 @@ elf_perform_reloc (
 extern bool _bfd_generic_link_write_global_symbol(struct generic_link_hash_entry *, void *);
 extern bool _bfd_generic_link_output_symbols(bfd *, bfd *, struct bfd_link_info *, size_t *);
 
-/* The final link routine, used both by Amiga and a.out backend */
-/* This is nearly a copy of linker.c/_bfd_generic_final_link */
+/* The final link routine of the amiga backend.
+   This is nearly a copy of linker.c/_bfd_generic_final_link */
 bool
 amiga_final_link (
      bfd *abfd,
@@ -1481,9 +1254,6 @@ amiga_final_link (
   AMIGA_DATA (abfd)->baserel = amiga_base_relative;
 
   DPRINT (5, ("Entering final_link\n"));
-
-  if (bfd_get_flavour (abfd) == bfd_target_aout_flavour)
-    return aout_amiga_final_link (abfd, info);
 
   abfd->outsymbols = (asymbol **) NULL;
   abfd->symcount = 0;
@@ -1619,10 +1389,6 @@ amiga_final_link (
   return true;
 }
 
-
-/* The final link routine, used both by Amiga and a.out backend */
-/* This is nearly a copy of linker.c/_bfd_generic_final_link */
-
 /* Handle reloc link order.
    This is nearly a copy of linker.c/_bfd_generic_reloc_link_order */
 static bool
@@ -1700,10 +1466,7 @@ amiga_reloc_link_order (
 	  use them, if they have not been set by now.. */
       BFD_ASSERT (data!=NULL);
 
-      if (bfd_get_flavour(abfd)==bfd_target_amiga_flavour)
-	ret=amiga_perform_reloc(abfd,r,data,sec,NULL,&em);
-      else
-	ret=aout_perform_reloc(abfd,r,data,sec,NULL,&em);
+      ret=amiga_perform_reloc(abfd,r,data,sec,NULL,&em);
 
       if (ret!=bfd_reloc_ok)
 	{
