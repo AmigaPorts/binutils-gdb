@@ -27,13 +27,6 @@
 #include "opcode/m68k.h"
 
 #define MOTOROLA 1
-#define TARGET_AMIGA 1
-
-#ifdef MOTOROLA
-/* print as signed decimal. */
-#undef sprintf_vma
-#define sprintf_vma(b,n) sprintf(b,"%d",(int)n)
-#endif
 
 /* Local function prototypes.  */
 #ifdef MOTOROLA
@@ -1855,14 +1848,6 @@ print_insn_m68k (bfd_vma memaddr, disassemble_info *info)
   info->display_endian = BFD_ENDIAN_BIG;
   priv.max_fetched = priv.the_buffer;
   priv.insn_start = memaddr;
-
-//  if (info->disassembler_options)
-//    {
-//      parse_disassembler_options (info->disassembler_options);
-//
-//      /* To avoid repeated parsing of these options, we remove them here.  */
-//      info->disassembler_options = NULL;
-//    }
 
   arch_mask = bfd_m68k_mach_to_features (info->mach);
   if (!arch_mask)

@@ -70,8 +70,6 @@ const pseudo_typeS obj_pseudo_table[] =
   {NULL, NULL, 0}		/* end sentinel */
 };
 
-#if 1 // BFD_ASSEMBLER
-
 static void s_custom_section(char const * secname)
 {
   segT seg = subseg_new(secname, 0);
@@ -208,8 +206,6 @@ obj_amiga_frob_file_before_fix ()
   gas_assert (x);
 }
 
-#endif /* BFD_ASSEMBLER */
-
 /* Get name of section.  */
 static char *
 obj_amiga_section_name ()
@@ -258,10 +254,7 @@ static void obj_amiga_section(int push) {
 	ignore_rest_of_line ();
 	--input_line_pointer;
 
-// support many segments
-	if (0 == strcmp(".rodata", name) || 0 == strcmp(".text", name) || 0 == strcmp(".text.startup", name)
-//	    || (0 == strncmp(".text.", name, 6) && strstr(name, "_GLOBAL_"))
-	    )
+	if (0 == strcmp(".rodata", name) || 0 == strcmp(".text", name) || 0 == strcmp(".text.startup", name))
 	  s_text(push);
 	else if (0 == strcmp(".data", name) || 0 == strcmp(".bss", name))
 	  s_data(push);
@@ -309,28 +302,3 @@ obj_amiga_weak (
   while (c == ',');
   demand_empty_rest_of_line ();
 }
-
-
-///* The first entry in a .stab section is special.  */
-//
-//void
-//obj_amiga_init_stab_section (seg)
-//     segT seg;
-//{
-//  char *file;
-//  char *p;
-//  char *stabstr_name;
-//  unsigned int stroff;
-//
-//  /* Make space for this first symbol.  */
-//  p = frag_more (12);
-//  /* Zero it out.  */
-//  memset (p, 0, 12);
-//  as_where (&file, (unsigned int *) NULL);
-//  stabstr_name = (char *) alloca (strlen (segment_info[seg].name) + 4);
-//  strcpy (stabstr_name, segment_info[seg].name);
-//  strcat (stabstr_name, "str");
-//  stroff = get_stab_string_offset (file, stabstr_name);
-//  know (stroff == 1);
-//  md_number_to_chars (p, stroff, 4);
-//}

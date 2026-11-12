@@ -107,9 +107,6 @@ extern int m68k_parse_long_option (char *);
 
 #define md_operand(x)
 
-#define TARGET_WORD_SIZE 32
-#define TARGET_ARCH bfd_arch_m68k
-
 extern struct relax_type md_relax_table[];
 #define TC_GENERIC_RELAX_TABLE md_relax_table
 
