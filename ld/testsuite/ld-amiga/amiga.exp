@@ -40,6 +40,7 @@ run_dump_test "baserel-section"
 run_dump_test "weak-override"
 run_dump_test "weak-override-local"
 run_dump_test "lto-r"
+run_dump_test "setelem"
 
 # A .datachip hunk must stay in chip RAM: a partial link keeps HUNKF_CHIP in
 # the HUNK_DATA size word, and a load file has it in the HUNK_HEADER table.
