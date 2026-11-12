@@ -732,10 +732,21 @@ get_relocated_section_contents (
 			 input_bfd, input_section, (*parent)->address));
 		  break;
 		case bfd_reloc_outofrange:
+		  /* A pc-relative reference into another hunk.  */
+		  link_info->callbacks->einfo
+		    (_("%X%P: %pB(%pA): relocation \"%pR\" goes out of range\n"),
+		     input_bfd, input_section, *parent);
+		  break;
+		case bfd_reloc_notsupported:
+		  link_info->callbacks->einfo
+		    (_("%X%P: %pB(%pA): relocation \"%pR\" is not supported\n"),
+		     input_bfd, input_section, *parent);
+		  break;
 		default:
-		  DPRINT(10,("get_rel_sec_cont fails, perform reloc "
-			     "returned $%x\n",r));
-		  fprintf(stderr, "%s: %s reloc for %s is out of range: %08x\n", abfd->filename, (*(*parent)->sym_ptr_ptr)->section->name, bfd_asymbol_name (*(*parent)->sym_ptr_ptr), relocation);
+		  link_info->callbacks->einfo
+		    (_("%X%P: %pB(%pA): relocation \"%pR\" returns an "
+		       "unrecognized value %x\n"),
+		     input_bfd, input_section, *parent, r);
 		  break;
 		}
 	    }
