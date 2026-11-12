@@ -35,8 +35,6 @@ Boston, MA 02110-1301, USA.  */
 #ifndef SAFE_CTYPE_H
 #define SAFE_CTYPE_H
 
-#include "libiberty.h"
-
 /* Determine host character set.  */
 #define HOST_CHARSET_UNKNOWN 0
 #define HOST_CHARSET_ASCII   1
@@ -109,8 +107,8 @@ extern const unsigned short _sch_istable[256];
 #define IS_SPACE_OR_NUL(c)	_sch_test(c, _sch_iscppsp)
 
 /* Character transformation.  */
-extern LIBIBERTYDECL const unsigned char  _sch_toupper[256];
-extern LIBIBERTYDECL const unsigned char  _sch_tolower[256];
+extern const unsigned char  _sch_toupper[256];
+extern const unsigned char  _sch_tolower[256];
 #define TOUPPER(c) _sch_toupper[(c) & 0xff]
 #define TOLOWER(c) _sch_tolower[(c) & 0xff]
 

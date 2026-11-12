@@ -28,6 +28,7 @@ Foundation, Inc., 675 Mass Ave, Cambridge, MA 02139, USA.  */
 #include "sysdep.h"
 #include "bfd.h"
 #include "bfdlink.h"
+#include "libiberty.h"
 #include "getopt.h"
 #include "ctf-api.h"
 
