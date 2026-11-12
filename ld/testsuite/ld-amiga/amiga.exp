@@ -65,6 +65,19 @@ run_ld_link_tests [list \
 	 "entry"] \
 ]
 
+# Set elements: ld builds each list as a count, the elements and a zero in
+# .data, with a relocation for every element in a section.  The same lists
+# come out of a final link of the objects and of an ld -r of them.
+run_ld_link_tests [list \
+    [list "Amiga set elements" \
+	 "-e _start" "" "" {ctor-sets.s} {{objdump {-r -s -j .data} ctor-sets.rd}} \
+	 "ctor-sets"] \
+    [list "Amiga set elements, ld -r" "-r" "" "" {ctor-sets.s} {} "ctor-sets-r.o"] \
+    [list "Amiga set elements after ld -r" \
+	 "-e _start tmpdir/ctor-sets-r.o" "" "" {} \
+	 {{objdump {-r -s -j .data} ctor-sets.rd}} "ctor-sets-r"] \
+]
+
 # A .datachip hunk must stay in chip RAM: a partial link keeps HUNKF_CHIP in
 # the HUNK_DATA size word, and a load file has it in the HUNK_HEADER table.
 # objdump shows neither, so read the longwords of the files directly.
