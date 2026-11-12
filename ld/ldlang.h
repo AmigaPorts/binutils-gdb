@@ -343,10 +343,6 @@ typedef struct lang_input_statement_struct
   const char *target;
 
   struct lang_input_statement_flags flags;
-
-  /* Added for AMIGA support of section attributes */
-  int amiga_attribute;
-
 } lang_input_statement_type;
 
 typedef struct

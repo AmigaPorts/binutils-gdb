@@ -52,15 +52,12 @@ void amiga_add_options PARAMS ((int, char **, int, struct option **, int, struct
 bool amiga_handle_option PARAMS ((int));
 void amiga_after_parse PARAMS ((void));
 void amiga_after_open PARAMS ((void));
-void amiga_after_allocation PARAMS ((void));
+void amiga_list_options PARAMS ((FILE *));
 
 /* amigaoslink.c variables */
 
 /* 1 means, write out debug hunk, when producing a load file */
 extern int write_debug_hunk;
-
-/* This is the attribute to use for the next file */
-extern int amiga_attribute;
 
 /* generate a combined data+bss hunk */
 extern int amiga_base_relative;
@@ -84,13 +81,8 @@ amiga_add_options (int ns ATTRIBUTE_UNUSED,
 		   struct option **really_longopts ATTRIBUTE_UNUSED)
 {
   static const struct option xtra_long[] = {
-    {"flavor", required_argument, NULL, OPTION_FLAVOR},
     {"amiga-datadata-reloc", no_argument, NULL, OPTION_AMIGA_DATADATA_RELOC},
-    {"amiga-databss-together", no_argument, NULL, OPTION_AMIGA_DATABSS_TOGETHER},
     {"amiga-debug-hunk", no_argument, NULL, OPTION_AMIGA_DEBUG},
-    {"attribute", required_argument, NULL, OPTION_AMIGA_ATTRIBUTE},
-    {"fast", no_argument, NULL, OPTION_AMIGA_FAST},
-    {"chip", no_argument, NULL, OPTION_AMIGA_CHIP},
     {"fl", required_argument, NULL, OPTION_FLAVOR},
     {NULL, no_argument, NULL, 0}
   };
@@ -112,29 +104,8 @@ amiga_handle_option (int optc)
       /* Long option which just sets a flag.  */
       break;
 
-    case OPTION_AMIGA_CHIP:
-      amiga_attribute = MEMF_CHIP;
-      break;
-
-    case OPTION_AMIGA_FAST:
-      amiga_attribute = MEMF_FAST;
-      break;
-
-    case OPTION_AMIGA_ATTRIBUTE:
-      {
-	char *end;
-	amiga_attribute = strtoul (optarg, &end, 0);
-	if (*end)
-	  einfo ("%P%F: invalid number \`%s\'\n", optarg);
-      }
-      break;
-
     case OPTION_AMIGA_DEBUG:
       write_debug_hunk = 1; /* Write out debug hunk */
-      break;
-
-    case OPTION_AMIGA_DATABSS_TOGETHER:
-      amiga_base_relative = 1; /* Combine data and bss */
       break;
 
     case OPTION_AMIGA_DATADATA_RELOC:
@@ -155,29 +126,26 @@ amiga_after_parse ()
   ldfile_sort_flavors();
 }
 
-void 
+void
 amiga_after_open ()
 {
   ldctor_build_sets ();
 }
 
-static void
-amiga_assign_attribute (lang_input_statement_type *inp)
-{
-  asection *s;
-
-  if (bfd_get_flavour(inp->the_bfd)==bfd_target_amiga_flavour)
-    {
-      for (s=inp->the_bfd->sections;s!=NULL;s=s->next)
-	amiga_per_section(s)->attribute=inp->amiga_attribute;
-    }
-}
-
 void
-amiga_after_allocation ()
+amiga_list_options (FILE *file)
 {
-  if (0) /* Does not work at the moment */
-    lang_for_each_input_file (amiga_assign_attribute);
+  fprintf (file, _("\
+  -fl NAME                    Search the NAME subdirectory of each library\n\
+                                directory first; several -fl nest, so\n\
+                                -fl libb -fl libm020 tries libb/libm020/,\n\
+                                then libb/, then the directory itself\n"));
+  fprintf (file, _("\
+  -amiga-datadata-reloc       Write the relocations of data to data that\n\
+                                resident programs apply to their copy of it\n"));
+  fprintf (file, _("\
+  -amiga-debug-hunk           Write the symbols and the debugging sections\n\
+                                into a load file\n"));
 }
 
 #endif
@@ -276,7 +244,7 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   amiga_after_open,			/* after_open */
   after_check_relocs_default,
   before_place_orphans_default,
-  amiga_after_allocation,		/* after_allocation */
+  after_allocation_default,		/* after_allocation */
   set_output_arch_default,		/* set_output_arch */
   ldemul_default_target,		/* choose_target */
   before_allocation_default,		/* before_allocation */
@@ -292,7 +260,7 @@ struct ld_emulation_xfer_struct ld_${EMULATION_NAME}_emulation =
   amiga_add_options,			/* add_options */
   amiga_handle_option,			/* handle_option */
   NULL,					/* unrecognized file */
-  NULL,					/* list_options */
+  amiga_list_options,			/* list_options */
   NULL,					/* recognized_file */
   NULL,					/* find potential_libraries */
   NULL,					/* new_vers_pattern */

@@ -96,9 +96,6 @@ error_print (const char *fmt, ...)
    written out */
 BFDDECL int write_debug_hunk = 1;
 
-/* This is also used by the linker to set the attribute of sections */
-BFDDECL int amiga_attribute = 0;
-
 /* This one is used to indicate base-relative linking */
 BFDDECL int amiga_base_relative = 0;
 
