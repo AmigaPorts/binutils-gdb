@@ -742,6 +742,7 @@ case "${targ}" in
     ;;
   m68*-*-amigaoself*)
     targ_defvec=m68k_elf32_vec
+    targ_selvecs="amiga_vec aout_amiga_vec"
     targ_underscore=yes
     ;;
   m68*-*-amigaos*)

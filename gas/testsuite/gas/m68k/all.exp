@@ -40,7 +40,7 @@ if { [istarget m68*-*-*] || [istarget fido*-*-*] } then {
 
     run_dump_test pcrel
 
-    if [istarget m68k-*-amigaos*] then {
+    if { [istarget m68k-*-amigaos*] && ![istarget m68k-*-amigaoself*] } then {
 	run_dump_test amiga-pcrel
 	run_dump_test amiga-bra-isac
     }
