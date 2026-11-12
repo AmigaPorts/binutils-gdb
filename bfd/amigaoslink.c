@@ -70,10 +70,6 @@ the original routines from @file{linker.c} and @file{reloc.c}.
 #include "elf/m68k.h"
 #include <time.h>
 
-#ifndef alloca
-extern void * alloca (size_t);
-#endif
-
 #define bfd_msg (*_bfd_error_handler)
 
 /*#define DEBUG_AMIGA 1*/
@@ -94,13 +90,13 @@ error_print (const char *fmt, ...)
 
 /* This one is used by the linker and tells us, if a debug hunk should be
    written out */
-BFDDECL int write_debug_hunk = 1;
+int write_debug_hunk = 1;
 
 /* This one is used to indicate base-relative linking */
-BFDDECL int amiga_base_relative = 0;
+int amiga_base_relative = 0;
 
 /* This one is used to indicate -resident linking */
-BFDDECL int amiga_resident = 0;
+int amiga_resident = 0;
 
 bool
 default_indirect_link_order (bfd *, struct bfd_link_info *,
@@ -112,8 +108,6 @@ bool
 amiga_final_link (bfd *, struct bfd_link_info *);
 bool
 aout_amiga_final_link (bfd *, struct bfd_link_info *);
-
-bool amiga_slurp_relocs (bfd *, sec_ptr, asymbol **);
 
 sec_ptr amiga_make_unique_section (bfd *, const char *);
 
@@ -192,9 +186,6 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	      && s->owner->xvec->flavour != bfd_target_elf_flavour)
 	    continue;
 
-//	  printf("%s:%p:%d:%d=%d -> %s:%d:%d\n", s->name, s, (int)s->output_offset, (int)s->rawsize, (int)(s->output_offset + s->rawsize),
-//		 s->output_section->name, (int)s->output_section->output_offset, (int)s->output_section->rawsize);
-
 	  if (s->output_section != target)
 	    continue;
 
@@ -269,10 +260,6 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 		  to = src->symbol->section->output_offset + src->symbol->value;
 		  from = s->output_offset + src->relent.address;
 		  dist = to - from;
-
-//		  fprintf(stderr, "0 sym %s: %d, tsec %p %s: %d, sec %p %s %d, rel %d\n",
-//			 src->symbol->name, src->symbol->value, src->symbol->section, src->symbol->section->name, src->symbol->section->output_offset,
-//			 s, s->name, s->output_offset, src->relent.address);
 
 		  if (-32766 <= dist && dist <= 32766)
 		    continue;
@@ -683,7 +670,6 @@ get_relocated_section_contents (
 
   /* We're not relaxing the section, so just copy the size info.  */
   input_section->size = input_section->rawsize;
-//  input_section->reloc_done = true;
 
   DPRINT(5,("GRSC: CanReloc\n"));
   reloc_count = bfd_canonicalize_reloc (input_bfd,
@@ -732,28 +718,24 @@ get_relocated_section_contents (
 			(link_info, bfd_asymbol_name (*(*parent)->sym_ptr_ptr),
 			 input_bfd, input_section, (*parent)->address,
 			 true));
-//		    goto error_return;
 		  break;
 		case bfd_reloc_dangerous:
 		  BFD_ASSERT (error_message != (char *) NULL);
 		  ((*link_info->callbacks->reloc_dangerous)
 			(link_info, error_message, input_bfd, input_section,
 			 (*parent)->address));
-//		    goto error_return;
 		  break;
 		case bfd_reloc_overflow:
 		  ((*link_info->callbacks->reloc_overflow)
 			(link_info, 0, bfd_asymbol_name (*(*parent)->sym_ptr_ptr),
 			 (*parent)->howto->name, (*parent)->addend,
 			 input_bfd, input_section, (*parent)->address));
-//		    goto error_return;
 		  break;
 		case bfd_reloc_outofrange:
 		default:
 		  DPRINT(10,("get_rel_sec_cont fails, perform reloc "
 			     "returned $%x\n",r));
 		  fprintf(stderr, "%s: %s reloc for %s is out of range: %08x\n", abfd->filename, (*(*parent)->sym_ptr_ptr)->section->name, bfd_asymbol_name (*(*parent)->sym_ptr_ptr), relocation);
-//		  abort ();
 		  break;
 		}
 	    }
@@ -811,7 +793,6 @@ my_add_to (
       else
 	val = bfd_getb16 (p);
 
-//      printf("%p: %04x+%04x=%05x %s %s\n", p, val, add, val + add, (*r->sym_ptr_ptr)->name, (*r->sym_ptr_ptr)->the_bfd->filename);
       val += add;
 
       /* check for overflow */
@@ -986,8 +967,6 @@ amiga_perform_reloc (
   if (target_section->kept_section)
       sym->section = target_section = target_section->kept_section;
 
-//  printf("%s %s: %x\n", sym->name, target_section->name, r->howto->type);
-
   if (bfd_is_und_section(target_section)) /* Error */
     {
       DPRINT(10,("amiga_perf_reloc: target_sec==UND\n"));
@@ -1046,7 +1025,6 @@ AbsReloc:
 	      || amiga_is_dwarf_section_name (sec->name))
 	    {
 	      relocation=sym->value + target_section->output_offset;
-//		  printf("stab: %s %s %d+%d=%d\n", sym->section->name, sym->name, sym->value, target_section->output_offset, relocation);
 	    }
 	  else
 	    {
@@ -1673,7 +1651,6 @@ amiga_reloc_link_order (
 	  ((*info->callbacks->unattached_reloc)
 		 (info, link_order->u.reloc.p->u.name,
 		  (bfd *) NULL, (asection *) NULL, (bfd_vma) 0));
-//	    return false;
 	  bfd_set_error (bfd_error_bad_value);
 	  DPRINT(5,("Leaving amiga_reloc_link, bad value in hash lookup\n"));
 	  return false;
