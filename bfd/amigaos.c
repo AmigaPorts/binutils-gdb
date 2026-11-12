@@ -421,9 +421,6 @@ howto_for_reloc (unsigned long type)
    be written out. */
 extern BFDDECL int write_debug_hunk;
 
-/* This is also used by the linker to set the attribute of sections. */
-extern BFDDECL int amiga_attribute;
-
 /* used with base-relative linking */
 extern BFDDECL int amiga_base_relative;
 
