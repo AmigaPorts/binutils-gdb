@@ -73,92 +73,20 @@ SECTIONS
    * The order here must match the order expected by amiga_pack_dwarf_sections()
    * in amigaos.c
    */
-  .debug_frame :
-  {
-    ${RELOCATING+__debug_frame_start = .;}
-    *(.debug_frame)
-    ${RELOCATING+__debug_frame_end = .;}
-  }
-  .debug_info :
-  {
-    ${RELOCATING+__debug_info_start = .;}
-    *(.debug_info)
-    *(.gnu.linkonce.wi.*)
-    ${RELOCATING+__debug_info_end = .;}
-  }
-  .debug_abbrev :
-  {
-    ${RELOCATING+__debug_abbrev_start = .;}
-    *(.debug_abbrev)
-    ${RELOCATING+__debug_abbrev_end = .;}
-  }
-  .debug_loclists :
-  {
-    ${RELOCATING+__debug_loclists_start = .;}
-    *(.debug_loclists)
-    ${RELOCATING+__debug_loclists_end = .;}
-  }
-  .debug_aranges :
-  {
-    ${RELOCATING+__debug_aranges_start = .;}
-    *(.debug_aranges)
-    ${RELOCATING+__debug_aranges_end = .;}
-  }
-  .debug_rnglists :
-  {
-    ${RELOCATING+__debug_rnglists_start = .;}
-    *(.debug_rnglists)
-    ${RELOCATING+__debug_rnglists_end = .;}
-  }
-  .debug_line :
-  {
-    ${RELOCATING+__debug_line_start = .;}
-    *(.debug_line)
-    *(.debug_line.*)
-    ${RELOCATING+__debug_line_end = .;}
-  }
-  .debug_str :
-  {
-    ${RELOCATING+__debug_str_start = .;}
-    *(.debug_str)
-    ${RELOCATING+__debug_str_end = .;}
-  }
-  .debug_line_str :
-  {
-    ${RELOCATING+__debug_line_str_start = .;}
-    *(.debug_line_str)
-    ${RELOCATING+__debug_line_str_end = .;}
-  }
+  .debug_frame : { *(.debug_frame) }
+  .debug_info : { *(.debug_info) *(.gnu.linkonce.wi.*) }
+  .debug_abbrev : { *(.debug_abbrev) }
+  .debug_loclists : { *(.debug_loclists) }
+  .debug_aranges : { *(.debug_aranges) }
+  .debug_rnglists : { *(.debug_rnglists) }
+  .debug_line : { *(.debug_line) *(.debug_line.*) }
+  .debug_str : { *(.debug_str) }
+  .debug_line_str : { *(.debug_line_str) }
   /* Additional DWARF sections for completeness */
-  .debug_types :
-  {
-    ${RELOCATING+__debug_types_start = .;}
-    *(.debug_types)
-    ${RELOCATING+__debug_types_end = .;}
-  }
-  .debug_macro :
-  {
-    ${RELOCATING+__debug_macro_start = .;}
-    *(.debug_macro)
-    ${RELOCATING+__debug_macro_end = .;}
-  }
-  .debug_ranges :
-  {
-    ${RELOCATING+__debug_ranges_start = .;}
-    *(.debug_ranges)
-    ${RELOCATING+__debug_ranges_end = .;}
-  }
-  .debug_addr :
-  {
-    ${RELOCATING+__debug_addr_start = .;}
-    *(.debug_addr)
-    ${RELOCATING+__debug_addr_end = .;}
-  }
-  .debug_str_offsets :
-  {
-    ${RELOCATING+__debug_str_offsets_start = .;}
-    *(.debug_str_offsets)
-    ${RELOCATING+__debug_str_offsets_end = .;}
-  }
+  .debug_types : { *(.debug_types) }
+  .debug_macro : { *(.debug_macro) }
+  .debug_ranges : { *(.debug_ranges) }
+  .debug_addr : { *(.debug_addr) }
+  .debug_str_offsets : { *(.debug_str_offsets) }
 }
 EOF
