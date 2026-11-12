@@ -42,6 +42,7 @@ if { [istarget m68*-*-*] || [istarget fido*-*-*] } then {
 
     if [istarget m68k-*-amigaos*] then {
 	run_dump_test amiga-pcrel
+	run_dump_test amiga-bra-isac
     }
 
     # Since fido is basically CPU32, it does not support those
