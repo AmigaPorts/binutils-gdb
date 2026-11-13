@@ -62,6 +62,7 @@ run_dump_test "weak-undef-strong"
 run_dump_test "weak-undef-strong2"
 run_dump_test "weak-undef-strong-r"
 run_dump_test "lto-r"
+run_dump_test "lto-weak"
 run_dump_test "setelem"
 
 # -e makes its symbol undefined, so ld pulls the archive member that

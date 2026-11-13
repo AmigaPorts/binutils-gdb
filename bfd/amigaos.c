@@ -3479,7 +3479,8 @@ amiga_walk_lto_symbols (bfd *abfd, amiga_symbol_type **symptrs,
 	      asp->symbol.name = name_copy;
 	      asp->symbol.the_bfd = abfd;
 	      asp->symbol.section = bfd_und_section_ptr;
-	      asp->symbol.flags = 0;
+	      asp->symbol.flags
+		= kind == AMIGA_LTO_GCCPK_WEAKUNDEF ? BSF_WEAK : 0;
 	      asp->symbol.value = 0;
 	      asp->type = EXT_ABSREF32;
 	      asp->index = asp - AMIGA_DATA(abfd)->symbols;
