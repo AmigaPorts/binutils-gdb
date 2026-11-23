@@ -4864,13 +4864,12 @@ amiga_gc_sections (bfd *abfd ATTRIBUTE_UNUSED, struct bfd_link_info *info)
   for (sec = info->input_bfds->sections; sec != NULL; sec = sec->next)
     amiga_keep_section(&referenced, sec);
 
-  // keep all init sections starting with .list__ or .dlist__
+  // keep all init sections starting with .list_ or .dlist_
   for (ibfd = info->input_bfds; ibfd != NULL; ibfd = ibfd->link.next)
     for (sec = ibfd->sections; sec != NULL; sec = sec->next)
-      if (0 == strncmp(".list_", sec->name, 7) ||
-	  0 == strncmp(".dlist_", sec->name, 7) ||
-	  0 == strncmp(".data.export", sec->name, 12)
-	  )
+      if (startswith (sec->name, ".list_")
+	  || startswith (sec->name, ".dlist_")
+	  || startswith (sec->name, ".data.export"))
     	amiga_keep_section(&referenced, sec);
   // loop until nothing new was added.
   for(i = 0;i != referenced.count;)
