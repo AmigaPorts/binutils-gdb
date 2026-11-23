@@ -4644,6 +4644,23 @@ amiga_keep_section (struct bfd_hash_table *ht, struct bfd_section *sec)
 
   sec->flags |= SEC_KEEP;
 
+  /* An a.out object, such as ixemul's startup code, has no Amiga
+     relocations to follow: keep the definitions of every symbol it
+     refers to instead.  */
+  if (bfd_get_flavour (sec->owner) != bfd_target_amiga_flavour)
+    {
+      unsigned j;
+
+      for (j = 0; j < sec->owner->symcount; ++j)
+	{
+	  sym = sec->owner->outsymbols[j];
+	  if (bfd_is_und_section (sym->section)
+	      || bfd_is_com_section (sym->section))
+	    bfd_hash_lookup (ht, sym->name, true, true);
+	}
+      return true;
+    }
+
   amiga_slurp_relocs(sec->owner, sec, 0);
 
   for (src = (amiga_reloc_type *) sec->relocation; src; src = src->next)
@@ -4678,17 +4695,6 @@ amiga_keep_section (struct bfd_hash_table *ht, struct bfd_section *sec)
           DBG("keep_section:   mark pseudo-section KEEP (%s)", symsec->name);
           symsec->flags |= SEC_KEEP;
           bfd_hash_lookup(ht, sym->name, true, true);
-        }
-    }
-
-  asection *s;
-  for (s = sec->owner->sections; s; s = s->next)
-    {
-      if (0 == strncmp(".list__", s->name, 7)
-          || 0 == strncmp(".dlist__", s->name, 8))
-        {
-          DBG("keep_section:   auto-keep list section %s", s->name);
-          amiga_keep_section(ht, s);
         }
     }
 
@@ -4734,16 +4740,14 @@ amiga_collect (struct bfd_hash_table *ht, asection *sec)
 
           if (he)
             {
-              if (he->section)
-        	sec->flags |= SEC_KEEP;
-              else
+              if (!he->section)
 		{
 		  DBG("collect: add  symbol %s resolves to section %s",
 		      sym->name, sec->name);
 
 		  he->section = sec;
-		  amiga_keep_section(ht, sec);
-	      }
+		}
+	      amiga_keep_section(ht, sec);
             }
         }
     }
@@ -4754,26 +4758,26 @@ amiga_collect (struct bfd_hash_table *ht, asection *sec)
       for (j = 0; j < sec->owner->symcount; ++j)
         {
           asymbol *sym = sec->owner->outsymbols[j];
-          struct ref_section_entry *he =
-            (struct ref_section_entry *) bfd_hash_lookup(ht, sym->name, false, false);
+          struct ref_section_entry *he;
 
+	  /* Only a definition resolves a symbol: crt0.o refers to _main,
+	     which the program defines.  */
+	  if (!(sym->flags & (BSF_GLOBAL | BSF_WEAK))
+	      || bfd_is_und_section (sym->section)
+	      || bfd_is_com_section (sym->section))
+	    continue;
+
+          he = (struct ref_section_entry *) bfd_hash_lookup(ht, sym->name, false, false);
           if (he)
             {
-              if (he->section)
+              if (!he->section)
                 {
-                  /* We already know the defining section.
-                     This is a reference -> keep the caller section. */
-                  sec->flags |= SEC_KEEP;
-                }
-              else
-                {
-                  /* First time we see a definition for this symbol. */
                   DBG("collect: add symbol %s resolves to section %s",
                       sym->name, sec->name);
 
                   he->section = sec;
-                  sec->flags |= SEC_KEEP;
                 }
+              amiga_keep_section(ht, sec);
             }
         }
     }
