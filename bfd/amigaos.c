@@ -1277,9 +1277,29 @@ amiga_handle_cdb_hunk (
 	    abfd->flags |= HAS_SYMS;
 	}
       else
-      /* skip the contents */
-      if ((secflags & SEC_HAS_CONTENTS) && bfd_seek (abfd, (len + 3) & ~3, SEEK_CUR))
-	return false;
+	{
+	  /* A code or data hunk of a load file can be shorter on disk
+	     than in memory, where LoadSeg() clears the rest: the bss
+	     that -fbaserel merges into the data hunk.  Read it now,
+	     zero padded, as the section then reaches past the end of
+	     the file, which bfd_get_full_section_contents refuses.  */
+	  if ((secflags & SEC_LOAD) != 0 && len < current_section->size)
+	    {
+	      bfd_byte *contents = bfd_zalloc (abfd, current_section->size);
+
+	      if (contents == NULL
+		  || bfd_read (contents, len, abfd) != len
+		  || bfd_seek (abfd, current_section->filepos, SEEK_SET))
+		return false;
+	      current_section->contents = contents;
+	      current_section->flags |= SEC_IN_MEMORY;
+	    }
+
+	  /* skip the contents */
+	  if ((secflags & SEC_HAS_CONTENTS)
+	      && bfd_seek (abfd, (len + 3) & ~3, SEEK_CUR))
+	    return false;
+	}
 
       if (!amiga_handle_rest (abfd, current_section, is_load))
 	return false;
@@ -2549,7 +2569,7 @@ amiga_write_section_contents (
   sec_ptr insection;
   asymbol *sym_p;
   arelent *r;
-  unsigned long zero=0,disksize,pad,n[2],k,l,s;
+  unsigned long zero=0,disksize,pad,n[2],k,l,s,on_disk;
   unsigned long lto_debug_header_size = 0;
   long *reloc_counts,reloc_count=0;
   unsigned char *values;
@@ -2598,7 +2618,31 @@ amiga_write_section_contents (
   DPRINT(10,("Section type is %lx\n",n[0]));
 
   /* Get real size in n[1], this may be shorter than the size in the header */
+  on_disk = amiga_per_section(section)->disk_size;
   amiga_per_section(section)->disk_size = section->rawsize;
+
+  /* A load file that objcopy or strip read keeps its code and data
+     hunks as short on disk as they were, without the zeros at the end
+     that LoadSeg() clears, such as the bss that -fbaserel merges into
+     the data hunk.  ld's output sections start with no size on disk
+     and are written in full.  */
+  if (AMIGA_DATA(abfd)->IsLoadFile
+      && (n[0] == HUNK_CODE || n[0] == HUNK_DATA)
+      && on_disk != 0 && on_disk < section->rawsize
+      && section->contents != NULL)
+    {
+      for (k = on_disk; k < section->rawsize; k++)
+	if (section->contents[k] != 0)
+	  break;
+      for (l = 0; k == section->rawsize && l < section->reloc_count; l++)
+	{
+	  r = section->orelocation[l];
+	  if (r != NULL && r->address + bfd_get_reloc_size (r->howto) > on_disk)
+	    k = 0;
+	}
+      if (k == section->rawsize)
+	amiga_per_section(section)->disk_size = on_disk;
+    }
 
   /* SBF: prepend the unpadded section size: add 4 bytes */
   if (n[0] == HUNK_DEBUG && amiga_is_dwarf_section_name (section->name))
@@ -4102,7 +4146,9 @@ bfd_size_type count)
       return false;
     }
 
-  if ((section->flags&SEC_IN_MEMORY)==0) /* Not in memory, so alloc space */
+  /* Not in memory, so alloc space.  objcopy copies SEC_IN_MEMORY from
+     an input section read into memory, without the contents.  */
+  if ((section->flags&SEC_IN_MEMORY)==0 || section->contents == NULL)
     {
       /* rawsize is only set once a section has been relaxed; a relocatable
 	 link never relaxes, so it is still zero there.  */
