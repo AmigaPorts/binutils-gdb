@@ -78,6 +78,17 @@ run_ld_link_tests [list \
 	 "entry"] \
 ]
 
+# To say where a symbol with a link warning is used, ld reads the relocs of
+# the object that references it before the final link.  They still resolve
+# to the archive members that the link loads, also for the other symbols.
+run_ld_link_tests [list \
+    [list "Amiga archive for the link warning test" "" "" "" {warn-f.s} {} "libwarnf.a"] \
+    [list "Amiga archive with a link warning" "" "" "" {warn-g.s} {} "libwarng.a"] \
+    [list "Amiga link warning and archive members" \
+	 "-e _start" "tmpdir/libwarnf.a tmpdir/libwarng.a" "" {warn-main.s} \
+	 {{ld warn.l} {nm {} warn.nd}} "warn"] \
+]
+
 # Set elements: ld builds each list as a count, the elements and a zero in
 # .data, with a relocation for every element in a section.  The same lists
 # come out of a final link of the objects and of an ld -r of them.

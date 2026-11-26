@@ -128,7 +128,12 @@ typedef struct amiga_reloc {
   arelent relent;
   struct amiga_reloc *next;
   asymbol *symbol;
+  /* The index of SYMBOL in the bfd's symbol table, or -1 for a reloc
+     relative to a section.  */
+  long symidx;
 } amiga_reloc_type;
+
+void amiga_sync_reloc_symbols (sec_ptr, asymbol **);
 
 /* Structure layout *must* match libaout.h/struct aout_symbol.  */
 
