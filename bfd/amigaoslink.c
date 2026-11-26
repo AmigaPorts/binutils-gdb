@@ -147,7 +147,7 @@ static int datadata_addend;
 
 static void
 insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bfd_link_order *link_order,
-		   bfd_byte **datap)
+		   bfd_byte **datap, asymbol **symbols)
 {
   bfd_byte *data = *datap;
   /**
@@ -227,6 +227,8 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
 	      s->rawsize = s->compressed_size;
 
 	      amiga_reloc_type *src;
+	      amiga_sync_reloc_symbols (s, s->owner == input_bfd
+					   ? symbols : s->owner->outsymbols);
 	      for (src = (amiga_reloc_type*) s->relocation; src; src = src->next)
 		{
 		  signed from;
@@ -403,6 +405,7 @@ insert_long_jumps (bfd *abfd, bfd *input_bfd, asection *input_section, struct bf
   if (input_section->owner->xvec->flavour == bfd_target_amiga_flavour && input_section->reloc_count > 0)
     {
       amiga_reloc_type *src;
+      amiga_sync_reloc_symbols (input_section, symbols);
       for (src = (amiga_reloc_type*) input_section->relocation; src; src = src->next)
 	{
 	  signed from;
@@ -666,7 +669,7 @@ get_relocated_section_contents (
      and ld runs no relaxation pass for it, so the output section's rawsize
      the pass keys on is still zero and it would truncate the section.  */
   if (!relocateable)
-    insert_long_jumps(abfd, input_bfd, input_section, link_order, &data);
+    insert_long_jumps(abfd, input_bfd, input_section, link_order, &data, symbols);
 
   /* We're not relaxing the section, so just copy the size info.  */
   input_section->size = input_section->rawsize;

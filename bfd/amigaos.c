@@ -214,7 +214,7 @@ static bool get_word (bfd *, unsigned long *);
 static bfd_cleanup amiga_object_p (bfd *);
 static sec_ptr amiga_get_section_by_hunk_number (bfd *, long);
 static bool amiga_add_reloc (bfd *, sec_ptr, bfd_size_type,
-	amiga_symbol_type *, reloc_howto_type *, long);
+	amiga_symbol_type *, long, reloc_howto_type *, long);
 sec_ptr amiga_make_unique_section (bfd *, const char *);
 static bool parse_archive_units (bfd *, int *, file_ptr,
 	bool, struct arch_syms **, symindex *);
@@ -503,6 +503,7 @@ amiga_add_reloc (
      sec_ptr section,
      bfd_size_type offset,
      amiga_symbol_type *symbol,
+     long symidx,
      reloc_howto_type *howto,
      long target_hunk)
 {
@@ -523,6 +524,7 @@ amiga_add_reloc (
   amiga_per_section(section)->reloc_tail = reloc;
 
   reloc->relent.sym_ptr_ptr = &reloc->symbol;
+  reloc->symidx = symbol == NULL ? -1 : symidx;
   reloc->relent.address = offset;
   reloc->relent.addend = 0;
   reloc->relent.howto = howto;
@@ -3991,7 +3993,7 @@ read_raw_relocs (
 	    /* add relocs */
 	      for (j = 0; j < no; j++)
 		{
-		  if (!get_long (abfd, &offset) || !amiga_add_reloc (abfd, section, offset, NULL, howto, hunk_number))
+		  if (!get_long (abfd, &offset) || !amiga_add_reloc (abfd, section, offset, NULL, -1, howto, hunk_number))
 		return false;
 	    }
 	  }
@@ -4011,7 +4013,7 @@ read_raw_relocs (
 	    /* add relocs */
 	      for (j = 0; j < no; j++)
 		{
-		  if (!get_word (abfd, &offset) || !amiga_add_reloc (abfd, section, offset, NULL, howto, hunk_number))
+		  if (!get_word (abfd, &offset) || !amiga_add_reloc (abfd, section, offset, NULL, -1, howto, hunk_number))
 		return false;
 	    }
 	  }
@@ -4096,7 +4098,8 @@ amiga_slurp_relocs (
 	      if (!get_long (abfd, &offset))
 		return false;
 	      if (!amiga_add_reloc (abfd, section, offset,
-				    abfd->outsymbols ? amiga_symbol(abfd->outsymbols[asp->index]) : asp, howto, -4))
+				    abfd->outsymbols ? amiga_symbol(abfd->outsymbols[asp->index]) : asp,
+				    asp->index, howto, -4))
 		return false;
 	    }
 	  break;
@@ -4105,6 +4108,27 @@ amiga_slurp_relocs (
   return true;
 }/* Of slurp_relocs */
 
+/* The relocs of a section are read once and keep the symbols they were read
+   against.  The generic final link then replaces entries of the input's
+   symbol table with the symbol of the hash table entry
+   (_bfd_generic_link_output_symbols), so relocs read before it, as ld does
+   to locate the reference that triggered a link warning, would still see
+   the undefined symbol.  Point them at the current entries of SYMBOLS, and
+   bind sym_ptr_ptr to the slot of SYMBOLS, as for the other backends.  */
+void
+amiga_sync_reloc_symbols (sec_ptr section, asymbol **symbols)
+{
+  amiga_reloc_type *src;
+
+  if (symbols == NULL)
+    return;
+  for (src = (amiga_reloc_type *) section->relocation; src; src = src->next)
+    if (src->symidx >= 0)
+      {
+	src->symbol = symbols[src->symidx];
+	src->relent.sym_ptr_ptr = &symbols[src->symidx];
+      }
+}
 
 static long
 amiga_canonicalize_reloc (
@@ -4118,6 +4142,7 @@ amiga_canonicalize_reloc (
   if (!section->relocation && !amiga_slurp_relocs (abfd, section, symbols))
     return -1;
 
+  amiga_sync_reloc_symbols (section, symbols);
   for (src = (amiga_reloc_type *)section->relocation; src; src = src->next)
     *relptr++ = &src->relent;
   *relptr = NULL;
